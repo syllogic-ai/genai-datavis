@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { API_URL } from "./lib/env";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Define form schema
 const formSchema = z.object({
@@ -16,14 +17,23 @@ const formSchema = z.object({
   }),
 });
 
+// Type for chat message
+type ChatMessage = {
+  role: 'user' | 'system';
+  content: string;
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [chatResponse, setChatResponse] = useState<string | null>(null);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [showDropzone, setShowDropzone] = useState(true);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [showJson, setShowJson] = useState(true);
 
   // Initialize form
   const form = useForm<z.infer<typeof formSchema>>({
@@ -32,6 +42,16 @@ export default function Home() {
       message: "",
     },
   });
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const scrollContainer = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
+    }
+  }, [messages]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     if (acceptedFiles.length > 0) {
@@ -66,7 +86,6 @@ export default function Home() {
 
     setAnalyzing(true);
     setError(null);
-    setAnalysisResult(null);
 
     try {
       // Read the file content
@@ -125,8 +144,17 @@ export default function Home() {
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!file) return;
 
+    // Hide dropzone after sending first message
+    setShowDropzone(false);
+    
     setIsChatLoading(true);
-    setChatResponse(null);
+    
+    // Add user message to chat
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: values.message
+    };
+    setMessages(prev => [...prev, userMessage]);
 
     // If we don't have analysis results yet, run the analysis first
     if (!analysisResult) {
@@ -150,7 +178,13 @@ export default function Home() {
       }
 
       const result = await response.json();
-      setChatResponse(result.response);
+      
+      // Add system response to chat
+      const systemMessage: ChatMessage = {
+        role: 'system',
+        content: result.response
+      };
+      setMessages(prev => [...prev, systemMessage]);
 
       // Reset the form
       form.reset({ message: "" });
@@ -165,60 +199,129 @@ export default function Home() {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-white p-4 text-black">
-      <div className="w-full max-w-lg">
-        <div className="mb-8 w-full">
-          <div
-            {...getRootProps()}
-            className={`p-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
-              isDragActive
-                ? "border-gray-500 bg-blue-50"
-                : "border-gray-300 hover:border-blue-400"
-            } ${uploadSuccess ? "border-green-500/10 bg-green-50/30" : ""}`}
-          >
-            <input {...getInputProps()} />
-            {isDragActive ? (
-              <p className="text-blue-500">Drop the CSV file here...</p>
-            ) : (
-              <div>
-                <p className="mb-2">
-                  Drag and drop a CSV file here, or click to select a file
-                </p>
-                <p className="text-sm text-gray-500">
-                  Only CSV files are accepted
-                </p>
-              </div>
-            )}
+    <div className="flex flex-col h-screen bg-white text-black">
+      <div className="flex-1 overflow-hidden">
+        {showDropzone && (
+          <div className="p-4 flex justify-center">
+            <div className="w-full max-w-lg">
+              <div
+                {...getRootProps()}
+                className={`p-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
+                  isDragActive
+                    ? "border-gray-500 bg-blue-50"
+                    : "border-gray-300 hover:border-blue-400"
+                } ${uploadSuccess ? "border-green-500/10 bg-green-50/30" : ""}`}
+              >
+                <input {...getInputProps()} />
+                {isDragActive ? (
+                  <p className="text-blue-500">Drop the CSV file here...</p>
+                ) : (
+                  <div>
+                    <p className="mb-2">
+                      Drag and drop a CSV file here, or click to select a file
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Only CSV files are accepted
+                    </p>
+                  </div>
+                )}
 
-            {file && uploadSuccess && (
-              <div className="mt-4 p-2 bg-green-100/30 rounded">
-                <p className="text-green-700/60">
-                  File uploaded successfully: {file.name} (
-                  {(file.size / 1024).toFixed(2)} KB)
-                </p>
+                {file && uploadSuccess && (
+                  <div className="mt-4 p-2 bg-green-100/30 rounded">
+                    <p className="text-green-700/60">
+                      File uploaded successfully: {file.name} (
+                      {(file.size / 1024).toFixed(2)} KB)
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
+
+              {error && (
+                <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">
+                  {error}
+                </div>
+              )}
+            </div>
           </div>
-
-          {error && (
-            <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">
-              {error}
+        )}
+        
+        <div className="p-4 flex flex-col md:flex-row gap-4 justify-center">
+          {/* Chat messages */}
+          {messages.length > 0 && (
+            <div className="w-full md:w-1/2 max-w-2xl">
+              <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-180px)] rounded-lg pr-4">
+                <div className="space-y-4 p-4">
+                  {messages.map((message, index) => (
+                    <div
+                      key={index}
+                      className={`p-4 rounded-lg ${
+                        message.role === 'user'
+                          ? 'bg-blue-100 ml-12'
+                          : 'bg-gray-100 mr-12'
+                      }`}
+                    >
+                      <p className="whitespace-pre-line">{message.content}</p>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
           )}
 
-          {/* Chat prompt feature */}
-          <div className="mt-6">
+          {/* Analysis Results JSON */}
+          {analysisResult && (
+            <div className={`w-full ${messages.length > 0 ? 'md:w-1/2' : ''} max-w-2xl`}>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="bg-gray-50 p-3 border-b border-gray-200 flex justify-between items-center">
+                  <h2 className="text-lg font-medium">Analysis Results</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowJson(!showJson)}
+                  >
+                    {showJson ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
+                {showJson && (
+                  <div className="bg-white">
+                    <ScrollArea className="h-[calc(100vh-230px)]">
+                      <pre className="p-4 text-sm overflow-auto">
+                        {JSON.stringify(analysisResult, null, 2)}
+                      </pre>
+                    </ScrollArea>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="p-4 flex justify-center">
+            <div className="w-full max-w-2xl">
+              <div className="p-3 bg-red-100 text-red-700 rounded">
+                {error}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Fixed chat input at the bottom */}
+      {file && (
+        <div className="p-4 border-t border-gray-200 bg-white">
+          <div className="max-w-2xl mx-auto">
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="relative rounded-xl border border-gray-300/20 overflow-hidden">
                 <Textarea
                   {...form.register("message")}
                   placeholder="Ask a question about your data..."
                   className="min-h-24 py-4 pb-14 resize-none rounded-xl"
-                  disabled={!file || analyzing || isChatLoading}
+                  disabled={analyzing || isChatLoading}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       const content = form.getValues('message');
-                      if (content.trim() && !(!file || analyzing || isChatLoading)) {
+                      if (content.trim() && !(analyzing || isChatLoading)) {
                         e.preventDefault();
                         form.handleSubmit(onSubmit)();
                       }
@@ -230,7 +333,7 @@ export default function Home() {
                     type="submit"
                     size="icon"
                     className="rounded-full group"
-                    disabled={!file || analyzing || isChatLoading}
+                    disabled={analyzing || isChatLoading}
                   >
                     {isChatLoading ? (
                       <span className="mx-1">...</span>
@@ -256,25 +359,9 @@ export default function Home() {
                 </div>
               </div>
             </form>
-
-            {chatResponse && (
-              <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <h3 className="text-lg font-medium mb-2">Response:</h3>
-                <p className="whitespace-pre-line">{chatResponse}</p>
-              </div>
-            )}
           </div>
         </div>
-
-        {analysisResult && (
-          <div className="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
-            <h2 className="text-xl font-bold mb-4">Analysis Results</h2>
-            <pre className="bg-gray-100 p-4 rounded overflow-auto max-h-96">
-              {JSON.stringify(analysisResult, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
