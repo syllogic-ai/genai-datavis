@@ -20,7 +20,7 @@ app = FastAPI(title="GenAI DataVis API",
 # Configure CORS with environment variables
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=["*"],  # Allow all origins for debugging
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,6 +51,10 @@ class QueryRequest(BaseModel):
     
 class AnalyzeRequest(BaseModel):
     data: List[Dict[str, Any]]
+    
+class ChatRequest(BaseModel):
+    prompt: str
+    data: Optional[Dict[str, Any]] = None
 
 # In-memory storage for demo purposes
 sample_datasets = {
@@ -72,7 +76,8 @@ def read_root():
             {"path": "/datasets", "method": "POST", "description": "Create a new dataset"},
             {"path": "/visualize", "method": "POST", "description": "Generate visualization config"},
             {"path": "/query", "method": "POST", "description": "Query an AI agent"},
-            {"path": "/analyze", "method": "POST", "description": "Analyze data"}
+            {"path": "/analyze", "method": "POST", "description": "Analyze data"},
+            {"path": "/chat", "method": "POST", "description": "Chat with the AI about your data"}
         ]
     }
 
@@ -140,6 +145,20 @@ def query_agent(request: QueryRequest):
         raise HTTPException(status_code=400, detail="Query is required")
     
     response = ai_service.process_query(request.context, request.query)
+    return {"response": response}
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+    if not request.prompt:
+        raise HTTPException(status_code=400, detail="Prompt is required")
+    
+    # Prepare context from the data
+    context = ""
+    if request.data:
+        context = f"Analysis results: {request.data}"
+    
+    # Use the AI service to process the request
+    response = ai_service.process_query(context, request.prompt)
     return {"response": response}
 
 @app.post("/analyze")

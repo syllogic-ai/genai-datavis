@@ -22,6 +22,26 @@ REM Install dependencies from requirements.txt
 echo Installing Python packages from requirements.txt...
 pip install -r requirements.txt
 
+REM Verify critical dependencies are installed
+echo Verifying critical dependencies...
+python -c "import uvicorn" 2>nul
+if %errorlevel% neq 0 (
+    echo Warning: uvicorn not found. Installing...
+    pip install uvicorn
+)
+
+python -c "import requests" 2>nul
+if %errorlevel% neq 0 (
+    echo Warning: requests not found. Installing...
+    pip install requests
+)
+
+python -c "import plotly" 2>nul
+if %errorlevel% neq 0 (
+    echo Warning: plotly not found. Installing...
+    pip install plotly
+)
+
 REM Create a basic app.py file if it doesn't exist
 if not exist "app.py" (
     echo Creating basic app.py file...
@@ -36,4 +56,4 @@ if not exist "app.py" (
     ) > app.py
 )
 
-echo ✅ Backend setup complete. Virtual environment activated.
+echo ✅ Backend setup complete. To start the server, run: python run.py

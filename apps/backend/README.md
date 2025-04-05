@@ -7,6 +7,18 @@ This is the backend server for the GenAI DataVis application, built with FastAPI
 - Python 3.8 or higher
 - pip (Python package installer)
 
+## Required Packages
+
+The following critical packages are needed:
+- `fastapi`: Web framework for building APIs
+- `uvicorn`: ASGI server to run the FastAPI application
+- `python-dotenv`: For loading environment variables
+- `pandas` & `numpy`: For data manipulation and analysis
+- `requests`: For making HTTP requests to external APIs
+- `plotly`: For generating data visualizations
+
+All these dependencies are listed in `requirements.txt`.
+
 ## Setup Instructions
 
 ### For Mac/Linux Users
@@ -136,3 +148,36 @@ Once the server is running, you can access the API documentation at:
 - `GET /datasets/{name}`: Get dataset by name
 - `POST /datasets`: Create a new dataset
 - `POST /visualize`: Generate visualization configuration 
+
+## Troubleshooting
+
+If you encounter errors while running the application, try the following:
+
+### Module Not Found Errors
+
+If you see errors like `ModuleNotFoundError: No module named 'uvicorn'` or similar, you might need to install missing dependencies:
+
+```bash
+# Make sure you're in the backend directory and virtual environment is activated
+pip install -r requirements.txt
+
+# Install individual packages if needed
+pip install uvicorn fastapi requests plotly pandas numpy python-dotenv
+```
+
+### Server Not Starting
+
+If the server isn't starting, check:
+1. You have Python 3.8+ installed (`python --version`)
+2. You've installed all dependencies (`pip list`)
+3. You're running the command from the correct directory
+
+### API Connection Issues
+
+If the frontend cannot connect to the backend:
+1. Ensure the backend server is running (`lsof -i :8000`)
+2. Check that the CORS settings in `main.py` include your frontend origin
+3. Verify the API_URL in the frontend points to `http://localhost:8000`
+4. Try accessing the API directly: `curl http://localhost:8000/`
+
+For further assistance, please check the logs or open an issue in the project repository. 

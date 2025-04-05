@@ -23,6 +23,23 @@ pip install setuptools==69.0.2
 echo "Installing Python packages from requirements.txt..."
 pip install -r requirements.txt
 
+# Verify critical dependencies are installed
+echo "Verifying critical dependencies..."
+if ! python -c "import uvicorn" &> /dev/null; then
+  echo "Warning: uvicorn not found. Installing..."
+  pip install uvicorn
+fi
+
+if ! python -c "import requests" &> /dev/null; then
+  echo "Warning: requests not found. Installing..."
+  pip install requests
+fi
+
+if ! python -c "import plotly" &> /dev/null; then
+  echo "Warning: plotly not found. Installing..."
+  pip install plotly
+fi
+
 # Create a basic app.py file if it doesn't exist
 if [ ! -f "app.py" ]; then
   echo "Creating basic app.py file..."
@@ -37,4 +54,4 @@ def read_root():
 EOF
 fi
 
-echo "✅ Backend setup complete. Virtual environment activated."
+echo "✅ Backend setup complete. To start the server, run: python run.py"
