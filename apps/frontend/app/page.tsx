@@ -202,7 +202,8 @@ export default function Home() {
     <div className="flex flex-col h-screen bg-white text-black">
       <div className="flex-1 overflow-hidden">
         {showDropzone && (
-          <div className="p-4 flex justify-center">
+          <div className="flex flex-col justify-center items-center h-full">
+            <h1 className="text-2xl font-semibold mb-6 text-center">What data would you like to analyze?</h1>
             <div className="w-full max-w-lg">
               <div
                 {...getRootProps()}
