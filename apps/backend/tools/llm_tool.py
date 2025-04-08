@@ -49,6 +49,8 @@ class LLMTool:
             response = requests.post(self.url, headers=headers, json=payload)
             response_text = response.json()[0]['generated_text'].strip()
 
+            print(f"LLM API Response: {response_text}")
+
             return response_text
         except Exception as e:
             print(f"Error in LLM API: {str(e)}")

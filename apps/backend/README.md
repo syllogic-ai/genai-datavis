@@ -51,7 +51,7 @@ All these dependencies are listed in `requirements.txt`.
    ```
 3. Run the setup script:
    ```
-   setup.bat
+   .\setup.bat
    ```
 4. The setup script will:
    - Create a virtual environment (`venv`)
@@ -123,7 +123,8 @@ This will start the server using the configuration from your environment variabl
 
 1. Ensure your virtual environment is activated:
    ```
-   venv\Scripts\activate
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   .\venv\Scripts\activate
    ```
 2. Start the server:
    ```

@@ -1,4 +1,4 @@
-from tools.llm_tool import LLMTool
+from apps.backend.tools.llm_tool import LLMTool
 
 class AIService:
     def __init__(self):

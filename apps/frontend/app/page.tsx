@@ -9,6 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Box } from "lucide-react";
 
 // Define form schema
 const formSchema = z.object({
@@ -81,7 +82,7 @@ export default function Home() {
     maxFiles: 1,
   });
 
-  const analyzeData = async () => {
+  const analyzeData = async (values: {message: string}) => {
     if (!file) return;
 
     setAnalyzing(true);
@@ -119,6 +120,7 @@ export default function Home() {
         },
         body: JSON.stringify({
           data: dataArray,
+          prompt: values.message,
         }),
       });
 
@@ -158,7 +160,7 @@ export default function Home() {
 
     // If we don't have analysis results yet, run the analysis first
     if (!analysisResult) {
-      await analyzeData();
+      await analyzeData(values);
     }
 
     try {
