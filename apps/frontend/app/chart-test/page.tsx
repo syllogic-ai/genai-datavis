@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { AreaChart, BarChartHorizontal, BarChartMultiple, ChartConfigCard, LineChart } from "@/components/charts"
 import { ChartConfig } from "@/components/ui/chart"
 
@@ -21,8 +22,8 @@ const categoryData = [
   { category: "Product E", revenue: 4300, cost: 2100 },
 ]
 
-// Chart configuration
-const deviceConfig: ChartConfig = {
+// Initial chart configurations
+const initialDeviceConfig: ChartConfig = {
   desktop: {
     label: "Desktop",
     color: "var(--chart-1)"
@@ -37,7 +38,7 @@ const deviceConfig: ChartConfig = {
   }
 }
 
-const productConfig: ChartConfig = {
+const initialProductConfig: ChartConfig = {
   revenue: {
     label: "Revenue",
     color: "var(--chart-1)"
@@ -49,6 +50,51 @@ const productConfig: ChartConfig = {
 }
 
 export default function ChartTest() {
+  // State for chart configurations
+  const [deviceConfig, setDeviceConfig] = useState<ChartConfig>(initialDeviceConfig)
+  const [productConfig, setProductConfig] = useState<ChartConfig>(initialProductConfig)
+  const [lineChartOptions, setLineChartOptions] = useState({
+    showGrid: true,
+    showLegend: true,
+    showTooltip: true,
+    showAxis: true,
+    showDots: true,
+    lineType: "monotone" as const,
+  })
+  const [barChartOptions, setBarChartOptions] = useState({
+    showGrid: true,
+    showLegend: true,
+    showTooltip: true,
+    showAxis: true,
+    barRadius: 4,
+    barSize: 30,
+  })
+
+  // Handle configuration changes
+  const handleLineChartConfigChange = (newConfig: any) => {
+    setDeviceConfig(newConfig.config)
+    setLineChartOptions({
+      showGrid: newConfig.showGrid,
+      showLegend: newConfig.showLegend,
+      showTooltip: newConfig.showTooltip,
+      showAxis: newConfig.showAxis,
+      showDots: newConfig.showDots,
+      lineType: newConfig.lineType,
+    })
+  }
+
+  const handleBarChartConfigChange = (newConfig: any) => {
+    setProductConfig(newConfig.config)
+    setBarChartOptions({
+      showGrid: newConfig.showGrid,
+      showLegend: newConfig.showLegend,
+      showTooltip: newConfig.showTooltip,
+      showAxis: newConfig.showAxis,
+      barRadius: newConfig.barRadius,
+      barSize: newConfig.barSize,
+    })
+  }
+
   return (
     <main className="container mx-auto py-8 px-4">
       <h1 className="text-3xl font-bold mb-8">Chart Components Test</h1>
@@ -61,7 +107,8 @@ export default function ChartTest() {
             <LineChart 
               data={monthlyData} 
               config={deviceConfig} 
-              xAxisKey="month" 
+              xAxisKey="month"
+              {...lineChartOptions}
             />
           </div>
         </section>
@@ -73,7 +120,12 @@ export default function ChartTest() {
             <BarChartMultiple 
               data={monthlyData} 
               config={deviceConfig} 
-              xAxisKey="month" 
+              xAxisKey="month"
+              showGrid={lineChartOptions.showGrid}
+              showLegend={lineChartOptions.showLegend}
+              showTooltip={lineChartOptions.showTooltip}
+              showAxis={lineChartOptions.showAxis}
+              barRadius={barChartOptions.barRadius}
             />
           </div>
         </section>
@@ -85,7 +137,11 @@ export default function ChartTest() {
             <AreaChart 
               data={monthlyData} 
               config={deviceConfig} 
-              xAxisKey="month" 
+              xAxisKey="month"
+              showGrid={lineChartOptions.showGrid}
+              showLegend={lineChartOptions.showLegend}
+              showTooltip={lineChartOptions.showTooltip}
+              showAxis={lineChartOptions.showAxis}
             />
           </div>
         </section>
@@ -98,7 +154,7 @@ export default function ChartTest() {
               data={categoryData} 
               config={productConfig} 
               yAxisKey="category"
-              barSize={30}
+              {...barChartOptions}
               className="min-h-[500px]"
             />
           </div>
@@ -117,6 +173,7 @@ export default function ChartTest() {
               data={monthlyData}
               config={deviceConfig}
               xAxisKey="month"
+              onConfigChange={handleLineChartConfigChange}
             />
             
             {/* Horizontal Bar Chart Config */}
@@ -127,6 +184,7 @@ export default function ChartTest() {
               data={categoryData}
               config={productConfig}
               yAxisKey="category"
+              onConfigChange={handleBarChartConfigChange}
             />
           </div>
         </section>

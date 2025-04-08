@@ -4,6 +4,38 @@ import { Area, AreaChart as RechartsAreaChart, CartesianGrid, ResponsiveContaine
 
 import { ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 
+// Custom label components for better visibility
+const CustomXAxisLabel = ({ value, x, y }: { value: string; x: number; y: number }) => {
+  return (
+    <text
+      x={x}
+      y={y}
+      dy={16}
+      fill="currentColor"
+      textAnchor="middle"
+      fontSize={12}
+    >
+      {value}
+    </text>
+  );
+};
+
+const CustomYAxisLabel = ({ value, x, y }: { value: string; x: number; y: number }) => {
+  return (
+    <text
+      x={x}
+      y={y}
+      dx={-16}
+      fill="currentColor"
+      textAnchor="middle"
+      fontSize={12}
+      transform={`rotate(-90, ${x}, ${y})`}
+    >
+      {value}
+    </text>
+  );
+};
+
 interface AreaChartProps {
   data: any[]
   config: ChartConfig
@@ -13,6 +45,8 @@ interface AreaChartProps {
   showTooltip?: boolean
   showGrid?: boolean
   showAxis?: boolean
+  xAxisLabel?: string
+  yAxisLabel?: string
 }
 
 export function AreaChart({
@@ -24,6 +58,8 @@ export function AreaChart({
   showTooltip = true,
   showGrid = true, 
   showAxis = true,
+  xAxisLabel,
+  yAxisLabel,
 }: AreaChartProps) {
   // Get data keys (excluding the xAxisKey)
   const dataKeys = Object.keys(data[0] || {}).filter(
@@ -32,33 +68,59 @@ export function AreaChart({
 
   return (
     <ChartContainer config={config} className={`min-h-[300px] w-full ${className}`}>
-      <RechartsAreaChart data={data} accessibilityLayer>
-        {showGrid && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
-        {showAxis && (
-          <>
-            <XAxis 
-              dataKey={xAxisKey} 
-              tickLine={false} 
-              axisLine={false} 
-              tickMargin={10} 
-            />
-            <YAxis tickLine={false} axisLine={false} tickMargin={10} />
-          </>
-        )}
-        {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
-        {showLegend && <ChartLegend content={<ChartLegendContent />} />}
+      <div className="relative w-full h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <RechartsAreaChart 
+            data={data} 
+            accessibilityLayer
+            margin={{ top: 20, right: 30, left: 40, bottom: 40 }}
+          >
+            {showGrid && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
+            {showAxis && (
+              <>
+                <XAxis 
+                  dataKey={xAxisKey} 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickMargin={10}
+                />
+                <YAxis 
+                  tickLine={false} 
+                  axisLine={false} 
+                  tickMargin={10}
+                />
+              </>
+            )}
+            {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
+            {showLegend && <ChartLegend content={<ChartLegendContent />} />}
+            
+            {dataKeys.map((key) => (
+              <Area 
+                key={key}
+                type="monotone"
+                dataKey={key} 
+                fill={`var(--color-${key})`}
+                stroke={`var(--color-${key})`}
+                fillOpacity={0.2} 
+              />
+            ))}
+          </RechartsAreaChart>
+        </ResponsiveContainer>
         
-        {dataKeys.map((key) => (
-          <Area 
-            key={key}
-            type="monotone"
-            dataKey={key} 
-            fill={`var(--color-${key})`}
-            stroke={`var(--color-${key})`}
-            fillOpacity={0.2} 
-          />
-        ))}
-      </RechartsAreaChart>
+        {/* X-axis label as a separate element */}
+        {xAxisLabel && (
+          <div className="absolute bottom-0 left-0 right-0 text-center text-sm text-muted-foreground pb-2">
+            {xAxisLabel}
+          </div>
+        )}
+        
+        {/* Y-axis label as a separate element */}
+        {yAxisLabel && (
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-8 -rotate-90 text-sm text-muted-foreground whitespace-nowrap">
+            {yAxisLabel}
+          </div>
+        )}
+      </div>
     </ChartContainer>
   )
 } 

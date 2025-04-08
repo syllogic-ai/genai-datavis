@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ChartConfig } from "@/components/ui/chart"
+import { ColorPicker } from "@/components/ui/color-picker"
 
 interface ChartConfigCardProps {
   title?: string
@@ -17,17 +18,29 @@ interface ChartConfigCardProps {
   xAxisKey?: string
   yAxisKey?: string
   onConfigChange?: (config: any) => void
+  xAxisLabel?: string
+  yAxisLabel?: string
 }
+
+interface ChartSeriesConfig {
+  label: string
+  color: string
+  theme?: Record<"light" | "dark", string>
+}
+
+type SeriesConfig = Record<string, ChartSeriesConfig>
 
 export function ChartConfigCard({
   title = "Chart Configuration",
   description = "Customize the appearance of your chart.",
   chartType,
   data,
-  config,
+  config: initialConfig,
   xAxisKey = "name",
   yAxisKey = "category",
-  onConfigChange
+  onConfigChange,
+  xAxisLabel: initialXAxisLabel = "X Axis",
+  yAxisLabel: initialYAxisLabel = "Y Axis"
 }: ChartConfigCardProps) {
   // Configuration state
   const [showGrid, setShowGrid] = useState(true)
@@ -38,6 +51,9 @@ export function ChartConfigCard({
   const [lineType, setLineType] = useState<"monotone" | "linear" | "step">("monotone")
   const [barRadius, setBarRadius] = useState(4)
   const [barSize, setBarSize] = useState(chartType === "horizontal-bar" ? 30 : 20)
+  const [config, setConfig] = useState<SeriesConfig>(initialConfig as SeriesConfig)
+  const [xAxisLabel, setXAxisLabel] = useState(initialXAxisLabel)
+  const [yAxisLabel, setYAxisLabel] = useState(initialYAxisLabel)
   
   // Current chart configuration
   const chartConfig = {
@@ -48,13 +64,26 @@ export function ChartConfigCard({
     showDots,
     lineType,
     barRadius,
-    barSize
+    barSize,
+    xAxisLabel,
+    yAxisLabel
+  }
+  
+  // Update color for a specific key in the config
+  const updateColor = (key: string, color: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        color
+      }
+    }))
   }
   
   // Apply changes
   const applyChanges = () => {
     if (onConfigChange) {
-      onConfigChange(chartConfig)
+      onConfigChange({ ...chartConfig, config })
     }
   }
   
@@ -65,7 +94,7 @@ export function ChartConfigCard({
         return (
           <LineChart 
             data={data} 
-            config={config} 
+            config={config as ChartConfig} 
             xAxisKey={xAxisKey}
             showGrid={showGrid}
             showLegend={showLegend}
@@ -73,38 +102,44 @@ export function ChartConfigCard({
             showAxis={showAxis}
             lineType={lineType}
             dotSize={showDots ? 4 : 0}
+            xAxisLabel={xAxisLabel}
+            yAxisLabel={yAxisLabel}
           />
         )
       case "bar":
         return (
           <BarChartMultiple 
             data={data} 
-            config={config} 
+            config={config as ChartConfig} 
             xAxisKey={xAxisKey}
             showGrid={showGrid}
             showLegend={showLegend}
             showTooltip={showTooltip}
             showAxis={showAxis}
             barRadius={barRadius}
+            xAxisLabel={xAxisLabel}
+            yAxisLabel={yAxisLabel}
           />
         )
       case "area":
         return (
           <AreaChart 
             data={data} 
-            config={config} 
+            config={config as ChartConfig} 
             xAxisKey={xAxisKey}
             showGrid={showGrid}
             showLegend={showLegend}
             showTooltip={showTooltip}
             showAxis={showAxis}
+            xAxisLabel={xAxisLabel}
+            yAxisLabel={yAxisLabel}
           />
         )
       case "horizontal-bar":
         return (
           <BarChartHorizontal 
             data={data} 
-            config={config} 
+            config={config as ChartConfig} 
             yAxisKey={yAxisKey}
             showGrid={showGrid}
             showLegend={showLegend}
@@ -113,6 +148,8 @@ export function ChartConfigCard({
             barRadius={barRadius}
             barSize={barSize}
             className="min-h-[400px]"
+            xAxisLabel={xAxisLabel}
+            yAxisLabel={yAxisLabel}
           />
         )
       default:
@@ -129,7 +166,7 @@ export function ChartConfigCard({
       <CardContent>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Chart Preview */}
-          <div className="bg-card rounded-lg border p-4 min-h-[400px]">
+          <div className="bg-card rounded-lg border p-6 min-h-[400px]">
             <h3 className="text-lg font-medium mb-4">Preview</h3>
             {renderChart()}
           </div>
@@ -138,6 +175,35 @@ export function ChartConfigCard({
           <div>
             <h3 className="text-lg font-medium mb-4">Settings</h3>
             <div className="space-y-6">
+              {/* Axis Labels */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium">Axis Labels</h4>
+                
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="xAxisLabel">X-Axis Label</Label>
+                    <input
+                      id="xAxisLabel"
+                      type="text"
+                      value={xAxisLabel}
+                      onChange={(e) => setXAxisLabel(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="yAxisLabel">Y-Axis Label</Label>
+                    <input
+                      id="yAxisLabel"
+                      type="text"
+                      value={yAxisLabel}
+                      onChange={(e) => setYAxisLabel(e.target.value)}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+              
               {/* Display Options */}
               <div className="space-y-4">
                 <h4 className="text-sm font-medium">Display Options</h4>
@@ -178,6 +244,21 @@ export function ChartConfigCard({
                       id="showAxis"
                     />
                   </div>
+                </div>
+              </div>
+              
+              {/* Color Options */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium">Colors</h4>
+                <div className="space-y-3">
+                  {Object.entries(config).map(([key, value]) => (
+                    <ColorPicker
+                      key={key}
+                      label={value.label}
+                      color={value.color}
+                      onChange={(color) => updateColor(key, color)}
+                    />
+                  ))}
                 </div>
               </div>
               
