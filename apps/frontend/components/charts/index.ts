@@ -1,5 +1,0 @@
-export { AreaChart } from "./AreaChart"
-export { BarChartMultiple } from "./BarChartMultiple"
-export { BarChartHorizontal } from "./BarChartHorizontal"
-export { LineChart } from "./LineChart"
-export { ChartConfigCard } from "./ChartConfigCard" 

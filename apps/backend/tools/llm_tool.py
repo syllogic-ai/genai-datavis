@@ -58,6 +58,11 @@ class LLMTool:
             
     def _mock_response(self, context, query):
         """Provide a mock response for testing when API is unavailable"""
+        # Check if this is a query to select a tool (from master_query or feedback_query)
+        if "decide which tool to use" in context.lower() or "following tools" in context.lower():
+            # Return a valid tool name for tool selection queries
+            return "get_insights"
+        
         if "visualization type" in query.lower():
             return "barchart"
         elif "components" in query.lower():

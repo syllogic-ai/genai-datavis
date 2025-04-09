@@ -176,7 +176,16 @@ export default function Home() {
       });
 
       if (!response.ok) {
-        throw new Error(`Chat request failed with status ${response.status}`);
+        try {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.detail
+              ? JSON.stringify(errorData.detail)
+              : `Chat request failed with status ${response.status}`
+          );
+        } catch (jsonError) {
+          throw new Error(`Chat request failed with status ${response.status}`);
+        }
       }
 
       const result = await response.json();

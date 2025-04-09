@@ -11,8 +11,9 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from apps.backend.services.ai_service import AIService
-from apps.backend.utils.utils import validate_data, get_insights, visualize, agentic_flow
+# Fix imports to be correct based on the package structure
+from services.ai_service import AIService
+from utils.utils import validate_data, get_insights, visualize, agentic_flow
 
 app = FastAPI(title="GenAI DataVis API", 
               description="API for generating data visualizations with AI",
@@ -47,3 +48,22 @@ async def analyze(request: Request):
     agentic_output = agentic_flow(df, user_query, ai_service)
 
     return jsonable_encoder(agentic_output)
+
+@app.post("/chat")
+async def chat(request: Request):
+    body = await request.json()
+    prompt = body.get("prompt", None)
+    data = body.get("data", None)
+    
+    if not prompt:
+        raise HTTPException(status_code=400, detail="No prompt provided")
+    
+    # Create a simple context from the data
+    context = "You are a data analysis assistant. Help analyze and explain the data."
+    if data:
+        context += f" The data analysis results are: {str(data)}"
+    
+    # Use the AI service to process the query
+    response = ai_service.process_query(context, prompt)
+    
+    return {"response": response}

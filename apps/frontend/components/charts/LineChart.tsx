@@ -1,133 +1,63 @@
-"use client"
+"use client";
 
-import { CartesianGrid, Line, LineChart as RechartsLineChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
+import { LineChart, Line, XAxis, CartesianGrid, YAxis } from "recharts";
+import {
+  ChartTooltip,
+  ChartTooltipContent,
+  ChartContainer,
+} from "@/components/ui/chart";
+import type { LineChartProps } from "@/types/line-chart-types";
+import moment from "moment";
 
-import { ChartConfig, ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+export function LineChartComponent({ data, config }: LineChartProps) {
+  
+  const interval = data.length > 10 ? Math.floor(data.length / 10) : 0;
 
-interface LineChartProps {
-  data: any[]
-  config: ChartConfig
-  className?: string
-  xAxisKey?: string
-  showLegend?: boolean
-  showTooltip?: boolean
-  showGrid?: boolean
-  showAxis?: boolean
-  lineType?: "linear" | "monotone" | "step" | "stepBefore" | "stepAfter"
-  dotSize?: number
-  activeDotSize?: number
-  xAxisLabel?: string
-  yAxisLabel?: string
+  // Sort data by datetime
+  const sortedData = [...data].sort((a, b) => {
+    const dateA = new Date(a.datetime as string);
+    const dateB = new Date(b.datetime as string);
+    return dateA.getTime() - dateB.getTime();
+  });
+  
+  // Use sortedData instead of data for the chart
+  data = sortedData;
+
+  function formatXAxis(tickItem: string) {
+    // If using moment.js
+    return moment(tickItem).format('DD-MM-YYYY')
+    }
+
+  return (
+
+        <ChartContainer config={config.chartConfig}>
+          <LineChart data={data} margin={{ left: 12, right: 12 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey={"datetime"}
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              interval={interval}
+              hide={false}
+              tickFormatter={formatXAxis}
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tickMargin={8}
+              tickCount={3}
+              hide={false}
+            />
+            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+            <Line
+              key={"consumption"}
+              dataKey={"consumption"}
+              type="monotone"
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ChartContainer>
+  )
 }
-
-// Custom label components for better visibility
-const CustomXAxisLabel = ({ value, x, y }: { value: string; x: number; y: number }) => {
-  return (
-    <text
-      x={x}
-      y={y}
-      dy={16}
-      fill="currentColor"
-      textAnchor="middle"
-      fontSize={12}
-    >
-      {value}
-    </text>
-  );
-};
-
-const CustomYAxisLabel = ({ value, x, y }: { value: string; x: number; y: number }) => {
-  return (
-    <text
-      x={x}
-      y={y}
-      dx={-16}
-      fill="currentColor"
-      textAnchor="middle"
-      fontSize={12}
-      transform={`rotate(-90, ${x}, ${y})`}
-    >
-      {value}
-    </text>
-  );
-};
-
-export function LineChart({
-  data,
-  config,
-  className,
-  xAxisKey = "name",
-  showLegend = true,
-  showTooltip = true,
-  showGrid = true, 
-  showAxis = true,
-  lineType = "monotone",
-  dotSize = 4,
-  activeDotSize = 6,
-  xAxisLabel,
-  yAxisLabel,
-}: LineChartProps) {
-  const dataKeys = Object.keys(data[0] || {}).filter(
-    (key) => key !== xAxisKey
-  )
-
-  return (
-    <ChartContainer config={config} className={`min-h-[300px] w-full ${className}`}>
-      <div className="relative w-full h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <RechartsLineChart 
-            data={data} 
-            accessibilityLayer
-            margin={{ top: 20, right: 30, left: 40, bottom: 40 }}
-          >
-            {showGrid && <CartesianGrid vertical={false} strokeDasharray="3 3" />}
-            {showAxis && (
-              <>
-                <XAxis 
-                  dataKey={xAxisKey} 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tickMargin={10}
-                  tickFormatter={(value) => typeof value === 'string' ? (value.length > 6 ? `${value.slice(0, 6)}...` : value) : value}
-                />
-                <YAxis 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tickMargin={10}
-                />
-              </>
-            )}
-            {showTooltip && <ChartTooltip content={<ChartTooltipContent />} />}
-            {showLegend && <ChartLegend content={<ChartLegendContent />} />}
-            
-            {dataKeys.map((key) => (
-              <Line 
-                key={key}
-                type={lineType}
-                dataKey={key} 
-                stroke={`var(--color-${key})`}
-                dot={{ r: dotSize, fill: `var(--color-${key})`, strokeWidth: 0 }}
-                activeDot={{ r: activeDotSize, fill: `var(--color-${key})`, strokeWidth: 0 }}
-                strokeWidth={2}
-              />
-            ))}
-          </RechartsLineChart>
-        </ResponsiveContainer>
-        
-        {/* X-axis label as a separate element */}
-        {xAxisLabel && (
-          <div className="absolute bottom-0 left-0 right-0 text-center text-sm text-muted-foreground pb-2">
-            {xAxisLabel}
-          </div>
-        )}
-        
-        {/* Y-axis label as a separate element */}
-        {yAxisLabel && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-8 -rotate-90 text-sm text-muted-foreground whitespace-nowrap">
-            {yAxisLabel}
-          </div>
-        )}
-      </div>
-    </ChartContainer>
-  )
-} 
