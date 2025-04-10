@@ -2,20 +2,44 @@
 
 import { ChartConfig } from "@/components/ui/chart";
 
-export interface ChartDataItem {
-  title: string;
-  description: string;
-  chartProps: LineChartProps;
-}
-
-// (e.g. "month", "desktop", "mobile", etc.).
-export interface LineChartDataItem {
+/** General data item type for charts */
+export interface DataItem {
   [key: string]: string | number;
 }
 
-// Global chart display options
-export interface LineChartConfig {
-  chartConfig: ChartConfig;
+export type ChartType = "line" | "bar" | "area" | "kpi";
+
+/** 
+ * A unified interface for all chart types (line, bar, area, KPI, etc.)
+ * Only certain fields apply to certain chart types.
+ */
+export interface ChartSpec {
+  /** The high-level visualization type */
+  chartType: ChartType;
+
+  /** Optional metadata for display */
+  title?: string;
+  description?: string;
+
+  /** Data to be plotted if we're dealing with a "chart" type */
+  data?: Array<DataItem>;
+
+  /** Global chart configuration from ui/chart components */
+  chartConfig?: ChartConfig;
+
+  /** 
+   * Series configuration (maps data keys to visual properties)
+   * For example: { "consumption": { color: "#10B981" } }
+   */
+  seriesConfig?: Record<string, {
+    color?: string;
+    [key: string]: any;
+  }>;
+
+  /**
+   * Axis configs if we're dealing with a line/bar/area chart.
+   * If chartType === "kpi", these can be ignored in rendering.
+   */
   xAxisConfig?: {
     dataKey: string;
     dateFormat?: string;
@@ -24,6 +48,7 @@ export interface LineChartConfig {
     axisLine?: boolean;
     tickMargin?: number;
   };
+
   yAxisConfig?: {
     hide?: boolean;
     tickLine?: boolean;
@@ -31,19 +56,21 @@ export interface LineChartConfig {
     tickMargin?: number;
     tickCount?: number;
   };
+
+  /** Formatting for tooltips, etc. (primarily for line/bar/area charts) */
   dateFormatTooltip?: string;
+
+  /** Optional line-specific configs—only meaningful if chartType === "line" or "area" */
   lineType?: "monotone" | "step" | "bump" | "linear";
   hideLegend?: boolean;
   strokeWidth?: number;
   dot?: boolean;
-}
 
-
-// Props for your custom LineChart component
-export interface LineChartProps {
-  /** The data array you want to plot */
-  data: LineChartDataItem[];
-  /** The chart configuration for each series (line) */
-  config: LineChartConfig;
-  /** Which key in `data` should be used as the x-axis label */
+  /**
+   * KPI-specific fields (only used if chartType === "kpi").
+   */
+  kpiValue?: string | number;
+  kpiLabel?: string;
+  kpiChange?: number;
+  kpiChangeDirection?: "increase" | "decrease" | "flat";
 }

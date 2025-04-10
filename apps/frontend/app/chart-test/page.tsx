@@ -1,16 +1,20 @@
 'use client'
 
 import { LineChartComponent } from "@/components/charts/LineChart";
-import { ChartDataItem, LineChartConfig, LineChartProps } from "@/types/chart-types";
+import { ChartSpec } from "@/types/chart-types";
 import { consumptionData } from "@/types/aep_2017_data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { LineChart } from "recharts";
 import LineChartBlock from "@/components/blocks/lineChart-block";
+
 // Mock data for the chart
 const chartData = consumptionData;
 
-// Chart configuration
-const chartConfig: LineChartConfig = {
+// Create chart specification using the new unified format
+const lineChartSpec: ChartSpec = {
+  chartType: "line",
+  title: "Line Chart",
+  description: "Consumption over time",
+  data: chartData,
   chartConfig: {
     datetime: {
       label: "datetime",
@@ -43,21 +47,11 @@ const chartConfig: LineChartConfig = {
   dot: false,
 };
 
-const cardData: ChartDataItem = {
-  title: "Line Chart",
-  description: "Consumption over time",
-  chartProps: {
-    data: chartData,
-    config: chartConfig
-  }
-}
-
 // Usage somewhere else
 export default function Page() {
-
   return (
     <div className="flex flex-col gap-4 p-12 w-full h-[calc(100vh-4rem)] bg-neutral-100">
-      <LineChartBlock cardData={cardData} />
+      <LineChartBlock cardData={lineChartSpec} />
     </div>
   );
 }
