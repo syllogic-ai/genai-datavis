@@ -131,7 +131,7 @@ def visualize(data, query, context, ai_service):
         query_components_f["title"] = query_components["title"]
         query_components_f["description"] = query_components["description"]
         query_components_f["data"] = [{query_components["xLabel"]: query_components["x"][i], query_components["y0Label"]: query_components["y0"][i]} for i in range(len(query_components["x"]))]
-
+        query_components_f["xAxisConfig"] = {"dataKey": query_components["xLabel"]}
 
 
         visualization_output.append(query_components_f)
