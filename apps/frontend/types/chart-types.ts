@@ -57,13 +57,30 @@ export interface ChartSpec {
   dateFormatTooltip?: string;
 
   /** Optional line-specific configs—only meaningful if chartType === "line" or "area" */
-  lineType?: "monotone" | "step" | "bump" | "linear";
+  lineType?: "monotone" | "step" | "bump" | "linear" | "natural";
   hideLegend?: boolean;
   strokeWidth?: number;
   dot?: boolean;
   
   /** Whether to stack elements (for area and bar charts) */
   stacked?: boolean;
+  
+  /** Area-specific configuration properties */
+  areaConfig?: {
+    /** Whether to use gradient fills instead of solid colors */
+    useGradient?: boolean;
+    /** Default fill opacity for areas */
+    fillOpacity?: number;
+    /** Add accessibility layer */
+    accessibilityLayer?: boolean;
+    /** Gradient color stop configurations */
+    gradientStops?: {
+      topOffset?: string;
+      bottomOffset?: string;
+      topOpacity?: number;
+      bottomOpacity?: number;
+    };
+  };
 
   /**
    * KPI-specific fields (only used if chartType === "kpi").

@@ -44,6 +44,15 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
 
   // Check if we should use stack mode
   const useStacks = spec.stacked === true;
+  
+  // Get area-specific configuration
+  const useGradient = spec.areaConfig?.useGradient !== false; // Default to true if not specified
+  const defaultFillOpacity = spec.areaConfig?.fillOpacity ?? 0.4;
+  const topOpacity = spec.areaConfig?.gradientStops?.topOpacity ?? 0.8;
+  const bottomOpacity = spec.areaConfig?.gradientStops?.bottomOpacity ?? 0.1;
+  const topOffset = spec.areaConfig?.gradientStops?.topOffset ?? "5%";
+  const bottomOffset = spec.areaConfig?.gradientStops?.bottomOffset ?? "95%";
+  const accessibilityLayer = spec.areaConfig?.accessibilityLayer ?? false;
 
   return (
     <ChartContainer 
@@ -53,17 +62,23 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
       <AreaChart 
         data={sortedData} 
         margin={{ left: 12, right: 12, top: 10, bottom: 10 }}
+        accessibilityLayer={accessibilityLayer}
       >
         <defs>
-          {dataKeys.map((key) => {
-            const color = spec.chartConfig?.[key]?.color || "#10B981";
-            return (
-              <linearGradient key={`fill${key}`} id={`fill${key}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity={0.8} />
-                <stop offset="100%" stopColor={color} stopOpacity={0.1} />
-              </linearGradient>
-            );
-          })}
+          {useGradient && dataKeys.map((key) => (
+            <linearGradient key={`fill${key}`} id={`fill${key}`} x1="0" y1="0" x2="0" y2="1">
+              <stop
+                offset={topOffset}
+                stopColor={`var(--color-${key})`}
+                stopOpacity={topOpacity}
+              />
+              <stop
+                offset={bottomOffset}
+                stopColor={`var(--color-${key})`}
+                stopOpacity={bottomOpacity}
+              />
+            </linearGradient>
+          ))}
         </defs>
         <CartesianGrid vertical={false} />
         <XAxis
@@ -84,25 +99,19 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
         />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         
-        {dataKeys.map((key) => {
-          const itemConfig = spec.chartConfig?.[key];
-          const color = itemConfig?.color || "#10B981";
-          const useGradient = true; // Can be made configurable
-          
-          return (
-            <Area
-              key={key}
-              dataKey={key}
-              type={spec.lineType ?? "monotone"}
-              strokeWidth={spec.strokeWidth ?? 2}
-              dot={spec.dot ?? false}
-              stroke={color}
-              fill={useGradient ? `url(#fill${key})` : color}
-              fillOpacity={useGradient ? 1 : 0.2}
-              stackId={useStacks ? "stack" : undefined}
-            />
-          );
-        })}
+        {dataKeys.map((key) => (
+          <Area
+            key={key}
+            dataKey={key}
+            type={spec.lineType ?? "monotone"}
+            strokeWidth={spec.strokeWidth ?? 2}
+            dot={spec.dot ?? false}
+            stroke={`var(--color-${key})`}
+            fill={useGradient ? `url(#fill${key})` : `var(--color-${key})`}
+            fillOpacity={defaultFillOpacity}
+            stackId={useStacks ? "a" : undefined}
+          />
+        ))}
       </AreaChart>
     </ChartContainer>
   );
