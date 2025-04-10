@@ -6,6 +6,7 @@ import threading
 import sqlite3
 import numpy as np
 import ast
+import json
 
 def validate_data(data, query=None, context=None, ai_service=None):
         validation_output = []
@@ -62,7 +63,85 @@ def exec_with_timeout(code, local_vars, timeout=5):
     if "error" in local_vars:
         raise local_vars["error"]
 
-def visualize(data, query, context, ai_service):
+def  visualize(data, query, context, ai_service):
+        """
+        Generate visualization configuration based on data and query.
+        
+        Returns a list containing a single ChartSpec object that strictly conforms to the frontend ChartSpec interface.
+        
+        Example of returned ChartSpec for different chart types:
+        
+        1. Line Chart:
+        {
+            "chartType": "line",
+            "title": "Revenue Trends",
+            "description": "Monthly revenue trends by department",
+            "data": [
+                {"month": "Jan", "marketing": 1200, "sales": 900},
+                {"month": "Feb", "marketing": 1400, "sales": 1000},
+                {"month": "Mar", "marketing": 1300, "sales": 1200}
+            ],
+            "xAxisConfig": {
+                "dataKey": "month"
+            },
+            "lineType": "monotone",
+            "dot": true
+        }
+        
+        2. Bar Chart:
+        {
+            "chartType": "bar",
+            "title": "Department Performance",
+            "description": "Annual performance by department",
+            "data": [
+                {"department": "Sales", "revenue": 12500, "target": 10000},
+                {"department": "Marketing", "revenue": 8500, "target": 9000},
+                {"department": "Support", "revenue": 4500, "target": 5000}
+            ],
+            "xAxisConfig": {
+                "dataKey": "department"
+            },
+            "barConfig": {
+                "radius": 4,
+                "fillOpacity": 0.8
+            }
+        }
+        
+        3. Area Chart:
+        {
+            "chartType": "area",
+            "title": "Traffic Sources",
+            "description": "Website traffic sources over time",
+            "data": [
+                {"date": "2023-01", "direct": 4000, "search": 2400, "social": 1800},
+                {"date": "2023-02", "direct": 4200, "search": 2800, "social": 2200},
+                {"date": "2023-03", "direct": 5000, "search": 3000, "social": 2600}
+            ],
+            "xAxisConfig": {
+                "dataKey": "date",
+                "dateFormat": "MMM YY"
+            },
+            "stacked": true,
+            "areaConfig": {
+                "useGradient": true,
+                "fillOpacity": 0.6
+            }
+        }
+        
+        4. KPI Chart:
+        {
+            "chartType": "kpi",
+            "title": "Total Revenue",
+            "description": "Q1 2023 Performance",
+            "kpiValue": 1250000,
+            "kpiLabel": "Total Revenue",
+            "kpiSubLabel": "Q1 2023",
+            "kpiPrefix": "$",
+            "kpiSuffix": "",
+            "kpiChange": 12.5,
+            "kpiChangeDirection": "increase"
+        }
+        """
         # Load the data glossary 
         file_path = 'utils/visual_glossary.txt'
         # file_path = "apps/backend/utils/visual_glossary.txt"
@@ -79,65 +158,420 @@ def visualize(data, query, context, ai_service):
 
         if not query:
             query = "Given the data, provide me a valuable visualization"
-        visualization_output = []
-        viz_components = {
-            "area": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
-             "piechart": ['title', "y0", "labels"],
-             "scatter": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
-             "line": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
-             "bar": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
-             "heatmap": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label', 'z0', 'z0Label'],
-        }
-
-        init_queries = [
-             f"I want you to decide what's the best visualization type to use in order to answer the following question: {query} \
-             Could be a barchart, piechart, scatter, line, or heatmap. \
-                Print only the name of the visualization type and nothing else. ",
-
-                f"Given the following data: {{df_metadata}} I want you to give me the following components for a nice visualization \
-                    Print only the components and nothing else in the following format: \
-                    <component1>: <value1>| <component2>: <value2>| <component3>: <value3>| ... \
-                    I want the visualization to answer to this user query as fine as possible: {{user_query}} \
-                    Also, here is a glossary of all the possible components and what they mean: {{visual_glossary}}. \
-                    The components I need: {{components_needed}}. \
-                    For the rest of the components, add them only if the user query explicitely asks for them. \
-                    Print only the components and nothing else." 
-    
-        ]
         
+        # Define accepted chart types to match frontend ChartSpec
+        valid_chart_types = ["line", "bar", "area", "kpi"]
+        
+        # Initial chart type determination
+        init_query = f"I want you to decide what's the best visualization type to use in order to answer the following question: {query} \
+             Could be a bar, area, line, or kpi chart. \
+             Print only the name of the visualization type and nothing else. \
+             You must choose from exactly these options: bar, area, line, kpi."
+
         data_text = data.to_string(index=False)
-        # context = f"The following is the financial data for 2024:\n{data_text}"
-
+        
         # First LLM Pass to get the visualization type
-        query_type = ai_service.process_query(context, init_queries[0])
+        chart_type = ai_service.process_query(context, init_query).strip().lower()
 
-        if query_type not in viz_components.keys(): 
-             query_type = "line"
-
-        # Second LLM Pass to get the visualization components
-        # query_components = ai_service.process_query(context, init_queries[1] + "I am looking to creating a " + query_type + ". The components I need: " + str(viz_components[query_type]))
-        query_components = ai_service.process_query(context, init_queries[1].format(df_metadata=data.head(10).to_string(index=False), user_query=query, visual_glossary=glossary_content, components_needed=str(viz_components[query_type])))
-        # Transform the query components into a dictionary
-        query_components = query_components.split("|") 
-        query_components = [x.strip() for x in query_components]
-        query_components = {k: v.split(": ")[1] for k, v in zip(viz_components[query_type], query_components)}
-
-        
-        query_components['x'] = ast.literal_eval(query_components['x'])
-        query_components['y0'] = ast.literal_eval(query_components['y0'])
-
-
-        query_components_f = {}
-        query_components_f["chartType"] = query_type
-        query_components_f["title"] = query_components["title"]
-        query_components_f["description"] = query_components["description"]
-        query_components_f["data"] = [{query_components["xLabel"]: query_components["x"][i], query_components["y0Label"]: query_components["y0"][i]} for i in range(len(query_components["x"]))]
-        query_components_f["xAxisConfig"] = {"dataKey": query_components["xLabel"]}
-
-
-        visualization_output.append(query_components_f)
-        
-        return visualization_output
+        # Validate and default to "line" if not valid
+        if chart_type not in valid_chart_types: 
+             chart_type = "line"
+             
+        # Build query based on chart type
+        if chart_type == "kpi":
+            # Special handling for KPI chart
+            kpi_query = f"""
+            Given the following data: {data.head(10).to_string(index=False)}, 
+            I want you to extract the following KPI components:
+            - A single numeric value for kpiValue
+            - An appropriate kpiLabel (string)
+            - An appropriate kpiSubLabel (string) if applicable
+            - A kpiPrefix or kpiSuffix if applicable (such as $, %, etc.)
+            - A kpiChange value (number) if there's change data
+            - A kpiChangeDirection ("increase", "decrease", or "flat")
+            
+            Here's an example of what your response should look like:
+            ```
+            {{
+              "kpiValue": 1250000,
+              "kpiLabel": "Total Revenue",
+              "kpiSubLabel": "Q1 2023",
+              "kpiPrefix": "$",
+              "kpiSuffix": "",
+              "kpiChange": 12.5,
+              "kpiChangeDirection": "increase"
+            }}
+            ```
+            
+            Format your response as JSON with these exact keys.
+            Your response should be strictly JSON, nothing else.
+            """
+            
+            kpi_response = ai_service.process_query(context, kpi_query)
+            try:
+                kpi_data = json.loads(kpi_response)
+                
+                # Ensure the response conforms to ChartSpec interface
+                chart_spec = {
+                    "chartType": "kpi",
+                    "title": kpi_data.get("kpiLabel", "Key Performance Indicator"),
+                    "description": kpi_data.get("kpiSubLabel", "KPI Metric"),
+                    "kpiValue": kpi_data.get("kpiValue", 0),
+                    "kpiLabel": kpi_data.get("kpiLabel", "Metric"),
+                    "kpiSubLabel": kpi_data.get("kpiSubLabel", "Performance Indicator"),
+                    "kpiPrefix": kpi_data.get("kpiPrefix", ""),
+                    "kpiSuffix": kpi_data.get("kpiSuffix", ""),
+                    "kpiChange": kpi_data.get("kpiChange", 0),
+                    "kpiChangeDirection": kpi_data.get("kpiChangeDirection", "flat"),
+                    "kpiValueFormat": kpi_data.get("kpiValueFormat", ""),
+                    "kpiChangeFormat": kpi_data.get("kpiChangeFormat", "+0.0%"),
+                    "kpiStyles": {
+                        "valueColor": "#3b82f6",  # blue
+                        "labelColor": "#374151",  # gray-700
+                        "subLabelColor": "#6b7280",  # gray-500
+                        "changePositiveColor": "#10b981",  # green
+                        "changeNegativeColor": "#ef4444",  # red
+                        "changeFlatColor": "#6b7280",  # gray-500
+                        "backgroundColor": "#ffffff",
+                        "padding": "1.5rem",
+                        "borderRadius": "0.5rem",
+                        "fontSize": {
+                            "value": "2.5rem",
+                            "label": "1.125rem",
+                            "change": "1rem"
+                        }
+                    },
+                    "chartConfig": {}  # Add empty chartConfig even for KPI charts
+                }
+                
+                # Log the final chart spec for debugging
+                print(f"DEBUG - Final KPI chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
+                
+                return [chart_spec]
+            except:
+                # Fallback in case JSON parsing fails
+                chart_spec = {
+                    "chartType": "kpi",
+                    "title": "Key Performance Indicator",
+                    "description": "KPI Metric",
+                    "kpiValue": 0,
+                    "kpiLabel": "Value",
+                    "kpiSubLabel": "Performance Indicator",
+                    "kpiPrefix": "",
+                    "kpiSuffix": "",
+                    "kpiChange": 0,
+                    "kpiChangeDirection": "flat",
+                    "kpiValueFormat": "",
+                    "kpiChangeFormat": "+0.0%",
+                    "kpiStyles": {
+                        "valueColor": "#3b82f6",
+                        "labelColor": "#374151",
+                        "subLabelColor": "#6b7280",
+                        "changePositiveColor": "#10b981",
+                        "changeNegativeColor": "#ef4444",
+                        "changeFlatColor": "#6b7280",
+                        "backgroundColor": "#ffffff",
+                        "padding": "1.5rem",
+                        "borderRadius": "0.5rem",
+                        "fontSize": {
+                            "value": "2.5rem",
+                            "label": "1.125rem",
+                            "change": "1rem"
+                        }
+                    },
+                    "chartConfig": {}  # Add empty chartConfig even for KPI fallback
+                }
+                
+                # Log the final chart spec for debugging
+                print(f"DEBUG - Final KPI fallback chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
+                
+                return [chart_spec]
+        else:
+            # For line, bar, and area charts
+            chart_query = f"""
+            Given the following data: {data.head(10).to_string(index=False)}, 
+            analyze it and create a {chart_type} chart that best answers this query: {query}
+            
+            Provide your response as strict JSON with these properties:
+            - title: A descriptive title for the chart
+            - description: A brief description of what the chart shows
+            - xAxisDataKey: The column name to use for x-axis values
+            - dataColumns: An array of column names to plot on the y-axis
+            
+            Here's an example of what your response should look like:
+            ```
+            {{
+              "title": "Sales Growth by Region",
+              "description": "Monthly sales figures across different regions",
+              "xAxisDataKey": "month",
+              "dataColumns": ["north_sales", "south_sales", "east_sales", "west_sales"]
+            }}
+            ```
+            
+            Your response should be strictly JSON, nothing else.
+            """
+            
+            chart_response = ai_service.process_query(context, chart_query)
+            try:
+                chart_data = json.loads(chart_response)
+                
+                # Prepare data for the chart
+                x_key = chart_data.get("xAxisDataKey", data.columns[0])
+                data_cols = chart_data.get("dataColumns", [data.columns[1]])
+                
+                # If data_cols is provided as string, convert to list
+                if isinstance(data_cols, str):
+                    try:
+                        data_cols = ast.literal_eval(data_cols)
+                    except:
+                        data_cols = [data_cols]
+                
+                # Ensure it's a list
+                if not isinstance(data_cols, list):
+                    data_cols = [data_cols]
+                
+                # Create the data array in the correct format
+                chart_data_array = []
+                for i in range(min(len(data), 100)):  # Limit to 100 data points
+                    item = {}
+                    try:
+                        item[x_key] = data.iloc[i][x_key]
+                        for col in data_cols:
+                            if col in data.columns:
+                                item[col] = data.iloc[i][col]
+                        chart_data_array.append(item)
+                    except:
+                        continue
+                
+                # Create chart spec that strictly conforms to the ChartSpec interface
+                chart_spec = {
+                    "chartType": chart_type,
+                    "title": chart_data.get("title", f"{chart_type.capitalize()} Chart"),
+                    "description": chart_data.get("description", ""),
+                    "data": chart_data_array,
+                    "xAxisConfig": {
+                        "dataKey": x_key
+                    },
+                    "chartConfig": {}  # Initialize empty chartConfig that will be populated later
+                }
+                
+                # Add optional properties based on chart type
+                if chart_type == "line":
+                    chart_spec["lineType"] = "monotone"
+                    chart_spec["dot"] = True
+                    chart_spec["dateFormatTooltip"] = "MMM DD, YYYY"
+                elif chart_type == "area":
+                    chart_spec["stacked"] = True
+                    chart_spec["lineType"] = "natural"
+                    chart_spec["dateFormatTooltip"] = "MMM DD, YYYY"
+                    chart_spec["dot"] = False
+                    chart_spec["areaConfig"] = {
+                        "useGradient": True,
+                        "fillOpacity": 0.4,
+                        "accessibilityLayer": True,
+                        "gradientStops": {
+                            "topOffset": "5%",
+                            "bottomOffset": "95%",
+                            "topOpacity": 0.8,
+                            "bottomOpacity": 0.1
+                        }
+                    }
+                    # Add yAxisConfig for area charts
+                    chart_spec["yAxisConfig"] = {
+                        "tickLine": False,
+                        "axisLine": False,
+                        "tickCount": 5
+                    }
+                elif chart_type == "bar":
+                    chart_spec["barConfig"] = {
+                        "radius": 4,
+                        "fillOpacity": 0.8,
+                        "accessibilityLayer": True
+                    }
+                    # Add yAxisConfig for bar charts
+                    chart_spec["yAxisConfig"] = {
+                        "tickLine": False,
+                        "axisLine": False
+                    }
+                
+                # Create a chartConfig for the data columns
+                chartConfig = {}
+                colors = [
+                    "#3b82f6",  # blue
+                    "#ef4444",  # red
+                    "#10b981",  # green
+                    "#f59e0b",  # amber
+                    "#8b5cf6",  # purple
+                    "#ec4899",  # pink
+                    "#06b6d4",  # cyan
+                    "#14b8a6",  # teal
+                    "#f97316",  # orange
+                    "#6366f1"   # indigo
+                ]
+                
+                # Add color configuration for each data column
+                for i, col in enumerate(data_cols):
+                    if col in data.columns:
+                        chartConfig[col] = {
+                            "color": colors[i % len(colors)],
+                            "label": col.replace("_", " ").title()
+                        }
+                
+                # Add the chartConfig to the spec
+                chart_spec["chartConfig"] = chartConfig
+                
+                # Ensure chartConfig is always present
+                if "chartConfig" not in chart_spec or not chart_spec["chartConfig"]:
+                    # Create a basic fallback chartConfig
+                    chartConfig = {}
+                    colors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6"]
+                    
+                    # Add color configuration for each data column
+                    for i, col in enumerate(data_cols):
+                        if col in data.columns:
+                            chartConfig[col] = {
+                                "color": colors[i % len(colors)],
+                                "label": col.replace("_", " ").title()
+                            }
+                    
+                    # If we couldn't create any entries, add at least one default
+                    if not chartConfig and len(data.columns) > 1:
+                        chartConfig[data.columns[1]] = {
+                            "color": "#3b82f6",
+                            "label": data.columns[1].replace("_", " ").title()
+                        }
+                    
+                    chart_spec["chartConfig"] = chartConfig
+                
+                # Log the final chart spec for debugging
+                print(f"DEBUG - Final chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
+                
+                return [chart_spec]
+            except Exception as e:
+                print(f"Error creating chart: {e}")
+                # Fallback with minimal valid chart spec
+                chart_spec = {
+                    "chartType": chart_type,
+                    "title": f"{chart_type.capitalize()} Chart",
+                    "description": f"Visualization of {data.columns[0]}",
+                    "data": [],
+                    "xAxisConfig": {
+                        "dataKey": data.columns[0],
+                        "tickLine": False,
+                        "axisLine": False
+                    },
+                    "yAxisConfig": {
+                        "tickLine": False,
+                        "axisLine": False,
+                        "tickCount": 5
+                    }
+                }
+                
+                # Create some fallback data
+                try:
+                    x_key = data.columns[0]
+                    # Get up to 2 numeric columns for y-axis data
+                    numeric_cols = [col for col in data.columns[1:3] if pd.api.types.is_numeric_dtype(data[col])]
+                    if not numeric_cols and len(data.columns) > 1:
+                        numeric_cols = [data.columns[1]]  # Fallback to first non-index column
+                    
+                    fallback_data = []
+                    for i in range(min(5, len(data))):  # Just use 5 data points for fallback
+                        item = {}
+                        # Format date columns properly
+                        if pd.api.types.is_datetime64_any_dtype(data[x_key]):
+                            item[x_key] = data.iloc[i][x_key].isoformat()
+                        else:
+                            item[x_key] = data.iloc[i][x_key]
+                        
+                        # Add numeric data for each column
+                        for col in numeric_cols:
+                            if col in data.columns:
+                                item[col] = float(data.iloc[i][col]) if pd.api.types.is_numeric_dtype(data[col]) else data.iloc[i][col]
+                        fallback_data.append(item)
+                    
+                    if fallback_data:
+                        chart_spec["data"] = fallback_data
+                except Exception as e:
+                    print(f"DEBUG - Error creating fallback data: {e}")
+                
+                # Create a basic chartConfig for the fallback
+                chartConfig = {}
+                colors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6"]
+                
+                try:
+                    for i, col in enumerate(numeric_cols):
+                        chartConfig[col] = {
+                            "color": colors[i % len(colors)],
+                            "label": col.replace("_", " ").title()
+                        }
+                except:
+                    # If there's any error, create at least one chart config entry
+                    if len(data.columns) > 1:
+                        chartConfig[data.columns[1]] = {
+                            "color": "#3b82f6",
+                            "label": data.columns[1].replace("_", " ").title()
+                        }
+                
+                chart_spec["chartConfig"] = chartConfig
+                
+                # Add type-specific properties based on chart type
+                if chart_type == "line":
+                    chart_spec["lineType"] = "monotone"
+                    chart_spec["dot"] = True
+                    chart_spec["dateFormatTooltip"] = "MMM DD, YYYY"
+                elif chart_type == "area":
+                    chart_spec["stacked"] = True
+                    chart_spec["lineType"] = "natural"
+                    chart_spec["dateFormatTooltip"] = "MMM DD, YYYY"
+                    chart_spec["dot"] = False
+                    chart_spec["areaConfig"] = {
+                        "useGradient": True,
+                        "fillOpacity": 0.4,
+                        "accessibilityLayer": True,
+                        "gradientStops": {
+                            "topOffset": "5%",
+                            "bottomOffset": "95%",
+                            "topOpacity": 0.8,
+                            "bottomOpacity": 0.1
+                        }
+                    }
+                elif chart_type == "bar":
+                    chart_spec["barConfig"] = {
+                        "radius": 4,
+                        "fillOpacity": 0.8,
+                        "accessibilityLayer": True,
+                        "truncateLabels": True,
+                        "maxLabelLength": 15
+                    }
+                
+                # Ensure chartConfig is always present
+                if "chartConfig" not in chart_spec or not chart_spec["chartConfig"]:
+                    # Create a basic fallback chartConfig
+                    chartConfig = {}
+                    colors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6"]
+                    
+                    # Add color configuration for each data column
+                    for i, col in enumerate(data_cols):
+                        if col in data.columns:
+                            chartConfig[col] = {
+                                "color": colors[i % len(colors)],
+                                "label": col.replace("_", " ").title()
+                            }
+                    
+                    # If we couldn't create any entries, add at least one default
+                    if not chartConfig and len(data.columns) > 1:
+                        chartConfig[data.columns[1]] = {
+                            "color": "#3b82f6",
+                            "label": data.columns[1].replace("_", " ").title()
+                        }
+                    
+                    chart_spec["chartConfig"] = chartConfig
+                
+                # Log the final chart spec for debugging
+                print(f"DEBUG - Final chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
+                
+                return [chart_spec]
 
 def calculate(data, query, context, ai_service):
         calculation_output = []
@@ -284,3 +718,4 @@ def agentic_flow(data, user_query, ai_service):
     ai_service.set_analysis_complete(True)
 
     return response_dict
+
