@@ -1,9 +1,8 @@
 'use client'
 
-import { LineChartComponent } from "@/components/charts/LineChart";
 import { ChartSpec } from "@/types/chart-types";
 import { consumptionData } from "@/types/aep_2017_data";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ChartBlock } from "@/components/blocks/ChartBlock";
 import LineChartBlock from "@/components/blocks/lineChart-block";
 
 // Mock data for the chart
@@ -51,7 +50,11 @@ const lineChartSpec: ChartSpec = {
 export default function Page() {
   return (
     <div className="flex flex-col gap-4 p-12 w-full h-[calc(100vh-4rem)] bg-neutral-100">
+      {/* Old way (deprecated) */}
       <LineChartBlock cardData={lineChartSpec} />
+      
+      {/* New way (recommended) */}
+      <ChartBlock spec={lineChartSpec} />
     </div>
   );
 }

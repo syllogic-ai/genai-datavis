@@ -1,24 +1,27 @@
+"use client";
+
 import { ChartRenderer } from "../charts/ChartRenderer";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { ChartSpec } from "@/types/chart-types";
 
-interface LineChartBlockProps {
-  cardData: ChartSpec;
+interface ChartBlockProps {
+  spec: ChartSpec;
 }
 
 /**
- * @deprecated Use ChartBlock with a ChartSpec instead
+ * A generic chart block component that can display any type of chart
+ * based on the provided ChartSpec
  */
-export default function LineChartBlock({ cardData }: LineChartBlockProps) {
+export function ChartBlock({ spec }: ChartBlockProps) {
   return (
     <Card className="w-full h-[500px] overflow-hidden bg-[#FFF1E5] lg:flex lg:flex-row lg:items-start lg:gap-4">
       <CardHeader className="pb-8 lg:w-1/3">
-        <CardTitle className="text-2xl font-bold">{cardData.title}</CardTitle>
-        <CardDescription className="text-md text-gray-500">{cardData.description}</CardDescription>
+        <CardTitle className="text-2xl font-bold">{spec.title}</CardTitle>
+        <CardDescription className="text-md text-gray-500">{spec.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex-1 h-full">
-        <ChartRenderer spec={cardData} />
+        <ChartRenderer spec={spec} />
       </CardContent>
     </Card>       
   );
-}
+} 
