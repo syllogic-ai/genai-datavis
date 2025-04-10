@@ -82,6 +82,28 @@ export interface ChartSpec {
     };
   };
 
+  /** Bar-specific configuration properties */
+  barConfig?: {
+    /** Border radius for bar corners */
+    radius?: number;
+    /** Whether to truncate long labels in x-axis */
+    truncateLabels?: boolean;
+    /** Maximum label length if truncating */
+    maxLabelLength?: number;
+    /** Whether to add accessibility layer to the chart */
+    accessibilityLayer?: boolean;
+    /** Custom fill opacity for bars */
+    fillOpacity?: number;
+    /** Custom bar padding */
+    barSize?: number;
+    /** Gap between bars in a group */
+    barGap?: number;
+    /** Gap between bar groups */
+    barCategoryGap?: number;
+    /** Whether to display the bar chart horizontally */
+    isHorizontal?: boolean;
+  };
+
   /**
    * KPI-specific fields (only used if chartType === "kpi").
    */

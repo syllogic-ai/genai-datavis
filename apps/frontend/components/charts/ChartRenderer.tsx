@@ -4,6 +4,7 @@ import { ChartSpec } from "@/types/chart-types";
 import { LineChartRenderer } from "@/components/charts/renderers/LineChartRenderer";
 import { AreaChartRenderer } from "@/components/charts/renderers/AreaChartRenderer";
 import { KPIRenderer } from "@/components/charts/renderers/KPIRenderer";
+import { BarChartRenderer } from "@/components/charts/renderers/BarChartRenderer";
 
 /**
  * Unified chart renderer that determines which chart component to render
@@ -24,9 +25,7 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
     case "line":
       return <LineChartRenderer spec={spec} />;
     case "bar":
-      // To be implemented
-      console.warn("Bar charts not yet implemented");
-      return <div>Bar Chart (Not yet implemented)</div>;
+      return <BarChartRenderer spec={spec} />;
     case "area":
       return <AreaChartRenderer spec={spec} />;
     case "kpi":

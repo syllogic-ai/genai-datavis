@@ -34,6 +34,26 @@ const generateMultiSeriesData = (days = 30) => {
   return data;
 };
 
+// Mock data for bar charts
+const barChartData = [
+  { category: "Product A", revenue: 4200, cost: 2100, profit: 2100 },
+  { category: "Product B", revenue: 3800, cost: 1700, profit: 2100 },
+  { category: "Product C", revenue: 5100, cost: 2700, profit: 2400 },
+  { category: "Product D", revenue: 2700, cost: 1500, profit: 1200 },
+  { category: "Product E", revenue: 6100, cost: 3200, profit: 2900 },
+  { category: "Product F", revenue: 4800, cost: 2400, profit: 2400 },
+];
+
+// Mock data for horizontal bar chart
+const horizontalBarData = [
+  { department: "Sales", headcount: 42 },
+  { department: "Marketing", headcount: 28 },
+  { department: "Engineering", headcount: 65 },
+  { department: "Product", headcount: 15 },
+  { department: "Customer Support", headcount: 34 },
+  { department: "Operations", headcount: 21 },
+].sort((a, b) => a.headcount - b.headcount); // Sort for better horizontal visualization
+
 const areaChartData = generateMultiSeriesData();
 
 // Create chart specification using the new unified format
@@ -72,6 +92,111 @@ const lineChartSpec: ChartSpec = {
   hideLegend: false,
   strokeWidth: 2,
   dot: false,
+};
+
+// Vertical bar chart specification
+const verticalBarChartSpec: ChartSpec = {
+  chartType: "bar",
+  title: "Product Revenue and Cost",
+  description: "Financial breakdown by product",
+  data: barChartData,
+  chartConfig: {
+    revenue: {
+      label: "Revenue",
+      color: "#4F46E5" // Indigo
+    },
+    cost: {
+      label: "Cost",
+      color: "#8B5CF6" // Purple
+    }
+  },
+  xAxisConfig: {
+    dataKey: "category",
+    tickLine: false,
+    axisLine: false,
+    tickMargin: 10
+  },
+  yAxisConfig: {
+    tickLine: false,
+    axisLine: false,
+    tickCount: 5
+  },
+  barConfig: {
+    radius: 4,
+    truncateLabels: false,
+    accessibilityLayer: true,
+    barGap: 4
+  }
+};
+
+// Horizontal bar chart specification
+const horizontalBarChartSpec: ChartSpec = {
+  chartType: "bar",
+  title: "Department Headcount",
+  description: "Number of employees by department",
+  data: horizontalBarData,
+  chartConfig: {
+    headcount: {
+      label: "Headcount",
+      color: "#0EA5E9" // Sky blue
+    }
+  },
+  xAxisConfig: {
+    dataKey: "department",
+    tickLine: false,
+    axisLine: false,
+    tickMargin: 10
+  },
+  yAxisConfig: {
+    tickLine: false,
+    axisLine: false,
+    tickCount: 5
+  },
+  barConfig: {
+    radius: 4,
+    truncateLabels: false,
+    accessibilityLayer: true,
+    isHorizontal: true // Indicates this should be rendered as a horizontal bar chart
+  }
+};
+
+// Stacked bar chart specification
+const stackedBarChartSpec: ChartSpec = {
+  chartType: "bar",
+  title: "Revenue, Cost, and Profit by Product",
+  description: "Financial breakdown with stacked view",
+  data: barChartData,
+  stacked: true,
+  chartConfig: {
+    revenue: {
+      label: "Revenue",
+      color: "#2DD4BF" // Teal
+    },
+    cost: {
+      label: "Cost",
+      color: "#4ADE80" // Green
+    },
+    profit: {
+      label: "Profit",
+      color: "#A3E635" // Lime
+    }
+  },
+  xAxisConfig: {
+    dataKey: "category",
+    tickLine: false,
+    axisLine: false,
+    tickMargin: 10
+  },
+  yAxisConfig: {
+    tickLine: false,
+    axisLine: false,
+    tickCount: 5
+  },
+  barConfig: {
+    radius: 4,
+    truncateLabels: false,
+    accessibilityLayer: true
+  }
 };
 
 // Stacked area chart specification
@@ -197,6 +322,16 @@ export default function Page() {
   return (
     <div className="flex flex-col gap-6 p-12 w-full min-h-[calc(100vh-4rem)] bg-neutral-100">
       <h1 className="text-3xl font-bold mb-4">Chart Examples</h1>
+      
+      {/* Bar Charts */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold mb-4">Bar Chart Examples</h2>
+        <div className="space-y-6">
+          <ChartBlock spec={verticalBarChartSpec} />
+          <ChartBlock spec={horizontalBarChartSpec} />
+          <ChartBlock spec={stackedBarChartSpec} />
+        </div>
+      </div>
       
       {/* Line Chart */}
       <div className="mb-8">
