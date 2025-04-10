@@ -2,6 +2,14 @@
 
 cd "$(dirname "$0")"
 
+# Check if the --run flag was passed
+RUN_AFTER_SETUP=false
+for arg in "$@"; do
+  if [ "$arg" = "--run" ]; then
+    RUN_AFTER_SETUP=true
+  fi
+done
+
 # Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
   echo "Creating virtual environment..."
@@ -54,4 +62,12 @@ def read_root():
 EOF
 fi
 
-echo "✅ Backend setup complete. To start the server, run: python run.py"
+echo "✅ Backend setup complete."
+
+# Start the server if the --run flag was passed
+if [ "$RUN_AFTER_SETUP" = true ]; then
+  echo "Starting the server..."
+  python run.py
+else
+  echo "To start the server, run: source venv/bin/activate && python run.py"
+fi

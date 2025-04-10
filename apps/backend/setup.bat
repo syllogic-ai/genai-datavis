@@ -1,6 +1,14 @@
 @echo off
 cd /d %~dp0
 
+REM Check if the --run flag was passed
+set RUN_AFTER_SETUP=false
+for %%A in (%*) do (
+    if "%%A"=="--run" (
+        set RUN_AFTER_SETUP=true
+    )
+)
+
 REM Create virtual environment if it doesn't exist
 if not exist "venv" (
     echo Creating virtual environment...
@@ -56,4 +64,12 @@ if not exist "app.py" (
     ) > app.py
 )
 
-echo ✅ Backend setup complete. To start the server, run: python run.py
+echo ✅ Backend setup complete.
+
+REM Start the server if the --run flag was passed
+if "%RUN_AFTER_SETUP%"=="true" (
+    echo Starting the server...
+    python run.py
+) else (
+    echo To start the server, run: call venv\Scripts\activate ^&^& python run.py
+)

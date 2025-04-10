@@ -21,43 +21,35 @@ All these dependencies are listed in `requirements.txt`.
 
 ## Setup Instructions
 
-### For Mac/Linux Users
+### Cross-Platform Setup (Windows, Mac, Linux)
 
-1. Open your terminal
+1. Open your terminal or command prompt
 2. Navigate to the backend directory:
    ```
+   # On Mac/Linux
    cd path/to/genai-datavis/apps/backend
-   ```
-3. Run the setup script:
-   ```
-   ./setup.sh
-   ```
-   If you encounter a permission error, make the script executable first:
-   ```
-   chmod +x setup.sh
-   ```
-4. The setup script will:
-   - Create a virtual environment (`venv`)
-   - Activate the virtual environment
-   - Upgrade pip
-   - Install required dependencies
-
-### For Windows Users
-
-1. Open Command Prompt or PowerShell
-2. Navigate to the backend directory:
-   ```
+   
+   # On Windows
    cd path\to\genai-datavis\apps\backend
    ```
 3. Run the setup script:
    ```
-   .\setup.bat
+   python setup.py
    ```
-4. The setup script will:
+   
+   This will set up the environment but not start the server.
+   
+4. Alternatively, to set up the environment AND start the server in one command:
+   ```
+   python setup.py --run
+   ```
+   
+5. The setup script will:
    - Create a virtual environment (`venv`)
    - Activate the virtual environment
    - Upgrade pip
    - Install required dependencies
+   - Optionally start the server (if --run flag is used)
 
 ## Environment Variables
 
@@ -103,37 +95,26 @@ This will start the server using the configuration from your environment variabl
 
 ## Running the Server
 
-### For Mac/Linux Users
+### After Setup
+
+Once you've run the setup script, you can start the server by:
 
 1. Ensure your virtual environment is activated:
    ```
+   # On Mac/Linux
    source venv/bin/activate
+   
+   # On Windows
+   call venv\Scripts\activate
    ```
 2. Start the server:
    ```
-   uvicorn app.main:app --reload
-   ```
-   
-   Alternatively, you can use the run.py script:
-   ```
    python run.py
    ```
-
-### For Windows Users
-
-1. Ensure your virtual environment is activated:
-   ```
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-   .\venv\Scripts\activate
-   ```
-2. Start the server:
+   
+   Or directly with uvicorn:
    ```
    uvicorn app.main:app --reload
-   ```
-   
-   Alternatively, you can use the run.py script:
-   ```
-   python run.py
    ```
 
 ## API Documentation
@@ -156,13 +137,13 @@ If you encounter errors while running the application, try the following:
 
 ### Module Not Found Errors
 
-If you see errors like `ModuleNotFoundError: No module named 'uvicorn'` or similar, you might need to install missing dependencies:
+If you see errors like `ModuleNotFoundError: No module named 'uvicorn'` or similar, you might need to reinstall missing dependencies:
 
 ```bash
 # Make sure you're in the backend directory and virtual environment is activated
-pip install -r requirements.txt
+python setup.py  # Run the setup script again to fix missing dependencies
 
-# Install individual packages if needed
+# Or install individual packages if needed
 pip install uvicorn fastapi requests plotly pandas numpy python-dotenv
 ```
 

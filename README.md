@@ -77,16 +77,15 @@ cp .env.example .env.local
 ```bash
 # Start backend
 cd apps/backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python run.py
+python setup.py --run  # Sets up environment and starts the server
 
 # Start frontend (in another terminal)
 cd apps/frontend
 npm install
 npm run dev
 ```
+
+For more detailed instructions, see the README files in the respective application directories.
 
 ## Environment Variables Best Practices
 
