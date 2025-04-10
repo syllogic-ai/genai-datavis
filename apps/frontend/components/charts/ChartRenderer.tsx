@@ -2,6 +2,7 @@
 
 import { ChartSpec } from "@/types/chart-types";
 import { LineChartRenderer } from "@/components/charts/renderers/LineChartRenderer";
+import { KPIRenderer } from "@/components/charts/renderers/KPIRenderer";
 
 /**
  * Unified chart renderer that determines which chart component to render
@@ -30,9 +31,7 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
       console.warn("Area charts not yet implemented");
       return <div>Area Chart (Not yet implemented)</div>;
     case "kpi":
-      // To be implemented
-      console.warn("KPI charts not yet implemented");
-      return <div>KPI Display (Not yet implemented)</div>;
+      return <KPIRenderer spec={spec} />;
     default:
       console.error(`Unknown chart type: ${spec.chartType}`);
       return null;

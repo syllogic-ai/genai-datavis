@@ -9,6 +9,11 @@ export interface DataItem {
 
 export type ChartType = "line" | "bar" | "area" | "kpi";
 
+/**
+ * Represents the direction of change for KPI metrics
+ */
+export type ChangeDirection = "increase" | "decrease" | "flat";
+
 /** 
  * A unified interface for all chart types (line, bar, area, KPI, etc.)
  * Only certain fields apply to certain chart types.
@@ -70,7 +75,30 @@ export interface ChartSpec {
    * KPI-specific fields (only used if chartType === "kpi").
    */
   kpiValue?: string | number;
+  kpiSuffix?: string; // For appending units like %, $, etc.
+  kpiPrefix?: string; // For prepending symbols like $, €, etc.
   kpiLabel?: string;
+  kpiSubLabel?: string; // Secondary label, e.g., "compared to last month"
   kpiChange?: number;
-  kpiChangeDirection?: "increase" | "decrease" | "flat";
+  kpiChangeDirection?: ChangeDirection;
+  kpiChangeFormat?: string; // Format for the change value, e.g., "+0.0%"
+  kpiValueFormat?: string; // Format for the main value
+  
+  /** Optional KPI styling options */
+  kpiStyles?: {
+    valueColor?: string;
+    labelColor?: string;
+    subLabelColor?: string;
+    changePositiveColor?: string;
+    changeNegativeColor?: string;
+    changeFlatColor?: string;
+    backgroundColor?: string;
+    padding?: string | number;
+    borderRadius?: string | number;
+    fontSize?: {
+      value?: string | number;
+      label?: string | number;
+      change?: string | number;
+    };
+  };
 }
