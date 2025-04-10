@@ -10,6 +10,7 @@ import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Box } from "lucide-react";
+import { ChartBlock } from "@/components/blocks/ChartBlock";
 
 // Define form schema
 const formSchema = z.object({
@@ -35,7 +36,7 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showJson, setShowJson] = useState(true);
-
+  const [visualization, setVisualization] = useState<any>(null);
   // Initialize form
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -135,6 +136,18 @@ export default function Home() {
 
       const result = await response.json();
       setAnalysisResult(result);
+
+      console.log("result");
+      console.log(result);
+
+      console.log("result[0].visualization");
+
+      console.log("JSON.parse(result[0].visualization)");
+      console.log(JSON.stringify(result.visual[0]));
+
+      setVisualization(result.visual[0]);
+
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error analyzing file");
       console.error("Error analyzing file:", err);
@@ -282,29 +295,30 @@ export default function Home() {
 
           {/* Analysis Results JSON */}
           {analysisResult && (
-            <div className={`w-full ${messages.length > 0 ? 'md:w-1/2' : ''} max-w-2xl`}>
-              <div className="rounded-lg border border-gray-200 overflow-hidden">
-                <div className="bg-gray-50 p-3 border-b border-gray-200 flex justify-between items-center">
-                  <h2 className="text-lg font-medium">Analysis Results</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowJson(!showJson)}
-                  >
-                    {showJson ? 'Hide' : 'Show'}
-                  </Button>
-                </div>
-                {showJson && (
-                  <div className="bg-white">
-                    <ScrollArea className="h-[calc(100vh-230px)]">
-                      <pre className="p-4 text-sm overflow-auto">
-                        {JSON.stringify(analysisResult, null, 2)}
-                      </pre>
-                    </ScrollArea>
-                  </div>
-                )}
-              </div>
-            </div>
+            // <div className={`w-full ${messages.length > 0 ? 'md:w-1/2' : ''} max-w-2xl`}>
+            //   <div className="rounded-lg border border-gray-200 overflow-hidden">
+            //     <div className="bg-gray-50 p-3 border-b border-gray-200 flex justify-between items-center">
+            //       <h2 className="text-lg font-medium">Analysis Results</h2>
+            //       <Button
+            //         variant="ghost"
+            //         size="sm"
+            //         onClick={() => setShowJson(!showJson)}
+            //       >
+            //         {showJson ? 'Hide' : 'Show'}
+            //       </Button>
+            //     </div>
+            //     {showJson && (
+            //       <div className="bg-white">
+            //         <ScrollArea className="h-[calc(100vh-230px)]">
+            //           <pre className="p-4 text-sm overflow-auto">
+            //             {JSON.stringify(analysisResult, null, 2)}
+            //           </pre>
+            //         </ScrollArea>
+            //       </div>
+            //     )}
+            //   </div>
+            // </div>
+            <ChartBlock spec={visualization} />
           )}
         </div>
 
