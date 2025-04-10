@@ -65,12 +65,12 @@ export function LineChartRenderer({ spec }: { spec: ChartSpec }) {
         />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         <Line
-          key={"consumption"}
-          dataKey={"consumption"}
+          key={Object.keys(spec.chartConfig || {}).find(key => key !== spec.xAxisConfig?.dataKey)}
+          dataKey={Object.keys(spec.chartConfig || {}).find(key => key !== spec.xAxisConfig?.dataKey)}
           type={spec.lineType ?? "monotone"}
           strokeWidth={spec.strokeWidth ?? 2}
           dot={spec.dot ?? false}
-          stroke={spec.seriesConfig?.consumption?.color || spec.chartConfig?.consumption?.color || "#10B981"}
+          stroke={spec.chartConfig?.consumption?.color || "#10B981"}
         />
       </LineChart>
     </ChartContainer>

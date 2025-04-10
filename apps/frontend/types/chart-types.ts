@@ -32,15 +32,6 @@ export interface ChartSpec {
   /** Global chart configuration from ui/chart components */
   chartConfig?: ChartConfig;
 
-  /** 
-   * Series configuration (maps data keys to visual properties)
-   * For example: { "consumption": { color: "#10B981" } }
-   */
-  seriesConfig?: Record<string, {
-    color?: string;
-    [key: string]: any;
-  }>;
-
   /**
    * Axis configs if we're dealing with a line/bar/area chart.
    * If chartType === "kpi", these can be ignored in rendering.
@@ -70,6 +61,9 @@ export interface ChartSpec {
   hideLegend?: boolean;
   strokeWidth?: number;
   dot?: boolean;
+  
+  /** Whether to stack elements (for area and bar charts) */
+  stacked?: boolean;
 
   /**
    * KPI-specific fields (only used if chartType === "kpi").
