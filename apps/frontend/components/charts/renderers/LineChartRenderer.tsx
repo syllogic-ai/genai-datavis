@@ -65,8 +65,8 @@ export function LineChartRenderer({ spec }: { spec: ChartSpec }) {
         />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         <Line
-          key={Object.keys(spec.chartConfig || {}).find(key => key !== spec.xAxisConfig?.dataKey)}
-          dataKey={Object.keys(spec.chartConfig || {}).find(key => key !== spec.xAxisConfig?.dataKey)}
+          key={Object.keys(spec.data[0] || {}).find(key => key !== spec.xAxisConfig?.dataKey)}
+          dataKey={Object.keys(spec.data[0] || {}).find(key => key !== spec.xAxisConfig?.dataKey)}
           type={spec.lineType ?? "monotone"}
           strokeWidth={spec.strokeWidth ?? 2}
           dot={spec.dot ?? false}

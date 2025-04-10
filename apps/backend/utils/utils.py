@@ -81,10 +81,11 @@ def visualize(data, query, context, ai_service):
             query = "Given the data, provide me a valuable visualization"
         visualization_output = []
         viz_components = {
-             "barchart": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
+            "area": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
              "piechart": ['title', "y0", "labels"],
              "scatter": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
              "line": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
+             "bar": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
              "heatmap": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label', 'z0', 'z0Label'],
         }
 

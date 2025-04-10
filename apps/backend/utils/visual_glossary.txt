@@ -1,4 +1,4 @@
-- chartType (string): can take the following values: 'line'
+- chartType (string): can take the following values: 'line', 'bar', 'area'
 - title (string): the title of the chart created, should be less than 30 characters
 - description (string): a small description of the chart crated, should be less than 50 characters
 - x (array): a list with the x-axis values
