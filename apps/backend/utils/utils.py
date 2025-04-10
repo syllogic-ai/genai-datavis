@@ -137,6 +137,9 @@ def calculate(data, query, context, ai_service):
 
 
 def agentic_flow(data, user_query, ai_service):
+    # Set analysis status to false at the start
+    ai_service.set_analysis_complete(False)
+    
     tools_funcs = {
     "validate_data": validate_data,
     "get_insights": get_insights,
@@ -222,12 +225,27 @@ def agentic_flow(data, user_query, ai_service):
         "calculate": "",
     }
     response_dict["insights"] = final_response
-    response_dict[tools_responses[str(counter-1)][0]] = tools_responses[str(counter-1)][1]
+    
+    # Handle the special case for calculate tool
+    if tools_responses.get(str(counter-1)) and tools_responses[str(counter-1)][0] == "calculate":
+        # If it's a DataFrame, convert it to a serializable format
+        calc_result = tools_responses[str(counter-1)][1]
+        if hasattr(calc_result, 'to_dict'):  # Check if DataFrame-like
+            response_dict["calculate"] = calc_result.to_dict()
+        else:
+            response_dict["calculate"] = calc_result
+    else:
+        # For other tools, just use the response as is
+        if tools_responses.get(str(counter-1)):
+            response_dict[tools_responses[str(counter-1)][0]] = tools_responses[str(counter-1)][1]
 
     for key, value in response_dict.items():
         if isinstance(value, np.ndarray):
             response_dict[key] = value.tolist()  # Convert numpy array to list
         elif isinstance(value, (np.int64, np.float64)):
             response_dict[key] = value.item()  # Convert numpy scalar to Python scalar
+
+    # Set analysis status to complete
+    ai_service.set_analysis_complete(True)
 
     return response_dict
