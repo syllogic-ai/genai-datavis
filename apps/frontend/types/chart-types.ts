@@ -2,6 +2,12 @@
 
 import { ChartConfig } from "@/components/ui/chart";
 
+export interface ChartDataItem {
+  title: string;
+  description: string;
+  chartProps: LineChartProps;
+}
+
 // (e.g. "month", "desktop", "mobile", etc.).
 export interface LineChartDataItem {
   [key: string]: string | number;
@@ -11,14 +17,25 @@ export interface LineChartDataItem {
 export interface LineChartConfig {
   chartConfig: ChartConfig;
   xAxisConfig?: {
-    label: string;
-    color: string;
+    dataKey: string;
+    dateFormat?: string;
+    hide?: boolean;
+    tickLine?: boolean;
+    axisLine?: boolean;
+    tickMargin?: number;
   };
+  yAxisConfig?: {
+    hide?: boolean;
+    tickLine?: boolean;
+    axisLine?: boolean;
+    tickMargin?: number;
+    tickCount?: number;
+  };
+  dateFormatTooltip?: string;
+  lineType?: "monotone" | "step" | "bump" | "linear";
+  hideLegend?: boolean;
   strokeWidth?: number;
   dot?: boolean;
-  tickLine?: boolean;
-  axisLine?: boolean;
-  tickMargin?: number;
 }
 
 
