@@ -5,6 +5,7 @@ import plotly.io as pio
 import threading
 import sqlite3
 import numpy as np
+import ast
 
 def validate_data(data, query=None, context=None, ai_service=None):
         validation_output = []
@@ -62,15 +63,29 @@ def exec_with_timeout(code, local_vars, timeout=5):
         raise local_vars["error"]
 
 def visualize(data, query, context, ai_service):
+        # Load the data glossary 
+        file_path = 'utils/visual_glossary.txt'
+        # file_path = "apps/backend/utils/visual_glossary.txt"
+        # file_path = 'apps\backend\utils\visual_glossary.txt'
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                glossary_content = file.read()
+        except FileNotFoundError:
+            print(f"Error: The file at {file_path} was not found.")
+            return ""
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return ""
+
         if not query:
             query = "Given the data, provide me a valuable visualization"
         visualization_output = []
         viz_components = {
-             "barchart": ["x", "y", "color", "title", "xaxis_title", "yaxis_title"],
-             "piechart": ["values", "names", "title"],
-                "scatter": ["x", "y", "color", "title", "xaxis_title", "yaxis_title"],
-                "line": ["x", "y", "title", "xaxis_title", "yaxis_title"],
-                "heatmap": ["z", "x", "y", "title", "xaxis_title", "yaxis_title"],
+             "barchart": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
+             "piechart": ['title', "y0", "labels"],
+             "scatter": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
+             "line": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label'], 
+             "heatmap": ['title', 'description', 'x', 'xLabel', 'y0', 'y0Label', 'z0', 'z0Label'],
         }
 
         init_queries = [
@@ -78,9 +93,14 @@ def visualize(data, query, context, ai_service):
              Could be a barchart, piechart, scatter, line, or heatmap. \
                 Print only the name of the visualization type and nothing else. ",
 
-                f"Given the following data: {data.head(10).to_string(index=False)} I want you to give me the following components for a nice visualization \
+                f"Given the following data: {{df_metadata}} I want you to give me the following components for a nice visualization \
                     Print only the components and nothing else in the following format: \
-                    <component1>: <value1>, <component2>: <value2>, <component3>: <value3>, ...\n " 
+                    <component1>: <value1>| <component2>: <value2>| <component3>: <value3>| ... \
+                    I want the visualization to answer to this user query as fine as possible: {{user_query}} \
+                    Also, here is a glossary of all the possible components and what they mean: {{visual_glossary}}. \
+                    The components I need: {{components_needed}}. \
+                    For the rest of the components, add them only if the user query explicitely asks for them. \
+                    Print only the components and nothing else." 
     
         ]
         
@@ -91,16 +111,30 @@ def visualize(data, query, context, ai_service):
         query_type = ai_service.process_query(context, init_queries[0])
 
         if query_type not in viz_components.keys(): 
-             query_type = "barchart"
+             query_type = "line"
 
         # Second LLM Pass to get the visualization components
-        query_components = ai_service.process_query(context, init_queries[1] + "I am looking to creating a " + query_type + ". The components I need: " + str(viz_components[query_type]))
+        # query_components = ai_service.process_query(context, init_queries[1] + "I am looking to creating a " + query_type + ". The components I need: " + str(viz_components[query_type]))
+        query_components = ai_service.process_query(context, init_queries[1].format(df_metadata=data.head(10).to_string(index=False), user_query=query, visual_glossary=glossary_content, components_needed=str(viz_components[query_type])))
         # Transform the query components into a dictionary
-        query_components = query_components.split(",") 
+        query_components = query_components.split("|") 
         query_components = [x.strip() for x in query_components]
         query_components = {k: v.split(": ")[1] for k, v in zip(viz_components[query_type], query_components)}
 
-        visualization_output.append(query_components)
+        
+        query_components['x'] = ast.literal_eval(query_components['x'])
+        query_components['y0'] = ast.literal_eval(query_components['y0'])
+
+
+        query_components_f = {}
+        query_components_f["chartType"] = query_type
+        query_components_f["title"] = query_components["title"]
+        query_components_f["description"] = query_components["description"]
+        query_components_f["data"] = [{query_components["xLabel"]: query_components["x"][i], query_components["y0Label"]: query_components["y0"][i]} for i in range(len(query_components["x"]))]
+
+
+
+        visualization_output.append(query_components_f)
         
         return visualization_output
 
