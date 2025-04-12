@@ -5,6 +5,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
   ChartContainer,
+  ChartConfig,
 } from "@/components/ui/chart";
 import type { ChartSpec } from "@/types/chart-types";
 import moment from "moment";
@@ -13,6 +14,8 @@ import moment from "moment";
  * Specialized renderer for area charts
  */
 export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
+  console.log("AreaChartRenderer received spec:", JSON.stringify(spec, null, 2));
+
   if (spec.chartType !== 'area') {
     console.error(`AreaChartRenderer: Expected chart type 'area', got '${spec.chartType}'`);
     return null;
@@ -25,12 +28,16 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
 
   const interval = spec.data.length > 10 ? Math.floor(spec.data.length / 10) : 0;
 
-  // Sort data by datetime
+  // Sort data by date using the dataKey from xAxisConfig
+  const dateKey = spec.xAxisConfig?.dataKey || "date";
+  console.log("Using dateKey:", dateKey);
+  
   const sortedData = [...spec.data].sort((a, b) => {
-    const dateA = new Date(a.datetime as string);
-    const dateB = new Date(b.datetime as string);
+    const dateA = new Date(a[dateKey] as string);
+    const dateB = new Date(b[dateKey] as string);
     return dateA.getTime() - dateB.getTime();
   });
+  console.log("Sorted data:", sortedData);
 
   function formatXAxis(tickItem: string) {
     // If using moment.js
@@ -38,9 +45,8 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
   }
 
   // Get data keys excluding the x-axis key
-  const dataKeys = spec.chartConfig ? 
-    Object.keys(spec.chartConfig).filter(key => key !== spec.xAxisConfig?.dataKey) : 
-    [];
+  const dataKeys = Object.keys(sortedData[0] || {}).filter(key => key !== dateKey);
+  console.log("Data keys:", dataKeys);
 
   // Check if we should use stack mode
   const useStacks = spec.stacked === true;
@@ -54,9 +60,38 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
   const bottomOffset = spec.areaConfig?.gradientStops?.bottomOffset ?? "95%";
   const accessibilityLayer = spec.areaConfig?.accessibilityLayer ?? false;
 
+  console.log("Area chart configuration:", {
+    useGradient,
+    defaultFillOpacity,
+    topOpacity,
+    bottomOpacity,
+    topOffset,
+    bottomOffset,
+    accessibilityLayer
+  });
+
+  // Create config object compatible with ChartContainer
+  const chartConfig: ChartConfig = {};
+  
+  // Add the date key to the config
+  chartConfig[dateKey] = {
+    label: spec.chartConfig?.[dateKey]?.label || dateKey,
+    color: spec.chartConfig?.[dateKey]?.color || "#1f77b4" // Default color
+  };
+  
+  // Add all data series keys to the config
+  dataKeys.forEach(key => {
+    chartConfig[key] = {
+      label: spec.chartConfig?.[key]?.label || key,
+      color: spec.chartConfig?.[key]?.color || "#1f77b4" // Default color
+    };
+  });
+  
+  console.log("Final chartConfig:", JSON.stringify(chartConfig, null, 2));
+
   return (
     <ChartContainer 
-      config={spec.chartConfig || {}} 
+      config={chartConfig} 
       className="w-full h-full"
     >
       <AreaChart 
@@ -65,24 +100,30 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
         accessibilityLayer={accessibilityLayer}
       >
         <defs>
-          {useGradient && dataKeys.map((key) => (
-            <linearGradient key={`fill${key}`} id={`fill${key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop
-                offset={topOffset}
-                stopColor={`var(--color-${key})`}
-                stopOpacity={topOpacity}
-              />
-              <stop
-                offset={bottomOffset}
-                stopColor={`var(--color-${key})`}
-                stopOpacity={bottomOpacity}
-              />
-            </linearGradient>
-          ))}
+          {useGradient && dataKeys.map((key) => {
+            // ChartConfig uses a specific format, so we need to safely extract the color
+            const configColor = chartConfig[key]?.color;
+            const color = typeof configColor === 'string' ? configColor : "#1f77b4";
+            console.log(`Color for key ${key}:`, color);
+            return (
+              <linearGradient key={`fill${key}`} id={`fill${key}`} x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset={topOffset}
+                  stopColor={color}
+                  stopOpacity={topOpacity}
+                />
+                <stop
+                  offset={bottomOffset}
+                  stopColor={color}
+                  stopOpacity={bottomOpacity}
+                />
+              </linearGradient>
+            );
+          })}
         </defs>
         <CartesianGrid vertical={false} />
         <XAxis
-          dataKey={spec.xAxisConfig?.dataKey ?? "datetime"}
+          dataKey={dateKey}
           tickLine={spec.xAxisConfig?.tickLine ?? false}
           axisLine={spec.xAxisConfig?.axisLine ?? false}
           tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
@@ -99,19 +140,25 @@ export function AreaChartRenderer({ spec }: { spec: ChartSpec }) {
         />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         
-        {dataKeys.map((key) => (
-          <Area
-            key={key}
-            dataKey={key}
-            type={spec.lineType ?? "monotone"}
-            strokeWidth={spec.strokeWidth ?? 2}
-            dot={spec.dot ?? false}
-            stroke={`var(--color-${key})`}
-            fill={useGradient ? `url(#fill${key})` : `var(--color-${key})`}
-            fillOpacity={defaultFillOpacity}
-            stackId={useStacks ? "a" : undefined}
-          />
-        ))}
+        {dataKeys.map((key) => {
+          // ChartConfig uses a specific format, so we need to safely extract the color
+          const configColor = chartConfig[key]?.color;
+          const color = typeof configColor === 'string' ? configColor : "#1f77b4";
+          console.log(`Area color for key ${key}:`, color);
+          return (
+            <Area
+              key={key}
+              dataKey={key}
+              type={spec.lineType ?? "monotone"}
+              strokeWidth={spec.strokeWidth ?? 2}
+              dot={spec.dot ?? false}
+              stroke={color}
+              fill={useGradient ? `url(#fill${key})` : color}
+              fillOpacity={defaultFillOpacity}
+              stackId={useStacks ? "a" : undefined}
+            />
+          );
+        })}
       </AreaChart>
     </ChartContainer>
   );

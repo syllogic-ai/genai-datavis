@@ -4,7 +4,7 @@ import { ChartConfig } from "@/components/ui/chart";
 
 /** General data item type for charts */
 export interface DataItem {
-  [key: string]: string | number;
+  [key: string]: string | number; // { category: "Product A", revenue: 4200, cost: 2100, profit: 2100 } OR { datetime: "2024-01-01", desktop: 1000, mobile: 500, tablet: 200 }
 }
 
 export type ChartType = "line" | "bar" | "area" | "kpi";
@@ -23,8 +23,8 @@ export interface ChartSpec {
   chartType: ChartType;
 
   /** Optional metadata for display */
-  title?: string;
-  description?: string;
+  title: string;
+  description: string;
 
   /** Data to be plotted if we're dealing with a "chart" type */
   data?: Array<DataItem>;
