@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 const routes = [
   { href: "/", label: "Home" },
-  { href: "/chart-test", label: "Chart Test" },
+  { href: "/chart-prompt", label: "Chart Generator" },
 ]
 
 export function Navbar() {
