@@ -1,8 +1,8 @@
 "use client";
 
 import { ChartSpec } from "@/types/chart-types";
-import { LineChartRenderer } from "@/components/charts/renderers/LineChartRenderer";
-import { AreaChartRenderer } from "@/components/charts/renderers/AreaChartRenderer";
+import { LineChartRenderer } from "@/components/charts/renderers/LineAreaChartRenderer";
+import { AreaChartRenderer } from "@/components/charts/renderers/LineAreaChartRenderer";
 import { KPIRenderer } from "@/components/charts/renderers/KPIRenderer";
 import { BarChartRenderer } from "@/components/charts/renderers/BarChartRenderer";
 
