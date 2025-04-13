@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useDropzone } from "react-dropzone";
 import { API_URL } from "./lib/env";
+import { uploadFileToSupabase, generateFileName, supabase } from "./lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +13,15 @@ import { Box } from "lucide-react";
 import { ChartBlock } from "@/components/blocks/ChartBlock";
 import { ConversationHistory } from "@/components/ConversationHistory";
 import { DebugPanel } from "@/components/DebugPanel";
+
+// Import FilePond
+import { FilePond, registerPlugin } from 'react-filepond';
+import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
+import 'filepond/dist/filepond.min.css';
+import type { FilePondFile } from 'filepond';
+
+// Register FilePond plugins
+registerPlugin(FilePondPluginFileValidateType);
 
 // Define form schema
 const formSchema = z.object({
@@ -39,6 +48,9 @@ export default function Home() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [showJson, setShowJson] = useState(true);
   const [visualization, setVisualization] = useState<any>(null);
+  const [fileData, setFileData] = useState<string>();
+  const [fileUrl, setFileUrl] = useState<string>("");
+  
   // Initialize form
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -57,33 +69,33 @@ export default function Home() {
     }
   }, [messages]);
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    if (acceptedFiles.length > 0) {
-      const selectedFile = acceptedFiles[0];
-
-      // Check if the file is a CSV
-      if (
-        selectedFile.type === "text/csv" ||
-        selectedFile.name.endsWith(".csv")
-      ) {
-        setFile(selectedFile);
-        setUploadSuccess(true);
-        setError(null);
-      } else {
-        setError("Please upload a CSV file");
-        setFile(null);
-        setUploadSuccess(false);
-      }
+  // Handle file upload
+  const handleFileUpload = async (fileItems: FilePondFile[]) => {
+    if (fileItems.length === 0) {
+      setFile(null);
+      setFileUrl("");
+      setUploadSuccess(false);
+      return;
     }
-  }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "text/csv": [".csv"],
-    },
-    maxFiles: 1,
-  });
+    try {
+      const fileItem = fileItems[0];
+      const fileBlob = fileItem.file as File;
+      setFile(fileBlob);
+      
+      // Upload to Supabase
+      const url = await uploadFileToSupabase(fileBlob);
+      setFileUrl(url);
+      setUploadSuccess(true);
+      console.log("File uploaded to Supabase:", url);
+      
+      // Hide dropzone once file is uploaded successfully
+      setShowDropzone(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error uploading file to storage");
+      console.error("Error uploading to Supabase:", err);
+    }
+  };
 
   const analyzeData = async (values: {message: string}) => {
     if (!file) return;
@@ -92,37 +104,19 @@ export default function Home() {
     setError(null);
 
     try {
-      // Read the file content
-      const fileContent = await file.text();
-
-      // Parse CSV into array of objects
-      const lines = fileContent.split("\n");
-      const headers = lines[0].split(",");
-      const dataArray = [];
-
-      // Start from index 1 to skip the header row
-      for (let i = 1; i < lines.length; i++) {
-        if (lines[i].trim()) {
-          // Skip empty lines
-          const values = lines[i].split(",");
-          const rowObject: Record<string, string> = {};
-
-          headers.forEach((header, index) => {
-            rowObject[header.trim()] = values[index]?.trim() || "";
-          });
-
-          dataArray.push(rowObject);
-        }
+      // We now pass the file URL instead of content
+      if (!fileUrl) {
+        throw new Error("File URL not available. Please ensure file is uploaded to storage.");
       }
 
-      // Send the parsed data as JSON
+      // Send the file URL to the backend
       const response = await fetch(`${API_URL}/analyze`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          data: dataArray,
+          file_url: fileUrl,
           prompt: values.message,
           is_follow_up: false,  // This is the initial analysis
           session_id: "default" // Use default session ID
@@ -203,6 +197,7 @@ export default function Home() {
           },
           body: JSON.stringify({
             prompt: values.message,
+            file_url: fileUrl, // Pass the file URL for follow-up questions too
             is_follow_up: true,  // Flag to indicate this is a follow-up question
             session_id: "default" // Use session ID if you have one
           }),
@@ -217,7 +212,7 @@ export default function Home() {
             },
             body: JSON.stringify({
               prompt: values.message,
-              data: analysisResult
+              file_url: fileUrl // Pass the file URL instead of data
             }),
           });
           
@@ -265,44 +260,32 @@ export default function Home() {
     }
   };
 
+  // Reset the file upload
+  const resetFileUpload = () => {
+    setFile(null);
+    setFileUrl("");
+    setUploadSuccess(false);
+    setShowDropzone(true);
+    setAnalysisResult(null);
+    setMessages([]);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-white text-black">
       <div className="flex-1 overflow-hidden">
-        {showDropzone && (
+        {showDropzone ? (
           <div className="flex flex-col justify-center items-center h-full">
             <h1 className="text-2xl font-semibold mb-6 text-center">What data would you like to analyze?</h1>
             <div className="w-full max-w-lg">
-              <div
-                {...getRootProps()}
-                className={`p-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors ${
-                  isDragActive
-                    ? "border-gray-500 bg-blue-50"
-                    : "border-gray-300 hover:border-blue-400"
-                } ${uploadSuccess ? "border-green-500/10 bg-green-50/30" : ""}`}
-              >
-                <input {...getInputProps()} />
-                {isDragActive ? (
-                  <p className="text-blue-500">Drop the CSV file here...</p>
-                ) : (
-                  <div>
-                    <p className="mb-2">
-                      Drag and drop a CSV file here, or click to select a file
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      Only CSV files are accepted
-                    </p>
-                  </div>
-                )}
-
-                {file && uploadSuccess && (
-                  <div className="mt-4 p-2 bg-green-100/30 rounded">
-                    <p className="text-green-700/60">
-                      File uploaded successfully: {file.name} (
-                      {(file.size / 1024).toFixed(2)} KB)
-                    </p>
-                  </div>
-                )}
-              </div>
+              <FilePond
+                allowMultiple={false}
+                maxFiles={1}
+                acceptedFileTypes={['.csv', 'text/csv']}
+                labelIdle='Drag & Drop your CSV file or <span class="filepond--label-action">Browse</span>'
+                onupdatefiles={handleFileUpload}
+                credits={false}
+                className="filepond-container"
+              />
 
               {error && (
                 <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">
@@ -310,6 +293,34 @@ export default function Home() {
                 </div>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center pt-4">
+            {file && uploadSuccess && (
+              <div className="p-4 bg-green-50 rounded-lg border border-green-100 w-full max-w-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-medium text-green-800">File Ready for Analysis</h3>
+                    <p className="text-sm text-green-700">
+                      {file.name} ({(file.size / 1024).toFixed(2)} KB)
+                    </p>
+                    {fileUrl && (
+                      <p className="text-xs text-green-600 mt-1 truncate">
+                        Stored successfully
+                      </p>
+                    )}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                    onClick={resetFileUpload}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         
@@ -363,7 +374,7 @@ export default function Home() {
       </div>
 
       {/* Fixed chat input at the bottom */}
-      {file && (
+      {file && uploadSuccess && (
         <div className="p-4 border-t border-gray-200 bg-white">
           <div className="max-w-2xl mx-auto">
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -390,7 +401,7 @@ export default function Home() {
                     className="rounded-full group"
                     disabled={analyzing || isChatLoading}
                   >
-                    {isChatLoading ? (
+                    {isChatLoading || analyzing ? (
                       <span className="mx-1">...</span>
                     ) : (
                       <span className="">

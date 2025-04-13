@@ -120,3 +120,35 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* FilePond custom styles */
+.filepond-container {
+  min-height: 180px;
+}
+
+.filepond--panel-root {
+  background-color: #f8fafc;
+  border: 2px dashed #e2e8f0;
+}
+
+.filepond--drop-label {
+  color: #475569;
+  font-size: 1rem;
+}
+
+.filepond--label-action {
+  color: #0284c7;
+  text-decoration-color: #0284c7;
+}
+
+.filepond--drip {
+  background-color: #0284c7;
+}
+
+.filepond--item-panel {
+  background-color: #e0f2fe;
+}
+
+.filepond--file {
+  color: #0c4a6e;
+}
