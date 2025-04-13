@@ -604,83 +604,19 @@ def calculate(data, query, context, ai_service):
 
         return calculation_output
 
+def debug_context(context, debug=True):
+    """Debug helper to print the generated context"""
+    if debug:
+        print("\n----- CONTEXT DEBUG START -----")
+        print(context)
+        print("----- CONTEXT DEBUG END -----\n")
+    return context
 
-def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_analysis=None):
-    # For follow-up queries (chat messages), handle in a simplified way without activating tools
-    if is_follow_up and previous_analysis:
-        # Format the context similar to what's done in the chat endpoint
-        context = "You are a data analysis assistant. Help analyze and explain the data."
-        
-        # Format the analysis results in a structured way
-        context += "\n\nAnalysis results:"
-        
-        # Check validation field
-        if isinstance(previous_analysis, dict) and "validation" in previous_analysis:
-            validation = previous_analysis["validation"]
-            if validation:
-                context += f"\n- Data validation: {validation}"
-        
-        # Check insights field
-        if isinstance(previous_analysis, dict) and "insights" in previous_analysis:
-            insights = previous_analysis["insights"]
-            if insights:
-                context += f"\n- Data insights: {insights}"
-        
-        # Check calculate field - handle both dict and DataFrame
-        if isinstance(previous_analysis, dict) and "calculate" in previous_analysis:
-            calculate_result = previous_analysis["calculate"]
-            context += "\n- Calculations:"
-            
-            # Handle DataFrame
-            if hasattr(calculate_result, 'to_dict'):  # Check if it's DataFrame-like
-                try:
-                    # Convert DataFrame to dict for display
-                    calc_dict = calculate_result.to_dict()
-                    for col, values in calc_dict.items():
-                        for idx, val in values.items():
-                            context += f"\n  * {col} {idx}: {val}"
-                except:
-                    # Fallback - use string representation
-                    context += f"\n  * {str(calculate_result)}"
-            # Handle dict
-            elif isinstance(calculate_result, dict):
-                for key, value in calculate_result.items():
-                    if isinstance(value, dict):
-                        for subkey, subvalue in value.items():
-                            context += f"\n  * {key} {subkey}: {subvalue}"
-                    else:
-                        context += f"\n  * {key}: {value}"
-            else:
-                # Fallback for other types
-                context += f"\n  * {str(calculate_result)}"
-        
-        # Check visual field
-        if isinstance(previous_analysis, dict) and "visual" in previous_analysis:
-            visual = previous_analysis["visual"]
-            if visual:
-                context += f"\n- Visualization components: {visual}"
-
-        # Add the user query
-        query_context = f"Given the analysis results above, answer the following question: {user_query}"
-        
-        # Process the query with this context, waiting for analysis to complete
-        response = ai_service.process_query(context, query_context, wait_for_analysis=True)
-        
-        # Return just the response in the same format as the normal agentic flow
-        response_dict = {
-            "validation": previous_analysis.get("validation", ""),
-            "insights": response,  # Put response in insights field
-            "visual": previous_analysis.get("visual", ""),
-            "calculate": previous_analysis.get("calculate", ""),
-        }
-        
-        return response_dict
-    
-    # Original agentic flow code for initial analysis
+def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_analysis=None, conversation_history=None, debug_mode=True):
     # Set analysis status to false at the start
     ai_service.set_analysis_complete(False)
     
-    # Remove the circular import and use the global functions directly
+    # Use the global functions directly
     tools_funcs = {
         "validate_data": validate_data,
         "get_insights": get_insights,
@@ -695,8 +631,107 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
         "calculate": "Performs calculations based on a user question."
     }
 
+    # Base context for all queries
     context = f"You are an experienced data analyst, expert in giving quality information and insights about various data types. \
-        I will be giving you a dataset, and you will be providing quality deiliverables. You have the following tools available: {{tools}}. " \
+        I will be giving you a dataset, and you will be providing quality deiliverables. You have the following tools available: {{tools}}. "
+
+    # Add conversation history to context if provided
+    if conversation_history:
+        context += "\n\nConversation history:"
+        if debug_mode:
+            print(f"Adding {len(conversation_history)} conversation entries")
+        
+        for i, entry in enumerate(conversation_history):
+            # Escape curly braces to prevent string formatting issues
+            if isinstance(entry, dict):
+                # Format properly based on if it's a user or system message
+                role = entry.get('role', 'unknown')
+                content = entry.get('content', '')
+                # Escape curly braces to prevent string formatting issues
+                safe_content = str(content).replace("{", "{{").replace("}", "}}")
+                context += f"\n[{i+1}] {role.upper()}: {safe_content}"
+                if debug_mode:
+                    print(f"Added entry {i+1}: {role.upper()}")
+            else:
+                # Handle if conversation history is in a different format
+                safe_entry = str(entry).replace("{", "{{").replace("}", "}}")
+                context += f"\n[{i+1}] {safe_entry}"
+                if debug_mode:
+                    print(f"Added entry {i+1} (unstructured)")
+    
+    # Add previous analysis to context if this is a follow-up query
+    if is_follow_up and previous_analysis:
+        context += "\n\nPrevious analysis results:"
+        
+        # Add validation field
+        if isinstance(previous_analysis, dict) and "validation" in previous_analysis and previous_analysis["validation"]:
+            validation = previous_analysis["validation"]
+            # Escape curly braces to prevent string formatting issues
+            validation_str = str(validation).replace("{", "{{").replace("}", "}}")
+            context += f"\n- Data validation: {validation_str}"
+        
+        # Add insights field
+        if isinstance(previous_analysis, dict) and "insights" in previous_analysis and previous_analysis["insights"]:
+            insights = previous_analysis["insights"]
+            # Escape curly braces to prevent string formatting issues
+            insights_str = str(insights).replace("{", "{{").replace("}", "}}")
+            context += f"\n- Data insights: {insights_str}"
+        
+        # Add calculate field
+        if isinstance(previous_analysis, dict) and "calculate" in previous_analysis and previous_analysis["calculate"]:
+            calculate_result = previous_analysis["calculate"]
+            context += "\n- Calculations:"
+            
+            # Handle DataFrame
+            if hasattr(calculate_result, 'to_dict'):  # Check if it's DataFrame-like
+                try:
+                    # Convert DataFrame to dict for display
+                    calc_dict = calculate_result.to_dict()
+                    # Escape curly braces to prevent string formatting issues
+                    calc_str = str(calc_dict).replace("{", "{{").replace("}", "}}")
+                    context += f"\n  * {calc_str}"
+                except:
+                    # Fallback - use string representation with escaped braces
+                    calc_str = str(calculate_result).replace("{", "{{").replace("}", "}}")
+                    context += f"\n  * {calc_str}"
+            # Handle dict
+            elif isinstance(calculate_result, dict):
+                # Escape the entire dict at once to prevent formatting issues
+                calc_str = str(calculate_result).replace("{", "{{").replace("}", "}}")
+                context += f"\n  * {calc_str}"
+            else:
+                # Fallback for other types - escape any potential braces
+                calc_str = str(calculate_result).replace("{", "{{").replace("}", "}}")
+                context += f"\n  * {calc_str}"
+        
+        # Add visual field
+        if isinstance(previous_analysis, dict) and "visual" in previous_analysis and previous_analysis["visual"]:
+            visual = previous_analysis["visual"]
+            # Escape curly braces in the visual JSON to prevent string formatting issues
+            visual_str = str(visual).replace("{", "{{").replace("}", "}}")
+            context += f"\n- Visualization components: {visual_str}"
+        
+        # Add dataset information
+        context += "\n\nDataset information:"
+        
+        # If we have data from the function parameter
+        if data is not None:
+            # Add data fields
+            columns = data.columns.tolist()
+            safe_columns = str(columns).replace("{", "{{").replace("}", "}}")
+            context += f"\n- Dataset columns: {safe_columns}"
+            context += f"\n- Dataset rows: {len(data)}"
+            
+            # Include a sample
+            sample_rows = min(3, len(data))
+            if sample_rows > 0:
+                sample_data = data.head(sample_rows).to_string(index=False).replace("{", "{{").replace("}", "}}")
+                context += f"\n- Sample data (first {sample_rows} rows):\n{sample_data}"
+        else:
+            context += "\n- No dataset provided for this query."
+        
+        # Modify user query for follow-up questions
+        user_query = f"Follow-up question: {user_query}\nPlease use the previous analysis results and the dataset to provide a detailed answer."
 
     master_query = f"Given the following dataset: {{data}}, and the following user query: {{user_query}}? \
     I want you to decide which tool to use in order to answer the user query. " \
@@ -723,30 +758,58 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
     tools_expl = ", ".join([f"{k}: {v}" for k, v in tools_explanation.items()])
     tools_responses = {}
 
-    data_text = data.to_string(index=False)
-    context_upd = context.format(tools=tools_expl)
-
+    # Prepare data text, escaping any curly braces to avoid formatting issues
+    if data is not None:
+        data_text = data.to_string(index=False).replace("{", "{{").replace("}", "}}")
+    else:
+        data_text = "No data provided for this follow-up query"
     
+    # Escape user_query to avoid issues with any curly braces it might contain
+    safe_user_query = user_query.replace("{", "{{").replace("}", "}}")
+    
+    # Prepare the context with tools explanation
+    context_upd = context.format(tools=tools_expl)
+    
+    # Debug the final context if debug_mode is enabled
+    context_upd = debug_context(context_upd, debug_mode)
 
     while True: 
         counter += 1
         if first_time_flag:
             first_time_flag = False
-            cur_tool = ai_service.process_query(context_upd, master_query.format(data=data_text, user_query=user_query, tools=tools_expl)).replace("'", "")
+            # Use the previously escaped user_query
+            cur_tool = ai_service.process_query(context_upd, master_query.format(
+                data=data_text, 
+                user_query=safe_user_query, 
+                tools=tools_expl
+            )).replace("'", "")
             # print(f"Master query: {master_query.format(data=data_text, user_query=user_query)}")
             # print(f"Context: {context_upd}")
         else:
             tool_responses = ", ".join([f"Iteration {k}: Tool: {v[0]}, Response: {v[1]}" for k, v in tools_responses.items()])
-            cur_tool = ai_service.process_query(context_upd, feedback_query.format(user_query=user_query, tool_responses=tool_responses, tools=tools_expl)).replace("'", "")
+            # Escape tool_responses to avoid string formatting issues
+            safe_tool_responses = tool_responses.replace("{", "{{").replace("}", "}}")
+            # Already have safe_user_query from first iteration
+            cur_tool = ai_service.process_query(context_upd, feedback_query.format(
+                user_query=safe_user_query, 
+                tool_responses=safe_tool_responses, 
+                tools=tools_expl
+            )).replace("'", "")
             
             if cur_tool == "yes":
                 print("The tool has given you a proper response.")
-                final_response = ai_service.process_query(context_upd, response_query.format(user_query=user_query, tool_responses=tool_responses))
+                final_response = ai_service.process_query(context_upd, response_query.format(
+                    user_query=safe_user_query, 
+                    tool_responses=safe_tool_responses
+                ))
                 print(final_response)
                 break
             elif len(tools_responses.keys()) >= 2:
                 print("The tool has reached maximum amount of iterations.")
-                final_response = ai_service.process_query(context_upd, response_query.format(user_query=user_query, tool_responses=tool_responses))
+                final_response = ai_service.process_query(context_upd, response_query.format(
+                    user_query=safe_user_query, 
+                    tool_responses=safe_tool_responses
+                ))
                 print(final_response)
                 break
             else:
@@ -754,11 +817,29 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
         
         print(f"Iteration {counter}")
         print(f"Using tool: {cur_tool}")
-        cur_response = tools_funcs[cur_tool](data, user_query, context_upd, ai_service)
+        
+        # Handle follow-up queries that might not have data
+        if data is None and is_follow_up and cur_tool != "get_insights":
+            # For tools that require data but we don't have any, use insights tool instead
+            print(f"Data is required for {cur_tool} but none provided. Using get_insights instead.")
+            cur_tool = "get_insights"
+            
+        # Use provided data for tool operations
+        tool_data = data
+        
+        # If this is a follow-up query, ensure we're using the original data for tools
+        if is_follow_up and data is not None:
+            print(f"Using original data for {cur_tool} tool")
+        elif tool_data is None and is_follow_up:
+            # Create placeholder data with minimal structure if absolutely needed by tools
+            print(f"No data available for {cur_tool} tool, using placeholder")
+            tool_data = pd.DataFrame({"placeholder": [1]})
+            
+        cur_response = tools_funcs[cur_tool](tool_data, user_query, context_upd, ai_service)
         tools_responses[str(counter)] = [cur_tool, cur_response]
         # print(f"Response: {cur_response}")
-        
     
+    # Create output response dictionary
     response_dict = {
         "validation": "",
         "insights": "",
@@ -780,6 +861,11 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
         if tools_responses.get(str(counter-1)):
             response_dict[tools_responses[str(counter-1)][0]] = tools_responses[str(counter-1)][1]
 
+    # If this is a follow-up query and we have visualization from previous analysis, keep it
+    if is_follow_up and previous_analysis and "visual" in previous_analysis and previous_analysis["visual"] and not response_dict["visual"]:
+        response_dict["visual"] = previous_analysis["visual"]
+
+    # Convert numpy types to Python native types for JSON serialization
     for key, value in response_dict.items():
         if isinstance(value, np.ndarray):
             response_dict[key] = value.tolist()  # Convert numpy array to list
@@ -790,4 +876,194 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
     ai_service.set_analysis_complete(True)
 
     return response_dict
+
+def test_conversation_history():
+    """
+    Test function to verify conversation history integration.
+    Run this function directly to see debug output of context building.
+    """
+    # Mock AI service
+    class MockAIService:
+        def __init__(self):
+            self.analysis_complete = False
+            
+        def set_analysis_complete(self, status):
+            self.analysis_complete = status
+            
+        def process_query(self, context, query):
+            return "This is a mock response"
+    
+    # Sample conversation history
+    conversation_history = [
+        {"role": "user", "content": "Can you analyze my sales data?"},
+        {"role": "system", "content": "I'll analyze your sales data. Please upload it."},
+        {"role": "user", "content": "Here's my CSV file with sales figures."},
+        {"role": "system", "content": "Thank you. I've analyzed your data and found some insights."}
+    ]
+    
+    # Sample data
+    sample_data = pd.DataFrame({
+        'month': ['2023-01-01', '2023-02-01', '2023-03-01'],
+        'sales': [1200, 1400, 1600],
+        'expenses': [900, 950, 980]
+    })
+    
+    # Create mock AI service
+    ai_service = MockAIService()
+    
+    # Call agentic_flow with debug_mode=True
+    print("Testing agentic_flow with conversation history...")
+    result = agentic_flow(
+        data=sample_data,
+        user_query="Show me a trend of my sales growth",
+        ai_service=ai_service,
+        is_follow_up=True,
+        previous_analysis={"insights": "Sales are growing consistently."},
+        conversation_history=conversation_history,
+        debug_mode=True
+    )
+    
+    print("\nTest completed!")
+    return result
+
+# Uncomment to run the test
+if __name__ == "__main__":
+    # test_conversation_history()  # Basic test without conversation manager
+    test_conversation_manager()    # Full test with conversation manager
+
+class ConversationManager:
+    """
+    Maintains the conversation history and analysis results across multiple interactions.
+    This allows retrieving the full context for new queries, not just the previous response.
+    """
+    def __init__(self, original_data=None):
+        # Store original data
+        self.original_data = original_data
+        
+        # Initialize conversation history
+        self.conversation_history = []
+        
+        # Store all analysis results for reference
+        self.analysis_history = []
+        
+        # Current analysis results (most recent)
+        self.current_analysis = None
+    
+    def add_user_message(self, message):
+        """Add a user message to the conversation history"""
+        self.conversation_history.append({
+            "role": "user",
+            "content": message,
+            "timestamp": pd.Timestamp.now().isoformat()
+        })
+    
+    def add_system_message(self, message, analysis_result=None):
+        """Add a system message to the conversation history"""
+        self.conversation_history.append({
+            "role": "system",
+            "content": message,
+            "timestamp": pd.Timestamp.now().isoformat()
+        })
+        
+        # Store analysis result if provided
+        if analysis_result:
+            self.current_analysis = analysis_result
+            self.analysis_history.append(analysis_result)
+    
+    def process_query(self, user_query, ai_service, debug_mode=False):
+        """
+        Process a user query with full conversation history context
+        Returns the analysis result
+        """
+        # Add user query to history
+        self.add_user_message(user_query)
+        
+        # Process the query with full history context
+        result = agentic_flow(
+            data=self.original_data,
+            user_query=user_query,
+            ai_service=ai_service,
+            is_follow_up=(len(self.conversation_history) > 1),  # True if not first interaction
+            previous_analysis=self.current_analysis,
+            conversation_history=self.conversation_history,
+            debug_mode=debug_mode
+        )
+        
+        # Extract insights as the system message
+        system_message = result.get("insights", "No insights generated")
+        
+        # Add system response to history
+        self.add_system_message(system_message, result)
+        
+        return result
+    
+    def get_conversation_history(self):
+        """Get the full conversation history"""
+        return self.conversation_history
+    
+    def get_analysis_history(self):
+        """Get the full analysis history"""
+        return self.analysis_history
+
+def test_conversation_manager():
+    """
+    Test function to verify conversation manager functionality.
+    This demonstrates how multiple interactions build up history.
+    """
+    # Mock AI service
+    class MockAIService:
+        def __init__(self):
+            self.analysis_complete = False
+            
+        def set_analysis_complete(self, status):
+            self.analysis_complete = status
+            
+        def process_query(self, context, query):
+            # Return different responses based on query content
+            if "sales" in query.lower():
+                return "Sales are trending upward"
+            elif "expense" in query.lower():
+                return "Expenses are stable"
+            else:
+                return "This is a general mock response"
+    
+    # Sample data
+    sample_data = pd.DataFrame({
+        'month': ['2023-01-01', '2023-02-01', '2023-03-01'],
+        'sales': [1200, 1400, 1600],
+        'expenses': [900, 950, 980]
+    })
+    
+    # Create mock AI service
+    ai_service = MockAIService()
+    
+    # Initialize conversation manager with the original data
+    manager = ConversationManager(original_data=sample_data)
+    
+    # First query about sales
+    print("\n\n=== FIRST QUERY ===")
+    result1 = manager.process_query("How are my sales trending?", ai_service, debug_mode=True)
+    print("\nFirst query result:", result1.get("insights"))
+    
+    # Second query about expenses
+    print("\n\n=== SECOND QUERY ===")
+    result2 = manager.process_query("What about my expenses?", ai_service, debug_mode=True)
+    print("\nSecond query result:", result2.get("insights"))
+    
+    # Third query with reference to previous data
+    print("\n\n=== THIRD QUERY ===")
+    result3 = manager.process_query("Summarize my financial situation", ai_service, debug_mode=True)
+    print("\nThird query result:", result3.get("insights"))
+    
+    # Print final conversation history
+    print("\n\n=== FINAL CONVERSATION HISTORY ===")
+    for i, entry in enumerate(manager.get_conversation_history()):
+        print(f"[{i+1}] {entry['role'].upper()}: {entry['content']}")
+    
+    print("\nTest completed!")
+    return manager
+
+# Uncomment to run the test
+# if __name__ == "__main__":
+#     test_conversation_manager()
 

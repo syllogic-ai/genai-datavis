@@ -11,6 +11,8 @@ import * as z from "zod";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Box } from "lucide-react";
 import { ChartBlock } from "@/components/blocks/ChartBlock";
+import { ConversationHistory } from "@/components/ConversationHistory";
+import { DebugPanel } from "@/components/DebugPanel";
 
 // Define form schema
 const formSchema = z.object({
@@ -334,34 +336,20 @@ export default function Home() {
             </div>
           )}
 
-          {/* Analysis Results JSON */}
+          {/* Analysis Results and Visualization */}
           {analysisResult && (
-            // <div className={`w-full ${messages.length > 0 ? 'md:w-1/2' : ''} max-w-2xl`}>
-            //   <div className="rounded-lg border border-gray-200 overflow-hidden">
-            //     <div className="bg-gray-50 p-3 border-b border-gray-200 flex justify-between items-center">
-            //       <h2 className="text-lg font-medium">Analysis Results</h2>
-            //       <Button
-            //         variant="ghost"
-            //         size="sm"
-            //         onClick={() => setShowJson(!showJson)}
-            //       >
-            //         {showJson ? 'Hide' : 'Show'}
-            //       </Button>
-            //     </div>
-            //     {showJson && (
-            //       <div className="bg-white">
-            //         <ScrollArea className="h-[calc(100vh-230px)]">
-            //           <pre className="p-4 text-sm overflow-auto">
-            //             {JSON.stringify(analysisResult, null, 2)}
-            //           </pre>
-            //         </ScrollArea>
-            //       </div>
-            //     )}
-            //   </div>
-            // </div>
-            <ChartBlock spec={visualization} />
+            <div className={`w-full ${messages.length > 0 ? 'md:w-1/2' : ''} max-w-2xl flex flex-col`}>
+              {messages.length > 0 && <ConversationHistory messages={messages} />}
+              <ChartBlock spec={visualization} />
+            </div>
           )}
         </div>
+
+        {messages.length > 0 && (
+          <div className="mx-auto max-w-4xl px-4 pb-4">
+            <DebugPanel />
+          </div>
+        )}
 
         {error && (
           <div className="p-4 flex justify-center">

@@ -54,12 +54,23 @@ async def analyze(request: Request):
                 detail="No previous analysis found for this session. Please upload data first."
             )
             
-        # Use stored analysis results for follow-up without requiring data
+        # Use stored analysis results for follow-up
         previous_analysis = latest_analysis_results[session_id]
         print(f"Follow-up query for session {session_id}: {user_query}")
         
-        # Convert data to DataFrame if provided, otherwise use None
-        df = pd.DataFrame(data) if data else None
+        # Get the original data if it was stored with the analysis results
+        df = None
+        if "original_data" in previous_analysis:
+            orig_data = previous_analysis["original_data"]
+            if orig_data:
+                # Convert stored data back to DataFrame
+                df = pd.DataFrame(orig_data)
+                print(f"Using original data for session {session_id}")
+        
+        # If no original data, use provided data if any
+        if df is None and data:
+            df = pd.DataFrame(data)
+            print(f"Using provided data for follow-up query")
         
         # Call agentic_flow with is_follow_up=True flag and previous analysis
         agentic_output = agentic_flow(
@@ -77,12 +88,18 @@ async def analyze(request: Request):
         df = pd.DataFrame(data)
         print(f"Initial analysis for session {session_id}: {user_query}")
         agentic_output = agentic_flow(df, user_query, ai_service)
+        
+        # Store the original data with the analysis results
+        agentic_output["original_data"] = data
+        print(f"Stored original data with analysis results for session {session_id}")
     
     # Store the analysis results for this session
     latest_analysis_results[session_id] = agentic_output
     print(f"Stored analysis results for session {session_id}")
 
-    return jsonable_encoder(agentic_output)
+    # Remove original_data from the response to avoid large payloads
+    response_output = {k: v for k, v in agentic_output.items() if k != "original_data"}
+    return jsonable_encoder(response_output)
 
 @app.post("/debug/chat-with-analysis")
 async def debug_chat_with_analysis(request: Request):
@@ -93,25 +110,72 @@ async def debug_chat_with_analysis(request: Request):
     if not prompt:
         raise HTTPException(status_code=400, detail="No prompt provided")
     
+    # Create sample data for the debug endpoint
+    sample_data_list = [
+        {"month": "2023-01", "sales": 100, "profits": 30}, 
+        {"month": "2023-02", "sales": 150, "profits": 45}, 
+        {"month": "2023-03", "sales": 120, "profits": 35}
+    ]
+    sample_data = pd.DataFrame(sample_data_list)
+    
     # Use predefined analysis results for testing
     test_analysis = {
         "validation": "Data is valid with no missing values",
-        "insights": "The max value in the data is 9998.0.",
+        "insights": "The max sales value is 150 in February.",
         "calculate": {
-            "MAX(AEP_MW)": {
-                "0": "9998.0"
+            "MAX(sales)": {
+                "0": "150"
             }
         },
-        "visual": ""
+        "visual": "",
+        "original_data": sample_data_list  # Store the original data
     }
     
     # Call agentic_flow with follow-up flag and predefined analysis
     response_dict = agentic_flow(
-        None,  # No data needed for follow-up
+        sample_data,  # Provide the data as DataFrame
         prompt,
         ai_service,
         is_follow_up=True,
         previous_analysis=test_analysis
     )
     
-    return jsonable_encoder(response_dict)
+    # Remove original_data from the response
+    response_output = {k: v for k, v in response_dict.items() if k != "original_data"}
+    return jsonable_encoder(response_output)
+
+@app.get("/conversation_history")
+async def get_conversation_history(session_id: str = "default"):
+    """Get the conversation history for a given session"""
+    # For testing/demonstration purposes, return a mock history
+    # This would normally come from a ConversationManager instance
+    
+    mock_history = {
+        "conversation_history": [
+            {
+                "role": "user",
+                "content": "What insights can you provide from this data?",
+                "timestamp": "2023-07-15T10:30:45"
+            },
+            {
+                "role": "system",
+                "content": "The data shows an upward trend in sales over the past quarter, with a peak in March.",
+                "timestamp": "2023-07-15T10:30:50"
+            },
+            {
+                "role": "user",
+                "content": "Show me a visualization of the monthly trend.",
+                "timestamp": "2023-07-15T10:31:15"
+            },
+            {
+                "role": "system",
+                "content": "Here's a line chart showing the monthly sales trend.",
+                "timestamp": "2023-07-15T10:31:20"
+            }
+        ],
+        "analysis_history": [
+            {"insights": "Sales are trending upward", "visual": "line chart data"}
+        ]
+    }
+    
+    return jsonable_encoder(mock_history)
