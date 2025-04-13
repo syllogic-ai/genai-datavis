@@ -40,100 +40,49 @@ async def analyze(request: Request):
     data = body.get("data", None)
     user_query = body.get("prompt", None)
     session_id = body.get("session_id", "default")
+    is_follow_up = body.get("is_follow_up", False)
     
-    if not data:
-        return {"error": "No data provided"}, 400
     if not user_query:
         user_query = "What insights can you provide based on the given dataframe?"
 
-    # Convert JSON data to a pandas DataFrame
-    df = pd.DataFrame(data)
-    # Validate the data
-    print(f"user_query: {user_query}")
-    agentic_output = agentic_flow(df, user_query, ai_service)
+    # For follow-up questions
+    if is_follow_up:
+        # Check if we have previous analysis for this session
+        if session_id not in latest_analysis_results:
+            raise HTTPException(
+                status_code=400, 
+                detail="No previous analysis found for this session. Please upload data first."
+            )
+            
+        # Use stored analysis results for follow-up without requiring data
+        previous_analysis = latest_analysis_results[session_id]
+        print(f"Follow-up query for session {session_id}: {user_query}")
+        
+        # Convert data to DataFrame if provided, otherwise use None
+        df = pd.DataFrame(data) if data else None
+        
+        # Call agentic_flow with is_follow_up=True flag and previous analysis
+        agentic_output = agentic_flow(
+            df, 
+            user_query, 
+            ai_service, 
+            is_follow_up=True, 
+            previous_analysis=previous_analysis
+        )
+    elif not data:
+        # If not a follow-up and no data provided
+        raise HTTPException(status_code=400, detail="No data provided")
+    else:
+        # Initial analysis of new data
+        df = pd.DataFrame(data)
+        print(f"Initial analysis for session {session_id}: {user_query}")
+        agentic_output = agentic_flow(df, user_query, ai_service)
     
     # Store the analysis results for this session
     latest_analysis_results[session_id] = agentic_output
     print(f"Stored analysis results for session {session_id}")
 
     return jsonable_encoder(agentic_output)
-
-@app.post("/chat")
-async def chat(request: Request):
-    body = await request.json()
-    prompt = body.get("prompt", None)
-    data = body.get("data", None)
-    analysis_results = body.get("analysis_results", None)
-    session_id = body.get("session_id", "default")
-    
-    if not prompt:
-        raise HTTPException(status_code=400, detail="No prompt provided")
-    
-    # If analysis_results not provided but we have stored results for this session, use them
-    if not analysis_results and session_id in latest_analysis_results:
-        analysis_results = latest_analysis_results[session_id]
-        print(f"Using stored analysis results for session {session_id}")
-    
-    # Create a comprehensive context from the analysis results
-    context = "You are a data analysis assistant. Help analyze and explain the data."
-    
-    if analysis_results:
-        # Format the analysis results in a structured way
-        context += "\n\nAnalysis results:"
-        
-        # Check validation field
-        if isinstance(analysis_results, dict) and "validation" in analysis_results:
-            validation = analysis_results["validation"]
-            if validation:
-                context += f"\n- Data validation: {validation}"
-        
-        # Check insights field
-        if isinstance(analysis_results, dict) and "insights" in analysis_results:
-            insights = analysis_results["insights"]
-            if insights:
-                context += f"\n- Data insights: {insights}"
-        
-        # Check calculate field - handle both dict and DataFrame
-        if isinstance(analysis_results, dict) and "calculate" in analysis_results:
-            calculate = analysis_results["calculate"]
-            context += "\n- Calculations:"
-            
-            # Handle DataFrame
-            if hasattr(calculate, 'to_dict'):  # Check if it's DataFrame-like
-                try:
-                    # Convert DataFrame to dict for display
-                    calc_dict = calculate.to_dict()
-                    for col, values in calc_dict.items():
-                        for idx, val in values.items():
-                            context += f"\n  * {col} {idx}: {val}"
-                except:
-                    # Fallback - use string representation
-                    context += f"\n  * {str(calculate)}"
-            # Handle dict
-            elif isinstance(calculate, dict):
-                for key, value in calculate.items():
-                    if isinstance(value, dict):
-                        for subkey, subvalue in value.items():
-                            context += f"\n  * {key} {subkey}: {subvalue}"
-                    else:
-                        context += f"\n  * {key}: {value}"
-            else:
-                # Fallback for other types
-                context += f"\n  * {str(calculate)}"
-        
-        # Check visual field
-        if isinstance(analysis_results, dict) and "visual" in analysis_results:
-            visual = analysis_results["visual"]
-            if visual:
-                context += f"\n- Visualization components: {visual}"
-    elif data:
-        # If we only have raw data, include it in the context
-        context += f"\n\nRaw data: {str(data)}"
-    
-    # Use the AI service to process the query, waiting for analysis to complete
-    response = ai_service.process_query(context, prompt, wait_for_analysis=True)
-    
-    return {"response": response}
 
 @app.post("/debug/chat-with-analysis")
 async def debug_chat_with_analysis(request: Request):
@@ -156,15 +105,13 @@ async def debug_chat_with_analysis(request: Request):
         "visual": ""
     }
     
-    # Process the query with a simple context that mimics our structured format
-    context = "You are a data analysis assistant. Help analyze and explain the data."
-    context += "\n\nAnalysis results:"
-    context += "\n- Data validation: Data is valid with no missing values"
-    context += "\n- Data insights: The max value in the data is 9998.0."
-    context += "\n- Calculations:"
-    context += "\n  * MAX(AEP_MW) 0: 9998.0"
+    # Call agentic_flow with follow-up flag and predefined analysis
+    response_dict = agentic_flow(
+        None,  # No data needed for follow-up
+        prompt,
+        ai_service,
+        is_follow_up=True,
+        previous_analysis=test_analysis
+    )
     
-    # Process the query with the test context
-    response = ai_service.process_query(context, prompt, wait_for_analysis=False)
-    
-    return {"response": response}
+    return jsonable_encoder(response_dict)

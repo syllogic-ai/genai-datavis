@@ -122,6 +122,8 @@ export default function Home() {
         body: JSON.stringify({
           data: dataArray,
           prompt: values.message,
+          is_follow_up: false,  // This is the initial analysis
+          session_id: "default" // Use default session ID
         }),
       });
 
@@ -137,16 +139,31 @@ export default function Home() {
       const result = await response.json();
       setAnalysisResult(result);
 
-      console.log("result");
-      console.log(result);
+      console.log("Analysis result received:", result);
+      
+      // Handle visualization 
+      if (result.visual && result.visual[0]) {
+        console.log("Visualization data:", JSON.stringify(result.visual[0]));
+        setVisualization(result.visual[0]);
+      }
 
-      console.log("result[0].visualization");
-
-      console.log("JSON.parse(result[0].visualization)");
-      console.log(JSON.stringify(result.visual[0]));
-
-      setVisualization(result.visual[0]);
-
+      // Add system response to chat
+      let insightContent = "";
+      if (typeof result.insights === "string") {
+        insightContent = result.insights;
+      } else if (Array.isArray(result.insights) && result.insights.length > 0) {
+        // If insights is an array, join elements
+        insightContent = result.insights.join("\n");
+      } else {
+        // Fallback to string representation
+        insightContent = "Analysis completed successfully.";
+      }
+      
+      const systemMessage: ChatMessage = {
+        role: 'system',
+        content: insightContent
+      };
+      setMessages(prev => [...prev, systemMessage]);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error analyzing file");
@@ -171,52 +188,76 @@ export default function Home() {
     };
     setMessages(prev => [...prev, userMessage]);
 
-    // If we don't have analysis results yet, run the analysis first
-    if (!analysisResult) {
-      await analyzeData(values);
-    }
-
     try {
-      const response = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: values.message,
-          data: analysisResult,
-        }),
-      });
+      // If we don't have analysis results yet, run the initial analysis
+      if (!analysisResult) {
+        await analyzeData(values);
+      } else {
+        // This is a follow-up question (chat message)
+        const response = await fetch(`${API_URL}/analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            prompt: values.message,
+            is_follow_up: true,  // Flag to indicate this is a follow-up question
+            session_id: "default" // Use session ID if you have one
+          }),
+        });
 
-      if (!response.ok) {
-        try {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.detail
-              ? JSON.stringify(errorData.detail)
-              : `Chat request failed with status ${response.status}`
-          );
-        } catch (jsonError) {
-          throw new Error(`Chat request failed with status ${response.status}`);
+        if (!response.ok) {
+          // Try the chat endpoint as fallback in case the server hasn't been updated
+          const fallbackResponse = await fetch(`${API_URL}/chat`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              prompt: values.message,
+              data: analysisResult
+            }),
+          });
+          
+          if (!fallbackResponse.ok) {
+            throw new Error(`Request failed with status ${response.status}`);
+          }
+          
+          const fallbackResult = await fallbackResponse.json();
+          
+          // Add system response to chat from fallback
+          const systemMessage: ChatMessage = {
+            role: 'system',
+            content: fallbackResult.response
+          };
+          setMessages(prev => [...prev, systemMessage]);
+        } else {
+          const result = await response.json();
+          
+          // Update the analysis result with the new response
+          setAnalysisResult(result);
+          
+          // Add system response to chat using insights field
+          const systemMessage: ChatMessage = {
+            role: 'system',
+            content: result.insights
+          };
+          setMessages(prev => [...prev, systemMessage]);
+          
+          // Update visualization if it changed
+          if (result.visual && result.visual[0]) {
+            setVisualization(result.visual[0]);
+          }
         }
       }
-
-      const result = await response.json();
-      
-      // Add system response to chat
-      const systemMessage: ChatMessage = {
-        role: 'system',
-        content: result.response
-      };
-      setMessages(prev => [...prev, systemMessage]);
 
       // Reset the form
       form.reset({ message: "" });
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Error processing chat request"
+        err instanceof Error ? err.message : "Error processing request"
       );
-      console.error("Chat error:", err);
+      console.error("Error:", err);
     } finally {
       setIsChatLoading(false);
     }

@@ -605,15 +605,87 @@ def calculate(data, query, context, ai_service):
         return calculation_output
 
 
-def agentic_flow(data, user_query, ai_service):
+def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_analysis=None):
+    # For follow-up queries (chat messages), handle in a simplified way without activating tools
+    if is_follow_up and previous_analysis:
+        # Format the context similar to what's done in the chat endpoint
+        context = "You are a data analysis assistant. Help analyze and explain the data."
+        
+        # Format the analysis results in a structured way
+        context += "\n\nAnalysis results:"
+        
+        # Check validation field
+        if isinstance(previous_analysis, dict) and "validation" in previous_analysis:
+            validation = previous_analysis["validation"]
+            if validation:
+                context += f"\n- Data validation: {validation}"
+        
+        # Check insights field
+        if isinstance(previous_analysis, dict) and "insights" in previous_analysis:
+            insights = previous_analysis["insights"]
+            if insights:
+                context += f"\n- Data insights: {insights}"
+        
+        # Check calculate field - handle both dict and DataFrame
+        if isinstance(previous_analysis, dict) and "calculate" in previous_analysis:
+            calculate_result = previous_analysis["calculate"]
+            context += "\n- Calculations:"
+            
+            # Handle DataFrame
+            if hasattr(calculate_result, 'to_dict'):  # Check if it's DataFrame-like
+                try:
+                    # Convert DataFrame to dict for display
+                    calc_dict = calculate_result.to_dict()
+                    for col, values in calc_dict.items():
+                        for idx, val in values.items():
+                            context += f"\n  * {col} {idx}: {val}"
+                except:
+                    # Fallback - use string representation
+                    context += f"\n  * {str(calculate_result)}"
+            # Handle dict
+            elif isinstance(calculate_result, dict):
+                for key, value in calculate_result.items():
+                    if isinstance(value, dict):
+                        for subkey, subvalue in value.items():
+                            context += f"\n  * {key} {subkey}: {subvalue}"
+                    else:
+                        context += f"\n  * {key}: {value}"
+            else:
+                # Fallback for other types
+                context += f"\n  * {str(calculate_result)}"
+        
+        # Check visual field
+        if isinstance(previous_analysis, dict) and "visual" in previous_analysis:
+            visual = previous_analysis["visual"]
+            if visual:
+                context += f"\n- Visualization components: {visual}"
+
+        # Add the user query
+        query_context = f"Given the analysis results above, answer the following question: {user_query}"
+        
+        # Process the query with this context, waiting for analysis to complete
+        response = ai_service.process_query(context, query_context, wait_for_analysis=True)
+        
+        # Return just the response in the same format as the normal agentic flow
+        response_dict = {
+            "validation": previous_analysis.get("validation", ""),
+            "insights": response,  # Put response in insights field
+            "visual": previous_analysis.get("visual", ""),
+            "calculate": previous_analysis.get("calculate", ""),
+        }
+        
+        return response_dict
+    
+    # Original agentic flow code for initial analysis
     # Set analysis status to false at the start
     ai_service.set_analysis_complete(False)
     
+    # Remove the circular import and use the global functions directly
     tools_funcs = {
-    "validate_data": validate_data,
-    "get_insights": get_insights,
-    "visual": visualize,
-    "calculate": calculate,
+        "validate_data": validate_data,
+        "get_insights": get_insights,
+        "visual": visualize,
+        "calculate": calculate,
     }
     
     tools_explanation = {
