@@ -138,7 +138,7 @@ export default function Home() {
       console.log("Analysis result received:", result);
       
       // Handle visualization 
-      if (result.visual && result.visual[0]) {
+      if (result.visual && result.visual.length > 0) {
         console.log("Visualization data:", JSON.stringify(result.visual[0]));
         setVisualization(result.visual[0]);
       }
@@ -242,7 +242,7 @@ export default function Home() {
           setMessages(prev => [...prev, systemMessage]);
           
           // Update visualization if it changed
-          if (result.visual && result.visual[0]) {
+          if (result.visual && result.visual.length > 0) {
             setVisualization(result.visual[0]);
           }
         }
@@ -351,7 +351,7 @@ export default function Home() {
           {analysisResult && (
             <div className={`w-full ${messages.length > 0 ? 'md:w-1/2' : ''} max-w-2xl flex flex-col`}>
               {messages.length > 0 && <ConversationHistory messages={messages} />}
-              <ChartBlock spec={visualization} />
+              {analysisResult.visual.length > 0 && <ChartBlock spec={visualization} />}
             </div>
           )}
         </div>
