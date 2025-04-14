@@ -1,6 +1,6 @@
 "use server";
 
-import db from '../../db'; // Import Drizzle client
+import db from '@/db';
 import { files, chats } from '../../db/schema'; // Import Drizzle schemas
 import { eq } from 'drizzle-orm'; // Import eq operator
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs

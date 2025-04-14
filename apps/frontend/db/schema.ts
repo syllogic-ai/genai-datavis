@@ -48,12 +48,3 @@ export const charts = pgTable("charts", {
   chartSpecs: jsonb("chart_specs").notNull(), // Next.js-compatible chart config
   createdAt: timestamp("created_at").defaultNow(),
 });
-
-// Optional: COLUMN ANNOTATIONS
-export const columnAnnotations = pgTable("column_annotations", {
-  id: text("id").primaryKey(), // Can be any string ID
-  uploadId: text("upload_id").references(() => files.id),
-  columnName: text("column_name").notNull(),
-  inferredType: text("inferred_type").notNull(), // numerical | categorical | datetime
-  annotation: text("annotation"),
-});
