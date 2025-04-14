@@ -38,7 +38,10 @@ def get_insights(data, query, context, ai_service):
         # context = f"The following is the financial data for 2024:\n{data_text}"
         final_query = f"Generate valuable business insights about the given data: {data_text}, trying to best answer the following  query: {query}. \
         Be specific and provide actionable insights. "
+        print(" - DEBUG - Final query for insights: ", final_query)
+        print(" - DEBUG - Context for insights: ", context)
         response = ai_service.process_query(context, final_query)
+        # print(response)
         # print(response)
         insights_output.append(response)
 
@@ -142,19 +145,6 @@ def  visualize(data, query, context, ai_service):
             "kpiChangeDirection": "increase"
         }
         """
-        # Load the data glossary 
-        file_path = 'utils/visual_glossary.txt'
-        # file_path = "apps/backend/utils/visual_glossary.txt"
-        # file_path = 'apps\backend\utils\visual_glossary.txt'
-        try:
-            with open(file_path, "r", encoding="utf-8") as file:
-                glossary_content = file.read()
-        except FileNotFoundError:
-            print(f"Error: The file at {file_path} was not found.")
-            return ""
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            return ""
 
         if not query:
             query = "Given the data, provide me a valuable visualization"
@@ -168,20 +158,29 @@ def  visualize(data, query, context, ai_service):
              Print only the name of the visualization type and nothing else. \
              You must choose from exactly these options: bar, area, line, kpi."
 
-        data_text = data.to_string(index=False)
+        if ai_service.current_data is not None:
+            # If current data is available, use it for context
+            print(" - DEBUG - Using current data for visualization: ", ai_service.current_data.head())
+            data_cur = ai_service.current_data
+            extra_context = f"You can also use the following database if it's more helpful: {ai_service.current_data.head(10).to_string(index=False)}"
+        else:
+            data_cur = data
+            extra_context = ""
         
         # First LLM Pass to get the visualization type
         chart_type = ai_service.process_query(context, init_query).strip().lower()
 
         # Validate and default to "line" if not valid
         if chart_type not in valid_chart_types: 
+             print(f"DEBUG - Invalid chart type '{chart_type}' detected. Defaulting to 'line'.")
              chart_type = "line"
+        print(" - DEBUG - Chart type: ", chart_type)
              
         # Build query based on chart type
         if chart_type == "kpi":
             # Special handling for KPI chart
             kpi_query = f"""
-            Given the following data: {data.head(10).to_string(index=False)}, 
+            Given the following data: {data_cur.head(10).to_string(index=False)}, 
             I want you to extract the following KPI components:
             - A single numeric value for kpiValue
             - An appropriate kpiLabel (string)
@@ -191,7 +190,7 @@ def  visualize(data, query, context, ai_service):
             - A kpiChangeDirection ("increase", "decrease", or "flat")
             
             Here's an example of what your response should look like:
-            ```
+            Don't add anything else than the JSON response itself.
             {{
               "kpiValue": 1250000,
               "kpiLabel": "Total Revenue",
@@ -201,13 +200,13 @@ def  visualize(data, query, context, ai_service):
               "kpiChange": 12.5,
               "kpiChangeDirection": "increase"
             }}
-            ```
             
             Format your response as JSON with these exact keys.
             Your response should be strictly JSON, nothing else.
             """
+            print(" - DEBUG - KPI query: ", kpi_query)
             
-            kpi_response = ai_service.process_query(context, kpi_query)
+            kpi_response = ai_service.process_query(context, kpi_query).replace("```", "").replace("json", "").strip()
             try:
                 kpi_data = json.loads(kpi_response)
                 
@@ -289,7 +288,7 @@ def  visualize(data, query, context, ai_service):
         else:
             # For line, bar, and area charts
             chart_query = f"""
-            Given the following data: {data.head(10).to_string(index=False)}, 
+            Given the following data: {data_cur.head(10).to_string(index=False)}, 
             analyze it and create a {chart_type} chart that best answers this query: {query}
             
             Provide your response as strict JSON with these properties:
@@ -298,26 +297,27 @@ def  visualize(data, query, context, ai_service):
             - xAxisDataKey: The column name to use for x-axis values
             - dataColumns: An array of column names to plot on the y-axis
             
+            
             Here's an example of what your response should look like:
-            ```
+            Don't add anything else than the JSON response itself.
             {{
               "title": "Sales Growth by Region",
               "description": "Monthly sales figures across different regions",
               "xAxisDataKey": "month",
-              "dataColumns": ["north_sales", "south_sales", "east_sales", "west_sales"]
+              "dataColumns": ["volumes", "transaction counts"]
             }}
-            ```
             
             Your response should be strictly JSON, nothing else.
             """
-            
-            chart_response = ai_service.process_query(context, chart_query)
+            print(" - DEBUG - Chart query: ", chart_query)
+
+            chart_response = ai_service.process_query(context, chart_query).replace("```", "").replace("json", "")
             try:
                 chart_data = json.loads(chart_response)
                 
                 # Prepare data for the chart
-                x_key = chart_data.get("xAxisDataKey", data.columns[0])
-                data_cols = chart_data.get("dataColumns", [data.columns[1]])
+                x_key = chart_data.get("xAxisDataKey", data_cur.columns[0])
+                data_cols = chart_data.get("dataColumns", [data_cur.columns[1]])
                 
                 # If data_cols is provided as string, convert to list
                 if isinstance(data_cols, str):
@@ -332,13 +332,13 @@ def  visualize(data, query, context, ai_service):
                 
                 # Create the data array in the correct format
                 chart_data_array = []
-                for i in range(min(len(data), 100)):  # Limit to 100 data points
+                for i in range(min(len(data_cur), 100)):  # Limit to 100 data points
                     item = {}
                     try:
-                        item[x_key] = data.iloc[i][x_key]
+                        item[x_key] = data_cur.iloc[i][x_key]
                         for col in data_cols:
-                            if col in data.columns:
-                                item[col] = data.iloc[i][col]
+                            if col in data_cur.columns:
+                                item[col] = data_cur.iloc[i][col].item()
                         chart_data_array.append(item)
                     except:
                         continue
@@ -411,7 +411,7 @@ def  visualize(data, query, context, ai_service):
                 
                 # Add color configuration for each data column
                 for i, col in enumerate(data_cols):
-                    if col in data.columns:
+                    if col in data_cur.columns:
                         chartConfig[col] = {
                             "color": colors[i % len(colors)],
                             "label": col.replace("_", " ").title()
@@ -428,23 +428,23 @@ def  visualize(data, query, context, ai_service):
                     
                     # Add color configuration for each data column
                     for i, col in enumerate(data_cols):
-                        if col in data.columns:
+                        if col in data_cur.columns:
                             chartConfig[col] = {
                                 "color": colors[i % len(colors)],
                                 "label": col.replace("_", " ").title()
                             }
                     
                     # If we couldn't create any entries, add at least one default
-                    if not chartConfig and len(data.columns) > 1:
-                        chartConfig[data.columns[1]] = {
+                    if not chartConfig and len(data_cur.columns) > 1:
+                        chartConfig[data_cur.columns[1]] = {
                             "color": "#3b82f6",
-                            "label": data.columns[1].replace("_", " ").title()
+                            "label": data_cur.columns[1].replace("_", " ").title()
                         }
                     
                     chart_spec["chartConfig"] = chartConfig
                 
                 # Log the final chart spec for debugging
-                print(f"DEBUG - Final chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
+                print(f" - DEBUG - Final chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
                 
                 return [chart_spec]
             except Exception as e:
@@ -453,10 +453,10 @@ def  visualize(data, query, context, ai_service):
                 chart_spec = {
                     "chartType": chart_type,
                     "title": f"{chart_type.capitalize()} Chart",
-                    "description": f"Visualization of {data.columns[0]}",
+                    "description": f"Visualization of {data_cur.columns[0]}",
                     "data": [],
                     "xAxisConfig": {
-                        "dataKey": data.columns[0],
+                        "dataKey": data_cur.columns[0],
                         "tickLine": False,
                         "axisLine": False
                     },
@@ -469,25 +469,25 @@ def  visualize(data, query, context, ai_service):
                 
                 # Create some fallback data
                 try:
-                    x_key = data.columns[0]
+                    x_key = data_cur.columns[0]
                     # Get up to 2 numeric columns for y-axis data
-                    numeric_cols = [col for col in data.columns[1:3] if pd.api.types.is_numeric_dtype(data[col])]
-                    if not numeric_cols and len(data.columns) > 1:
-                        numeric_cols = [data.columns[1]]  # Fallback to first non-index column
+                    numeric_cols = [col for col in data_cur.columns[1:3] if pd.api.types.is_numeric_dtype(data[col])]
+                    if not numeric_cols and len(data_cur.columns) > 1:
+                        numeric_cols = [data_cur.columns[1]]  # Fallback to first non-index column
                     
                     fallback_data = []
-                    for i in range(min(5, len(data))):  # Just use 5 data points for fallback
+                    for i in range(min(5, len(data_cur))):  # Just use 5 data points for fallback
                         item = {}
                         # Format date columns properly
-                        if pd.api.types.is_datetime64_any_dtype(data[x_key]):
-                            item[x_key] = data.iloc[i][x_key].isoformat()
+                        if pd.api.types.is_datetime64_any_dtype(data_cur[x_key]):
+                            item[x_key] = data_cur.iloc[i][x_key].isoformat()
                         else:
-                            item[x_key] = data.iloc[i][x_key]
+                            item[x_key] = data_cur.iloc[i][x_key]
                         
                         # Add numeric data for each column
                         for col in numeric_cols:
-                            if col in data.columns:
-                                item[col] = float(data.iloc[i][col]) if pd.api.types.is_numeric_dtype(data[col]) else data.iloc[i][col]
+                            if col in data_cur.columns:
+                                item[col] = float(data_cur.iloc[i][col]) if pd.api.types.is_numeric_dtype(data_cur[col]) else data_cur.iloc[i][col]
                         fallback_data.append(item)
                     
                     if fallback_data:
@@ -507,10 +507,10 @@ def  visualize(data, query, context, ai_service):
                         }
                 except:
                     # If there's any error, create at least one chart config entry
-                    if len(data.columns) > 1:
-                        chartConfig[data.columns[1]] = {
+                    if len(data_cur.columns) > 1:
+                        chartConfig[data_cur.columns[1]] = {
                             "color": "#3b82f6",
-                            "label": data.columns[1].replace("_", " ").title()
+                            "label": data_cur.columns[1].replace("_", " ").title()
                         }
                 
                 chart_spec["chartConfig"] = chartConfig
@@ -553,20 +553,23 @@ def  visualize(data, query, context, ai_service):
                     
                     # Add color configuration for each data column
                     for i, col in enumerate(data_cols):
-                        if col in data.columns:
+                        if col in data_cur.columns:
                             chartConfig[col] = {
                                 "color": colors[i % len(colors)],
                                 "label": col.replace("_", " ").title()
                             }
                     
                     # If we couldn't create any entries, add at least one default
-                    if not chartConfig and len(data.columns) > 1:
-                        chartConfig[data.columns[1]] = {
+                    if not chartConfig and len(data+cur.columns) > 1:
+                        chartConfig[data_cur.columns[1]] = {
                             "color": "#3b82f6",
-                            "label": data.columns[1].replace("_", " ").title()
+                            "label": data_cur.columns[1].replace("_", " ").title()
                         }
                     
                     chart_spec["chartConfig"] = chartConfig
+
+                print(" - DEBUG - Setting current data to None: ")
+                ai_service.current_data = None
                 
                 # Log the final chart spec for debugging
                 print(f"DEBUG - Final chart spec: {json.dumps(chart_spec, indent=2, default=str)}")
@@ -577,22 +580,27 @@ def calculate(data, query, context, ai_service):
         calculation_output = []
         data_columns = data.columns
         final_query = f"Given a table with the following metadata: {data_columns} \
-              I want you to generate a SQL code, trying to answer the following question: {query}. \
+              I want you to generate a SQLite code, trying to answer the following question: {query}. \
               Assume that the table name is 'data_table'. \
-              Provide the SQL code only, and nothing else."
-        response = ai_service.process_query(context, final_query)
+              Don't use DATE_FORMAT function, as this is not compatible with SQLite syntax. \
+              Provide the SQLlite code only, and nothing else, with no sql prefix. \
+                And example response could be: \
+                SELECT column1, column2 FROM data_table"
+        response = ai_service.process_query(context, final_query).replace("```", "")
 
         # Create an in-memory SQLite database
         conn = sqlite3.connect(":memory:")
-        print(f"Calculate response: {response}")
+        print(" - DEBUG - SQL to run: ", response)
         try:
             # Load the DataFrame into the SQLite database
             data.to_sql("data_table", conn, index=False, if_exists="replace")
 
             # Execute the SQL query
             result = pd.read_sql_query(response, conn)
+            ai_service.current_data = result  # Update the current data in the AI service
+            print(" - DEBUG - Updating current data with what was calculated!")
 
-            return result
+            # return result
         except Exception as e:
             print(f"Error executing SQL query: {e}")
             return None
@@ -628,7 +636,7 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
         "validate_data": "Check for missing values, duplicates, and data types.",
         "get_insights": "Generate valuable business insights about the given data.",
         "visual": "Generate a visualization of the data.",
-        "calculate": "Performs calculations based on a user question."
+        "calculate": "Performs calculations based on a user question. Use it whenever any calculation is needed."
     }
 
     # Base context for all queries
@@ -734,15 +742,15 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
         user_query = f"Follow-up question: {user_query}\nPlease use the previous analysis results and the dataset to provide a detailed answer."
 
     master_query = f"Given the following dataset: {{data}}, and the following user query: {{user_query}}? \
-    I want you to decide which tool to use in order to answer the user query. " \
-    "Print only the name of the tool and nothing else. " \
-    "The tools are: {{tools}}. " \
+    I want you to decide which tool to use in order to answer the user query. \
+    Print only the name of one tool and nothing else. \
+    The tools are: {{tools}}. "
 
     feedback_query = f"Given the user query {{user_query}}, you have used the following tools, producing the respective responses: \
         {{tool_responses}} \
         Do you have enough information to answer the user query, or are additional information missing?  \
         If yes, print 'yes' and nothing else. \
-        If not, print only the name of the tool you need to use in order to answer the user query, and nothing else. Don't price NO in this case. \
+        If not, print only the name of the one tool you need to use in order to answer the user query, and nothing else. Don't price NO in this case. \
         Available tools are {{tools}}. " 
 
     response_query = f"Given the user query {{user_query}}, you have used the following tools, producing the respective responses: \
@@ -796,13 +804,13 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
                 tools=tools_expl
             )).replace("'", "")
             
-            if cur_tool == "yes":
-                print("The tool has given you a proper response.")
+            if cur_tool.lower() == "yes":
+                print(" - DEBUG - The tool has given you a proper response.")
                 final_response = ai_service.process_query(context_upd, response_query.format(
                     user_query=safe_user_query, 
                     tool_responses=safe_tool_responses
                 ))
-                print(final_response)
+                # print(" - DEBUG - Final Response: ", final_response)
                 break
             elif len(tools_responses.keys()) >= 2:
                 print("The tool has reached maximum amount of iterations.")
@@ -815,7 +823,7 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
             else:
                 cur_tool = cur_tool.strip()
         
-        print(f"Iteration {counter}")
+        print(f"============================= Iteration {counter} ===============================")
         print(f"Using tool: {cur_tool}")
         
         # Handle follow-up queries that might not have data
@@ -852,10 +860,19 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
     if tools_responses.get(str(counter-1)) and tools_responses[str(counter-1)][0] == "calculate":
         # If it's a DataFrame, convert it to a serializable format
         calc_result = tools_responses[str(counter-1)][1]
-        if hasattr(calc_result, 'to_dict'):  # Check if DataFrame-like
-            response_dict["calculate"] = calc_result.to_dict()
-        else:
+        if hasattr(calc_result, 'tolist'):  # Check if it's an array-like object
+            response_dict["calculate"] = calc_result.tolist()
+        elif isinstance(calc_result, (np.int64, np.float64)):  # Handle numpy scalar
+            response_dict["calculate"] = calc_result.item()
+        elif isinstance(calc_result, (int, float)):  # Handle Python scalar
             response_dict["calculate"] = calc_result
+        else:
+            response_dict["calculate"] = str(calc_result)  # Fallback to string representation
+
+        # if hasattr(calc_result, 'item'):  # Check if DataFrame-like
+        #     response_dict["calculate"] = calc_result.item()
+        # else:
+        #     response_dict["calculate"] = calc_result
     else:
         # For other tools, just use the response as is
         if tools_responses.get(str(counter-1)):
@@ -874,6 +891,12 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
 
     # Set analysis status to complete
     ai_service.set_analysis_complete(True)
+    
+    final_response_dict = [{"type": v[0], "value": v[1]} for k, v in tools_responses.items()]
+    final_respons_dict = tools_responses
+    print("=========== FINAL RESPONSE DICT START ========================") 
+    print(response_dict)
+    print("=========== FINAL RESPONSE DICT END ========================")
 
     return response_dict
 

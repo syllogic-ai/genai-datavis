@@ -3,6 +3,7 @@ from tools.llm_tool import LLMTool
 class AIService:
     def __init__(self):
         self.llm_tool = LLMTool()
+        self.current_data = None
 
     def process_query(self, context: str, query: str, wait_for_analysis: bool = False) -> str:
         # Use the LLM tool to process the query
