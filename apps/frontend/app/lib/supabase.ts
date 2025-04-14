@@ -38,4 +38,4 @@ export async function uploadFileToSupabase(file: File, bucketName: string = 'tes
     console.error('Error uploading file:', error);
     throw error;
   }
-} 
+}

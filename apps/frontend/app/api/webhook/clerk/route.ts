@@ -1,8 +1,9 @@
 import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { WebhookEvent } from '@clerk/nextjs/server';
-import { db, users } from '@/db';
+import { db } from '@/db';
 import { eq } from 'drizzle-orm';
+import { users } from '@/db/schema';
 
 export async function POST(req: Request) {
   // Get the headers
@@ -53,9 +54,7 @@ export async function POST(req: Request) {
         await db.insert(users).values({
           id: userId,
           email: email_addresses[0].email_address,
-          chatHistory: [],
-          analysisResults: [],
-          dataFileLink: null,
+          createdAt: new Date(),
         });
 
         console.log(`User created: ${userId}`);

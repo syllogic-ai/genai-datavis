@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { db, users } from '@/db';
+import { db } from '@/db';
+import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuth } from '@clerk/nextjs/server';
 import { cookies, headers } from 'next/headers';
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { email, chatHistory, analysisResults, dataFileLink } = body;
+    const { email } = body;
 
     // First check if user exists
     const existingUser = await db.select().from(users).where(eq(users.id, userId));
@@ -50,10 +51,7 @@ export async function POST(request: Request) {
       await db.update(users)
         .set({
           email: email || existingUser[0].email,
-          chatHistory: chatHistory || existingUser[0].chatHistory,
-          analysisResults: analysisResults || existingUser[0].analysisResults,
-          dataFileLink: dataFileLink || existingUser[0].dataFileLink,
-          updatedAt: new Date(),
+          createdAt: new Date(),
         })
         .where(eq(users.id, userId));
     } else {
@@ -61,9 +59,7 @@ export async function POST(request: Request) {
       await db.insert(users).values({
         id: userId,
         email,
-        chatHistory: chatHistory || [],
-        analysisResults: analysisResults || [],
-        dataFileLink: dataFileLink || null,
+        createdAt: new Date(),
       });
     }
 

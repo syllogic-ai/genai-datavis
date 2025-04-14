@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { API_URL } from "../lib/env";
-import { uploadFileToSupabase, generateFileName, supabase } from "../lib/supabase";
+import { uploadFileToSupabase } from "../lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,15 +13,22 @@ import { Box } from "lucide-react";
 import { ChartBlock } from "@/components/blocks/ChartBlock";
 import { ConversationHistory } from "@/components/ConversationHistory";
 import { DebugPanel } from "@/components/DebugPanel";
+import { v4 as uuidv4 } from 'uuid';
+import { useUser } from "@clerk/nextjs";
+import { useRouter } from 'next/navigation';
 
 // Import FilePond
 import { FilePond, registerPlugin } from 'react-filepond';
 import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
+import FilePondPluginImagePreview from 'filepond-plugin-image-preview';
 import 'filepond/dist/filepond.min.css';
+import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
 import type { FilePondFile } from 'filepond';
+import { createChat, createFile } from "../lib/actions";
 
 // Register FilePond plugins
 registerPlugin(FilePondPluginFileValidateType);
+registerPlugin(FilePondPluginImagePreview);
 
 // Define form schema
 const formSchema = z.object({
@@ -37,6 +44,7 @@ type ChatMessage = {
 };
 
 export default function Home() {
+  const { user, isLoaded, isSignedIn } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -69,6 +77,18 @@ export default function Home() {
     }
   }, [messages]);
 
+  if (!isLoaded) return <div>Loading...</div>;
+
+  const userId = user?.id;
+
+  if (!userId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <h1 className="text-2xl font-semibold mb-6 text-center">Please sign in to upload files</h1>
+      </div>
+    );
+  }
+
   // Handle file upload
   const handleFileUpload = async (fileItems: FilePondFile[]) => {
     if (fileItems.length === 0) {
@@ -85,6 +105,15 @@ export default function Home() {
       
       // Upload to Supabase
       const url = await uploadFileToSupabase(fileBlob);
+      const fileId = uuidv4();
+      const chatId = uuidv4();
+      console.log("File ID:", fileId);
+
+      await Promise.all([
+        createFile(fileId, "original", fileBlob.name, url, userId),
+        createChat(chatId, userId, fileId)
+      ]);
+
       setFileUrl(url);
       setUploadSuccess(true);
       console.log("File uploaded to Supabase:", url);
