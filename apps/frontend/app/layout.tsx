@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Open_Sans } from "next/font/google";
 import "./globals.css";
 
 import { Navbar } from "@/components/ui/navbar";
+import { ClerkProvider } from '@clerk/nextjs';
 
 const openSans = Open_Sans({
   variable: "--font-open-sans",
@@ -31,12 +32,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${openSans.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <Navbar />
-        {children}
-      </body>
+      <ClerkProvider>
+        <body
+          className={`${openSans.variable} ${geistSans.variable} ${geistMono.variable} antialiased`}
+        >
+          {/* <Navbar /> */}
+          {children}
+        </body>
+      </ClerkProvider>
     </html>
   );
 }
