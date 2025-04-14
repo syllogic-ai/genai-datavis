@@ -1,7 +1,7 @@
 import { Webhook } from 'svix';
 import { headers } from 'next/headers';
 import { WebhookEvent } from '@clerk/nextjs/server';
-import { db, users } from '@/lib/db';
+import { db, users } from '@/db';
 import { eq } from 'drizzle-orm';
 
 export async function POST(req: Request) {
