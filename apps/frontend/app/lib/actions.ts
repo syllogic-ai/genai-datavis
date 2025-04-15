@@ -72,3 +72,9 @@ export async function createChat(chatId: string, userId: string, fileId: string)
     throw error; // Re-throw the error
   }
 } 
+
+
+export async function getChats(userId: string) {
+  const result = await db.select().from(chats).where(eq(chats.userId, userId));
+  return result;
+}

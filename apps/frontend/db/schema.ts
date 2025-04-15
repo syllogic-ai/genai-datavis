@@ -48,3 +48,9 @@ export const charts = pgTable("charts", {
   chartSpecs: jsonb("chart_specs").notNull(), // Next.js-compatible chart config
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Define Chat type
+export type User = typeof users.$inferSelect;
+export type Chat = typeof chats.$inferSelect;
+export type File = typeof files.$inferSelect;
+export type Chart = typeof charts.$inferSelect;

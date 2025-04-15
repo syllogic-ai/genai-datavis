@@ -300,8 +300,8 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white text-black">
-      <div className="flex-1 overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden text-black">
+      <div className="flex-1 overflow-auto">
         {showDropzone ? (
           <div className="flex flex-col justify-center items-center h-full">
             <h1 className="text-2xl font-semibold mb-6 text-center">What data would you like to analyze?</h1>
@@ -357,7 +357,7 @@ export default function Home() {
           {/* Chat messages */}
           {messages.length > 0 && (
             <div className="w-full md:w-1/2 max-w-2xl">
-              <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-180px)] rounded-lg pr-4">
+              <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-15rem)] rounded-lg pr-4">
                 <div className="space-y-4 p-4">
                   {messages.map((message, index) => (
                     <div
@@ -404,7 +404,7 @@ export default function Home() {
 
       {/* Fixed chat input at the bottom */}
       {file && uploadSuccess && (
-        <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="p-4 border-t border-gray-200 bg-white sticky bottom-0">
           <div className="max-w-2xl mx-auto">
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <div className="relative rounded-xl border border-gray-300/20 overflow-hidden">
