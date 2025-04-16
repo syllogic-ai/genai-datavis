@@ -7,14 +7,6 @@ const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || 
 // Create standard supabase client with anon key
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Create service role client for admin operations (use carefully)
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: {
-    persistSession: false,
-    autoRefreshToken: false,
-  }
-});
-
 // Creates a URL for a file in a bucket
 export function getFileUrl(bucket: string, filePath: string): string {
   return `${supabaseUrl}/storage/v1/object/public/${bucket}/${filePath}`;

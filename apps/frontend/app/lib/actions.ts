@@ -2,9 +2,9 @@
 
 import db from '@/db';
 import { files, chats } from '../../db/schema'; // Import Drizzle schemas
-import { eq } from 'drizzle-orm'; // Import eq operator
+import { eq, and } from 'drizzle-orm'; // Import eq and and operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
-import { supabase, supabaseAdmin } from './supabase';
+import { supabase } from './supabase';
 import { ChatMessage, normalizeMessages } from './types';
 
 // Create a new file in the database using Drizzle
@@ -114,30 +114,131 @@ export async function updateChatConversation(
     return processedMsg;
   });
 
-  // Use supabaseAdmin to bypass RLS
-  const { data, error } = await supabaseAdmin
-    .from('chats')
-    .update({ conversation: processedConversation })
-    .eq('id', chatId)
-    .eq('user_id', userId) // Keep the user_id check for security
-    .select();
+  try {
+    const result = await db.update(chats)
+      .set({ conversation: processedConversation })
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ))
+      .returning();
 
-  if (error) throw error;
-  return data;
+    if (!result || result.length === 0) {
+      throw new Error(`Failed to update conversation for chat ${chatId}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error updating chat conversation:', error);
+    throw error;
+  }
 }
 
 /**
  * Get a chat by ID
  */
 export async function getChat(chatId: string, userId: string) {
-  // Use supabaseAdmin to bypass RLS
-  const { data, error } = await supabaseAdmin
-    .from('chats')
-    .select('*, files(*)')
-    .eq('id', chatId)
-    .eq('user_id', userId) // Keep the user_id check for security
-    .single();
+  try {
+    // Get the chat using Drizzle
+    const chatResult = await db.select().from(chats)
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ));
+    
+    if (!chatResult || chatResult.length === 0) {
+      throw new Error(`Chat with ID ${chatId} not found`);
+    }
 
-  if (error) throw error;
-  return data;
+    const chatData = chatResult[0];
+
+    // If there's a fileId, get the file details using Drizzle
+    if (chatData.fileId) {
+      const fileResult = await db.select().from(files)
+        .where(eq(files.id, chatData.fileId));
+      
+      if (fileResult && fileResult.length > 0) {
+        const fileData = fileResult[0];
+        // Return a combined object with chat data and file details
+        return { 
+          ...chatData, 
+          files: {
+            ...fileData,
+            // Ensure the storage_path is available for the frontend
+            storage_path: fileData.storagePath
+          }
+        };
+      }
+    }
+
+    // Return just the chat data if no file is found
+    return chatData;
+  } catch (error) {
+    console.error('Error fetching chat:', error);
+    throw error;
+  }
+}
+
+/**
+ * Append a single message to the conversation in a chat
+ */
+export async function appendChatMessage(
+  chatId: string,
+  message: ChatMessage | any,
+  userId: string
+) {
+  // Process the message to ensure it has proper structure
+  const processedMsg: any = {
+    role: message.role,
+    timestamp: new Date().toISOString(), // Add timestamp
+  };
+  
+  if ('content' in message) {
+    processedMsg.content = message.content;
+  }
+  
+  if ('message' in message) {
+    processedMsg.message = message.message;
+  }
+  
+  // Ensure at least one of content or message exists
+  if (!('content' in processedMsg) && !('message' in processedMsg)) {
+    processedMsg.content = "Unknown message content";
+  }
+
+  try {
+    // First get the current conversation
+    const chatResult = await db.select({ conversation: chats.conversation })
+      .from(chats)
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ));
+    
+    if (!chatResult || chatResult.length === 0) {
+      throw new Error(`Chat with ID ${chatId} not found`);
+    }
+
+    // Append the new message to the existing conversation
+    const currentConversation = chatResult[0].conversation || [];
+    const updatedConversation = [...currentConversation, processedMsg];
+    
+    // Update the chat with the new conversation
+    const result = await db.update(chats)
+      .set({ conversation: updatedConversation })
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ))
+      .returning();
+
+    if (!result || result.length === 0) {
+      throw new Error(`Failed to append message to chat ${chatId}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error appending chat message:', error);
+    throw error;
+  }
 }

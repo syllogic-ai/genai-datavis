@@ -12,7 +12,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Box } from "lucide-react";
 import { ChartBlock } from "@/components/blocks/ChartBlock";
 import { ConversationHistory } from "@/components/ConversationHistory";
-import { DebugPanel } from "@/components/DebugPanel";
 
 // Import FilePond
 import { FilePond, registerPlugin } from 'react-filepond';
@@ -355,12 +354,6 @@ export default function Home() {
             </div>
           )}
         </div>
-
-        {messages.length > 0 && (
-          <div className="mx-auto max-w-4xl px-4 pb-4">
-            <DebugPanel />
-          </div>
-        )}
 
         {error && (
           <div className="p-4 flex justify-center">

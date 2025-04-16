@@ -15,8 +15,7 @@ import { ConversationHistory } from "@/components/ConversationHistory";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 
 import { API_URL } from "@/app/lib/env";
-import { updateChatConversation } from "@/app/lib/actions";
-import { supabase, supabaseAdmin } from "@/app/lib/supabase";
+import { updateChatConversation, appendChatMessage, getChat } from "@/app/lib/actions";
 import { ChatMessage } from "@/app/lib/types";
 
 // Zod schema for input
@@ -41,6 +40,7 @@ export default function ChatPage() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [chatDetails, setChatDetails] = useState<any>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   // Subscribe to real-time updates on the chat - MUST be called unconditionally
@@ -49,6 +49,23 @@ export default function ChatPage() {
       setMessages(updatedConversation);
     },
   });
+
+  // Fetch the chat details including the associated file
+  useEffect(() => {
+    if (!chatId || !user) return;
+
+    const fetchChatDetails = async () => {
+      try {
+        const chatData = await getChat(chatId, user.id);
+        setChatDetails(chatData);
+      } catch (err) {
+        console.error("Error fetching chat details:", err);
+        setError(err instanceof Error ? err.message : "Error fetching chat details");
+      }
+    };
+
+    fetchChatDetails();
+  }, [chatId, user]);
 
   // Initialize form with RHF + Zod
   const form = useForm<z.infer<typeof formSchema>>({
@@ -84,20 +101,30 @@ export default function ChatPage() {
 
   // A function to handle the analyze request
   async function analyzeData(prompt: string) {
-    if (!user) return;
+    if (!user || !chatDetails) return;
     
     setAnalyzing(true);
     setError(null);
 
     try {
-      // Example: call your /analyze or /chat endpoint
+      // Get the file URL from chat details
+      // The files object now has both storage_path (for Supabase) and storagePath (from Drizzle)
+      const fileUrl = chatDetails.files?.storage_path || chatDetails.files?.storagePath;
+      
+      // Ensure we have a valid file URL
+      if (!fileUrl) {
+        throw new Error("No file URL found for this chat");
+      }
+
+      console.log("Using file URL:", fileUrl); // Log the URL being used
+
+      // Call your /analyze or /chat endpoint
       const response = await fetch(`${API_URL}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          // file_url or other data you retrieved from your DB
-          file_url: "some-file-url-from-db",
+          file_url: fileUrl, // Use the actual file URL from the database
           is_follow_up: Boolean(analysisResult),
           session_id: chatId, // or some session key
         }),
@@ -127,11 +154,12 @@ export default function ChatPage() {
             : result.insights?.join("\n") ?? "Analysis completed.",
       };
       
-      // Add to local state and update in database
+      // Add to local state
       const updatedMessages = [...messages, systemMessage];
       setMessages(updatedMessages);
       
-      await updateChatConversation(chatId, updatedMessages, user.id);
+      // Append the system message to the database
+      await appendChatMessage(chatId, systemMessage, user.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error analyzing file");
       console.error("Error analyzing file:", err);
@@ -150,12 +178,13 @@ export default function ChatPage() {
     // Add user message to chat
     const userMessage: ChatMessage = { role: "user", content: values.message };
     
-    // Add to local state and update in database
+    // Add to local state 
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
 
     try {
-      await updateChatConversation(chatId, updatedMessages, user.id);
+      // Append the user message to the database conversation
+      await appendChatMessage(chatId, userMessage, user.id);
       
       await analyzeData(values.message);
       // Reset form

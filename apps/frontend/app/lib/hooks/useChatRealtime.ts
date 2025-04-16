@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { supabase, supabaseAdmin } from '@/app/lib/supabase';
+import { supabase } from '@/app/lib/supabase';
 import { useUser } from '@clerk/nextjs';
 import { ChatMessage, ChatRealtimeOptions, normalizeMessages } from '@/app/lib/types';
 
@@ -40,7 +40,7 @@ export function useChatRealtime(
     // Fetch conversation data
     const fetchConversation = async () => {
       try {
-        const { data, error } = await supabaseAdmin
+        const { data, error } = await supabase
           .from('chats')
           .select('conversation')
           .eq('id', chatId)
