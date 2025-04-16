@@ -2,9 +2,18 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY || supabaseAnonKey;
 
-// Create supabase client
+// Create standard supabase client with anon key
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Create service role client for admin operations (use carefully)
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  }
+});
 
 // Creates a URL for a file in a bucket
 export function getFileUrl(bucket: string, filePath: string): string {

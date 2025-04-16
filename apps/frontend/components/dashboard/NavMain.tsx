@@ -63,7 +63,7 @@ export function NavMain({
             </SidebarMenuItem>
             {chats.map((chat) => (
               <SidebarMenuItem key={chat.id}>
-                <Link href={`/dashboard/chat/${chat.id}`} passHref>
+                <Link href={`/dashboard/c/${chat.id}`} passHref>
                   <SidebarMenuButton tooltip="Chat" className="truncate">
                     <MessageSquare className="h-4 w-4 mr-2" />
                     <span>{chat.id.substring(0, 10)}...</span>
