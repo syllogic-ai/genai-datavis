@@ -23,6 +23,7 @@ export const chats = pgTable("chats", {
   id: text("id").primaryKey(), // Can be any string ID
   userId: text("user_id").references(() => users.id),
   fileId: text("file_id").references(() => files.id),
+  title: text("title").notNull().default("New Chat"),
   conversation: jsonb("conversation").notNull().$type<{
     role: string;
     message: string;

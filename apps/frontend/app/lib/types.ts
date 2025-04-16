@@ -2,10 +2,13 @@
  * Type for standard chat messages with content field
  */
 export type ChatMessage = {
-  role: "user" | "system";
+  role: "user" | "system" | "chart";
   content: string;
   timestamp?: string;
 };
+
+// Import ChartSpec from the chart-types file
+export type { ChartSpec } from "@/types/chart-types";
 
 /**
  * Type for chat realtime hook options

@@ -15,8 +15,10 @@ import { ConversationHistory } from "@/components/ConversationHistory";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 
 import { API_URL } from "@/app/lib/env";
-import { updateChatConversation, appendChatMessage, getChat } from "@/app/lib/actions";
+import { updateChatConversation, appendChatMessage, getChat, getChartById } from "@/app/lib/actions";
 import { ChatMessage } from "@/app/lib/types";
+import type { ChartSpec } from "@/types/chart-types";
+import { SiteHeader } from "@/components/dashboard/SiteHeader";
 
 // Zod schema for input
 const formSchema = z.object({
@@ -36,7 +38,7 @@ export default function ChatPage() {
   // States - define all state unconditionally (React hooks rule)
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const [visualization, setVisualization] = useState<any>(null);
+  const [visualization, setVisualization] = useState<ChartSpec | null>(null);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,8 +47,27 @@ export default function ChatPage() {
 
   // Subscribe to real-time updates on the chat - MUST be called unconditionally
   const { conversation, isLoading: isConversationLoading, error: conversationError } = useChatRealtime(chatId, {
-    onUpdate: (updatedConversation) => {
+    onUpdate: async (updatedConversation) => {
       setMessages(updatedConversation);
+      
+      // Check for chart messages
+      const chartMessages = updatedConversation.filter(msg => msg.role === "chart");
+      if (chartMessages.length > 0) {
+        const latestChartMessage = chartMessages[chartMessages.length - 1];
+        // Extract chartId from message content
+        const chartId = latestChartMessage.content;
+        
+        try {
+          // Retrieve the chart specification using Drizzle
+          const chartSpec = await getChartById(chartId);
+          if (chartSpec) {
+            setVisualization(chartSpec as ChartSpec);
+          }
+        } catch (err) {
+          console.error("Error fetching chart specification:", err);
+          setError(err instanceof Error ? err.message : "Error fetching chart");
+        }
+      }
     },
   });
 
@@ -77,6 +98,29 @@ export default function ChatPage() {
   useEffect(() => {
     if (conversation && conversation.length > 0) {
       setMessages(conversation);
+      
+      // Find the last message with role "chart"
+      const chartMessages = conversation.filter(msg => msg.role === "chart");
+      if (chartMessages.length > 0) {
+        const latestChartMessage = chartMessages[chartMessages.length - 1];
+        // Extract chartId from message content
+        const chartId = latestChartMessage.content;
+        
+        // Retrieve the chart specification
+        const loadChartSpec = async () => {
+          try {
+            const chartSpec = await getChartById(chartId);
+            if (chartSpec) {
+              setVisualization(chartSpec as ChartSpec);
+            }
+          } catch (err) {
+            console.error("Error fetching chart specification:", err);
+            setError(err instanceof Error ? err.message : "Error fetching chart");
+          }
+        };
+        
+        loadChartSpec();
+      }
     }
   }, [conversation]); // Only depend on conversation changes
 
@@ -211,98 +255,101 @@ export default function ChatPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden text-black">
+      <SiteHeader 
+        chatTitle={chatDetails?.title || "New Chat"} 
+        fileName={chatDetails?.files?.originalFilename} 
+        fileStatus="available"
+      />
       <div className="flex-1 overflow-auto">
-        {/* Chat messages */}
-        <div className="flex items-center justify-center pt-4">
-          <div className="w-full md:w-1/2 max-w-2xl">
-            <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-15rem)] pr-4">
-              <div className="space-y-4 p-4">
-                {messages.map((message, index) => (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg ${
-                      message.role === "user" ? "bg-blue-100 ml-12" : "bg-gray-100 mr-12"
-                    }`}
-                  >
-                    <p className="whitespace-pre-line">{message.content}</p>
+        {/* Main content container with side-by-side layout */}
+        <div className="flex h-full pt-4">
+          {/* Chat column - messages and input */}
+          <div className={`flex flex-col transition-all duration-300 ease-in-out ${visualization ? 'md:w-1/2' : 'w-full'}`}>
+            {/* Chat messages */}
+            <div className="flex-1 flex items-start justify-center">
+              <div className="w-full max-w-2xl">
+                <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-18rem)] pr-4">
+                  <div className="space-y-4 p-4">
+                    {messages.map((message, index) => (
+                      <div
+                        key={index}
+                        className={`p-4 rounded-lg ${
+                          message.role === "user" ? "bg-blue-100 ml-12" : "bg-gray-100 mr-12"
+                        }`}
+                      >
+                        <p className="whitespace-pre-line">{message.content}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-
-        {/* Visualization (if any) */}
-        {visualization && (
-          <div className="flex justify-center p-4">
-            <ChartBlock spec={visualization} />
-          </div>
-        )}
-
-        {/* Debug / Additional UI */}
-        {messages.length > 0 && (
-          <div className="mx-auto max-w-4xl px-4 pb-4">
-            {/* DebugPanel removed */}
-          </div>
-        )}
-
-        {error && (
-          <div className="p-4 flex justify-center">
-            <div className="w-full max-w-2xl">
-              <div className="p-3 bg-red-100 text-red-700 rounded">
-                {error}
+                </ScrollArea>
               </div>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* Chat input */}
-      <div className="p-4 border-t border-gray-200 bg-white sticky bottom-0">
-        <div className="max-w-2xl mx-auto">
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="relative rounded-xl border border-gray-300/20 overflow-hidden">
-              <Textarea
-                {...form.register("message")}
-                placeholder="Ask a question about your data..."
-                className="min-h-24 py-4 pb-14 resize-none rounded-xl"
-                disabled={isChatLoading || analyzing}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    form.handleSubmit(onSubmit)();
-                  }
-                }}
-              />
-              <div className="absolute bottom-3 right-3">
-                <Button
-                  type="submit"
-                  size="icon"
-                  className="rounded-full group"
-                  disabled={isChatLoading || analyzing}
-                >
-                  {isChatLoading || analyzing ? (
-                    <span className="mx-1">...</span>
-                  ) : (
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      strokeWidth={2.5}
-                      stroke="currentColor"
-                      className="w-5 h-5 group-hover:translate-x-0.5 transition-all duration-300"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M13.5 4.5L21 12m0 0-7.5 7.5M21 12H3"
-                      />
-                    </svg>
-                  )}
-                </Button>
+            {/* Chat input - placed under messages */}
+            <div className="p-4 ">
+              <div className="max-w-2xl mx-auto">
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                  <div className="relative rounded-xl border border-gray-300/20 overflow-hidden">
+                    <Textarea
+                      {...form.register("message")}
+                      placeholder="Ask a question about your data..."
+                      className="min-h-24 py-4 pb-14 resize-none rounded-xl"
+                      disabled={isChatLoading || analyzing}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          form.handleSubmit(onSubmit)();
+                        }
+                      }}
+                    />
+                    <div className="absolute bottom-3 right-3">
+                      <Button
+                        type="submit"
+                        size="icon"
+                        className="rounded-full group"
+                        disabled={isChatLoading || analyzing}
+                      >
+                        {isChatLoading || analyzing ? (
+                          <span className="mx-1">...</span>
+                        ) : (
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            strokeWidth={2.5}
+                            stroke="currentColor"
+                            className="w-5 h-5 group-hover:translate-x-0.5 transition-all duration-300"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M13.5 4.5L21 12m0 0-7.5 7.5M21 12H3"
+                            />
+                          </svg>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </form>
               </div>
             </div>
-          </form>
+
+            {/* Error display */}
+            {error && (
+              <div className="p-4 flex justify-center">
+                <div className="w-full max-w-2xl">
+                  <div className="p-3 bg-red-100 text-red-700 rounded">
+                    {error}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Visualization - right side, appears with smooth transition */}
+          <div className={`md:w-1/2 p-4 flex transition-all duration-300 ease-in-out ${visualization ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'}`}>
+            {visualization && <ChartBlock spec={visualization} />}
+          </div>
         </div>
       </div>
     </div>

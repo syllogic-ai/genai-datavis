@@ -1,5 +1,5 @@
 {
-  "id": "266e98c1-f729-43ba-8b9f-4055cde42487",
+  "id": "c22ad90f-a76f-43ae-83db-faf7ee5a5e42",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -83,6 +83,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'New Chat'"
         },
         "conversation": {
           "name": "conversation",

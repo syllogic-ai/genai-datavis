@@ -10,6 +10,7 @@ CREATE TABLE "chats" (
 	"id" text PRIMARY KEY NOT NULL,
 	"user_id" text,
 	"file_id" text,
+	"title" text DEFAULT 'New Chat' NOT NULL,
 	"conversation" jsonb NOT NULL,
 	"usage" jsonb,
 	"created_at" timestamp DEFAULT now()

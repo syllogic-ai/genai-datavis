@@ -1,7 +1,7 @@
 "use server";
 
 import db from '@/db';
-import { files, chats } from '../../db/schema'; // Import Drizzle schemas
+import { files, chats, charts } from '../../db/schema'; // Import Drizzle schemas
 import { eq, and } from 'drizzle-orm'; // Import eq and and operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
 import { supabase } from './supabase';
@@ -159,13 +159,31 @@ export async function getChat(chatId: string, userId: string) {
       
       if (fileResult && fileResult.length > 0) {
         const fileData = fileResult[0];
+        
+        // Look for the original file to get the original filename
+        let originalFilename = fileData.originalFilename;
+        if (fileData.fileType !== "original") {
+          // If this isn't the original file, look for an original file with the same ID prefix
+          const originalFileResult = await db.select().from(files)
+            .where(and(
+              eq(files.userId, userId),
+              eq(files.fileType, "original")
+            ));
+            
+          // If original file found, use its filename
+          if (originalFileResult && originalFileResult.length > 0) {
+            originalFilename = originalFileResult[0].originalFilename;
+          }
+        }
+        
         // Return a combined object with chat data and file details
         return { 
           ...chatData, 
           files: {
             ...fileData,
             // Ensure the storage_path is available for the frontend
-            storage_path: fileData.storagePath
+            storage_path: fileData.storagePath,
+            originalFilename
           }
         };
       }
@@ -239,6 +257,25 @@ export async function appendChatMessage(
     return result;
   } catch (error) {
     console.error('Error appending chat message:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get a chart specification by ID
+ */
+export async function getChartById(chartId: string) {
+  try {
+    const chartResult = await db.select().from(charts)
+      .where(eq(charts.id, chartId));
+    
+    if (!chartResult || chartResult.length === 0) {
+      throw new Error(`Chart with ID ${chartId} not found`);
+    }
+
+    return chartResult[0].chartSpecs;
+  } catch (error) {
+    console.error('Error fetching chart:', error);
     throw error;
   }
 }

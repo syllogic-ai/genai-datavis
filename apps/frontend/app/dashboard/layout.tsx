@@ -33,10 +33,10 @@ export default async function DashboardLayout({
     <SidebarProvider>
       <AppSidebar variant="inset" chats={chats} />
       <SidebarInset>
-        <SiteHeader />
+        
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            {children}
+           {children}
           </div>
         </div>
       </SidebarInset>

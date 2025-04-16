@@ -13,6 +13,7 @@ import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
 
 import { uploadFileToSupabase } from "@/app/lib/supabase";
 import { createChat, createFile } from "@/app/lib/actions";
+import { SiteHeader } from "@/components/dashboard/SiteHeader";
 registerPlugin(FilePondPluginFileValidateType);
 registerPlugin(FilePondPluginImagePreview);
 
@@ -66,6 +67,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden text-black">
+      <SiteHeader />
       <div className="flex-1 overflow-auto">
         <div className="flex flex-col justify-center items-center h-full">
           <h1 className="text-2xl font-semibold mb-6 text-center">

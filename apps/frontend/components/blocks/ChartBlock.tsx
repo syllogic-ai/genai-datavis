@@ -19,7 +19,7 @@ export function ChartBlock({ spec }: ChartBlockProps) {
         <CardTitle className="text-2xl font-bold">{spec.title}</CardTitle>
         <CardDescription className="text-md text-gray-500">{spec.description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 h-full">
+      <CardContent className="flex-1 h-full max-h-[300px]">
         <ChartRenderer spec={spec} />
       </CardContent>
     </Card>       
