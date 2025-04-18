@@ -13,7 +13,8 @@ CREATE TABLE "chats" (
 	"title" text DEFAULT 'New Chat' NOT NULL,
 	"conversation" jsonb NOT NULL,
 	"usage" jsonb,
-	"created_at" timestamp DEFAULT now()
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE "files" (

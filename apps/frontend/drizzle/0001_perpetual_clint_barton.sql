@@ -1,1 +1,0 @@
-ALTER TABLE "chats" ADD COLUMN "updated_at" timestamp DEFAULT now();
