@@ -18,6 +18,7 @@ import {
   SettingsIcon,
   UsersIcon,
 } from "lucide-react"
+import { usePathname } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -32,9 +33,15 @@ import { Chat } from "@/db/schema"
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   chats?: Chat[];
+  currentChatId?: string;
 }
 
-export function AppSidebar({ chats, ...props }: AppSidebarProps) {
+export function AppSidebar({ chats, currentChatId, ...props }: AppSidebarProps) {
+  // If currentChatId is not provided, try to extract it from the pathname
+  const pathname = usePathname();
+  const activeChatId = currentChatId || (pathname?.includes('/dashboard/c/') ? 
+    pathname.split('/dashboard/c/')[1] : undefined);
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -53,7 +60,7 @@ export function AppSidebar({ chats, ...props }: AppSidebarProps) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={[]} chats={chats} />
+        <NavMain items={[]} chats={chats} currentChatId={activeChatId} />
       </SidebarContent>
       <SidebarFooter>
         {/* Add upgrade or usage button here */}

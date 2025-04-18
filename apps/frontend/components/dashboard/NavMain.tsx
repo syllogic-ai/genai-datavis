@@ -1,6 +1,7 @@
 "use client";
 
 import { MailIcon, PlusCircleIcon, MessageSquare, type LucideIcon } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -12,17 +13,25 @@ import {
 } from "@/components/ui/sidebar";
 import { Chat } from "@/db/schema";
 import Link from "next/link";
+import { ChatItem } from "./ChatItem";
 
 export function NavMain({
   items = [],
   chats = [],
+  currentChatId,
 }: {
   items?: {
     title: string;
     url: string;
   }[];
   chats?: Chat[];
+  currentChatId?: string;
 }) {
+  // If currentChatId is not provided, try to extract it from the pathname
+  const pathname = usePathname();
+  const activeChatId = currentChatId || (pathname?.includes('/dashboard/c/') ? 
+    pathname.split('/dashboard/c/')[1] : undefined);
+
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
@@ -61,16 +70,14 @@ export function NavMain({
             <SidebarMenuItem className="mb-1">
               <div className="px-3 text-xs font-medium text-muted-foreground">Recent Chats</div>
             </SidebarMenuItem>
-            {chats.map((chat) => (
-              <SidebarMenuItem key={chat.id}>
-                <Link href={`/dashboard/c/${chat.id}`} passHref>
-                  <SidebarMenuButton tooltip="Chat" className="truncate">
-                    <MessageSquare className="h-4 w-4 mr-2" />
-                    <span>{chat.id.substring(0, 10)}...</span>
-                  </SidebarMenuButton>
-                </Link>
-              </SidebarMenuItem>
-            ))}
+            {chats.map((chat) => {
+              const isActive = activeChatId === chat.id;
+              return (
+                <SidebarMenuItem key={chat.id}>
+                  <ChatItem chat={chat} isActive={isActive} />
+                </SidebarMenuItem>
+              );
+            })}
           </SidebarMenu>
         )}
       </SidebarGroupContent>

@@ -2,7 +2,7 @@
 
 import db from '@/db';
 import { files, chats, charts } from '../../db/schema'; // Import Drizzle schemas
-import { eq, and } from 'drizzle-orm'; // Import eq and and operators
+import { eq, and, desc } from 'drizzle-orm'; // Import eq, and, and desc operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
 import { supabase } from './supabase';
 import { ChatMessage, normalizeMessages } from './types';
@@ -61,6 +61,7 @@ export async function createChat(chatId: string, userId: string, fileId: string)
       userId: userId,
       fileId: fileId,
       conversation: [], // Initialize with an empty conversation array
+      updatedAt: new Date(), // Set updatedAt to current time
       // usage field is omitted, assuming it's nullable or has a default in the DB/schema
     }).returning(); // Optional: return the inserted record
 
@@ -77,7 +78,10 @@ export async function createChat(chatId: string, userId: string, fileId: string)
 
 
 export async function getChats(userId: string) {
-  const result = await db.select().from(chats).where(eq(chats.userId, userId));
+  const result = await db.select()
+    .from(chats)
+    .where(eq(chats.userId, userId))
+    .orderBy(desc(chats.updatedAt));
   return result;
 }
 
@@ -116,7 +120,10 @@ export async function updateChatConversation(
 
   try {
     const result = await db.update(chats)
-      .set({ conversation: processedConversation })
+      .set({ 
+        conversation: processedConversation,
+        updatedAt: new Date() // Update the timestamp
+      })
       .where(and(
         eq(chats.id, chatId),
         eq(chats.userId, userId)
@@ -243,7 +250,10 @@ export async function appendChatMessage(
     
     // Update the chat with the new conversation
     const result = await db.update(chats)
-      .set({ conversation: updatedConversation })
+      .set({ 
+        conversation: updatedConversation,
+        updatedAt: new Date() // Update the timestamp
+      })
       .where(and(
         eq(chats.id, chatId),
         eq(chats.userId, userId)

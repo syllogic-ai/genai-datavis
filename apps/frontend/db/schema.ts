@@ -39,6 +39,7 @@ export const chats = pgTable("chats", {
     costUSD: number;
   }>(),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // CHARTS

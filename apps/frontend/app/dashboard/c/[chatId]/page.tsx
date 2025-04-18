@@ -19,6 +19,7 @@ import { updateChatConversation, appendChatMessage, getChat, getChartById } from
 import { ChatMessage } from "@/app/lib/types";
 import type { ChartSpec } from "@/types/chart-types";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
+import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 
 // Zod schema for input
 const formSchema = z.object({
@@ -26,6 +27,46 @@ const formSchema = z.object({
     message: "Please enter a message.",
   }),
 });
+
+// Custom hook for chat title updates
+function useChatTitle(chatId: string, userId: string | undefined) {
+  const [title, setTitle] = useState<string>("New Chat");
+  
+  useEffect(() => {
+    if (!chatId || !userId) return;
+    
+    const fetchChatTitle = async () => {
+      try {
+        const chatData = await getChat(chatId, userId);
+        if (chatData && chatData.title) {
+          setTitle(chatData.title);
+        }
+      } catch (err) {
+        console.error("Error fetching chat title:", err);
+      }
+    };
+    
+    // Fetch the title initially
+    fetchChatTitle();
+    
+    // Listen for rename events
+    const handleChatRenamed = (data: {chatId: string, newTitle: string}) => {
+      if (data.chatId === chatId) {
+        setTitle(data.newTitle);
+      }
+    };
+    
+    // Subscribe to rename events
+    chatEvents.on(CHAT_EVENTS.CHAT_RENAMED, handleChatRenamed);
+    
+    // Cleanup: unsubscribe when component unmounts
+    return () => {
+      chatEvents.off(CHAT_EVENTS.CHAT_RENAMED, handleChatRenamed);
+    };
+  }, [chatId, userId]);
+  
+  return title;
+}
 
 export default function ChatPage() {
   // Grab chatId from the route
@@ -44,6 +85,9 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [chatDetails, setChatDetails] = useState<any>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  
+  // Get real-time updated chat title
+  const chatTitle = useChatTitle(chatId, user?.id);
 
   // Subscribe to real-time updates on the chat - MUST be called unconditionally
   const { conversation, isLoading: isConversationLoading, error: conversationError } = useChatRealtime(chatId, {
@@ -256,7 +300,7 @@ export default function ChatPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden text-black">
       <SiteHeader 
-        chatTitle={chatDetails?.title || "New Chat"} 
+        chatTitle={chatTitle} 
         fileName={chatDetails?.files?.originalFilename} 
         fileStatus="available"
       />
@@ -273,8 +317,8 @@ export default function ChatPage() {
                     {messages.map((message, index) => (
                       <div
                         key={index}
-                        className={`p-4 rounded-lg ${
-                          message.role === "user" ? "bg-blue-100 ml-12" : "bg-gray-100 mr-12"
+                        className={`px-4 py-2 rounded-xl shadow-md border border-gray-300/20  ${
+                          message.role === "user" ? "bg-neutral-800 text-white ml-12" : "bg-[#f9f9f9ba] mr-12"
                         }`}
                       >
                         <p className="whitespace-pre-line">{message.content}</p>
