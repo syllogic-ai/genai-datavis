@@ -303,6 +303,7 @@ export default function ChatPage() {
         chatTitle={chatTitle} 
         fileName={chatDetails?.files?.originalFilename} 
         fileStatus="available"
+        filePath={chatDetails?.files?.storage_path || chatDetails?.files?.url || chatDetails?.files?.storagePath}
       />
       <div className="flex-1 overflow-auto">
         {/* Main content container with side-by-side layout */}

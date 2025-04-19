@@ -199,39 +199,3 @@ async def debug_chat_with_analysis(request: Request):
     # Remove original_data from the response
     response_output = {k: v for k, v in response_dict.items() if k != "original_data"}
     return jsonable_encoder(response_output)
-
-@app.get("/conversation_history")
-async def get_conversation_history(session_id: str = "default"):
-    """Get the conversation history for a given session"""
-    # For testing/demonstration purposes, return a mock history
-    # This would normally come from a ConversationManager instance
-    
-    mock_history = {
-        "conversation_history": [
-            {
-                "role": "user",
-                "content": "What insights can you provide from this data?",
-                "timestamp": "2023-07-15T10:30:45"
-            },
-            {
-                "role": "system",
-                "content": "The data shows an upward trend in sales over the past quarter, with a peak in March.",
-                "timestamp": "2023-07-15T10:30:50"
-            },
-            {
-                "role": "user",
-                "content": "Show me a visualization of the monthly trend.",
-                "timestamp": "2023-07-15T10:31:15"
-            },
-            {
-                "role": "system",
-                "content": "Here's a line chart showing the monthly sales trend.",
-                "timestamp": "2023-07-15T10:31:20"
-            }
-        ],
-        "analysis_history": [
-            {"insights": "Sales are trending upward", "visual": "line chart data"}
-        ]
-    }
-    
-    return jsonable_encoder(mock_history)

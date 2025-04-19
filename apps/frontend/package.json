@@ -28,6 +28,7 @@
     "@uppy/tus": "^4.2.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "csv-parse": "^5.6.0",
     "dotenv": "^16.5.0",
     "filepond": "^4.32.7",
     "filepond-plugin-file-encode": "^2.1.14",
