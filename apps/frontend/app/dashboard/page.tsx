@@ -20,18 +20,43 @@ registerPlugin(FilePondPluginImagePreview);
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoaded, isSignedIn } = useUser();
-
   const [error, setError] = useState<string | null>(null);
-
- 
-  const userId = user?.id;
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // Handle file upload
   const handleFileUpload = async (fileItems: any[]) => {
-    if (!fileItems.length) return;
+    if (!fileItems.length || !isSignedIn || !user?.id) {
+      setError("You must be signed in to upload files");
+      return;
+    }
+
+    setIsProcessing(true);
+    setError(null);
 
     try {
+      // Check if user exists in DB first
+      const userResponse = await fetch(`/api/user?userId=${user.id}`);
+      
+      // If user not found in DB, create them
+      if (userResponse.status === 404) {
+        const createUserResponse = await fetch('/api/user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            email: user.primaryEmailAddress?.emailAddress || '',
+          }),
+        });
+        
+        if (!createUserResponse.ok) {
+          throw new Error('Failed to create user in database');
+        }
+      } else if (!userResponse.ok && userResponse.status !== 404) {
+        throw new Error('Error checking user in database');
+      }
+
       const fileBlob = fileItems[0].file as File;
+      
       // Upload to Supabase
       const url = await uploadFileToSupabase(fileBlob);
 
@@ -41,8 +66,8 @@ export default function DashboardPage() {
 
       // Create file + chat records in your DB
       await Promise.all([
-        createFile(fileId, "original", fileBlob.name, url, userId ?? ""),
-        createChat(chatId, userId ?? "", fileId)
+        createFile(fileId, "original", fileBlob.name, url, user.id),
+        createChat(chatId, user.id, fileId)
       ]);
 
       // Navigate to the new chat page
@@ -51,6 +76,8 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error uploading file");
       console.error("Error uploading file:", err);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -63,15 +90,22 @@ export default function DashboardPage() {
             What data would you like to analyze?
           </h1>
           <div className="w-full max-w-2xl">
-            <FilePond
-              allowMultiple={false}
-              maxFiles={1}
-              acceptedFileTypes={['.csv', 'text/csv']}
-              labelIdle='Drag & Drop your CSV file or <span class="filepond--label-action">Browse</span>'
-              onupdatefiles={handleFileUpload}
-              credits={false}
-              className="filepond-container"
-            />
+            {!isLoaded ? (
+              <div className="text-center p-4">Loading...</div>
+            ) : !isSignedIn ? (
+              <div className="text-center p-4">You need to sign in to upload files</div>
+            ) : (
+              <FilePond
+                allowMultiple={false}
+                maxFiles={1}
+                acceptedFileTypes={['.csv', 'text/csv']}
+                labelIdle='Drag & Drop your CSV file or <span class="filepond--label-action">Browse</span>'
+                onupdatefiles={handleFileUpload}
+                credits={false}
+                className="filepond-container"
+                disabled={isProcessing}
+              />
+            )}
 
             {error && (
               <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">

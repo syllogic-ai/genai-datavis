@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/db';
+import db from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getAuth } from '@clerk/nextjs/server';
@@ -31,20 +31,21 @@ export async function GET(request: Request) {
 
 // POST /api/user - Create or update a user
 export async function POST(request: Request) {
-  // Parse the URL to extract parameters
-  const url = new URL(request.url);
-  const userId = url.searchParams.get('userId');
-
-  if (!userId) {
-    return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
-  }
-
   try {
     const body = await request.json();
-    const { email } = body;
+    const { userId, email } = body;
+    
+    // Extract userId from body or URL params
+    const url = new URL(request.url);
+    const queryUserId = url.searchParams.get('userId');
+    const finalUserId = userId || queryUserId;
+
+    if (!finalUserId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 });
+    }
 
     // First check if user exists
-    const existingUser = await db.select().from(users).where(eq(users.id, userId));
+    const existingUser = await db.select().from(users).where(eq(users.id, finalUserId));
 
     if (existingUser.length > 0) {
       // Update existing user
@@ -53,17 +54,17 @@ export async function POST(request: Request) {
           email: email || existingUser[0].email,
           createdAt: new Date(),
         })
-        .where(eq(users.id, userId));
+        .where(eq(users.id, finalUserId));
     } else {
       // Create new user
       await db.insert(users).values({
-        id: userId,
+        id: finalUserId,
         email,
         createdAt: new Date(),
       });
     }
 
-    const updatedUser = await db.select().from(users).where(eq(users.id, userId));
+    const updatedUser = await db.select().from(users).where(eq(users.id, finalUserId));
     return NextResponse.json(updatedUser[0]);
 
   } catch (error) {

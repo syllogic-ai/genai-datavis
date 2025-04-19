@@ -214,7 +214,7 @@ export default function ChatPage() {
           prompt,
           file_url: fileUrl, // Use the actual file URL from the database
           is_follow_up: Boolean(analysisResult),
-          session_id: chatId, // or some session key
+          session_id: chatId, // The session_id is actually the chat_id
         }),
       });
 
@@ -233,21 +233,8 @@ export default function ChatPage() {
         setVisualization(result.visual[0]);
       }
 
-      // Build system message from insights
-      const systemMessage: ChatMessage = {
-        role: "system",
-        content:
-          typeof result.insights === "string"
-            ? result.insights
-            : result.insights?.join("\n") ?? "Analysis completed.",
-      };
-      
-      // Add to local state
-      const updatedMessages = [...messages, systemMessage];
-      setMessages(updatedMessages);
-      
-      // Append the system message to the database
-      await appendChatMessage(chatId, systemMessage, user.id);
+      // The backend will now handle appending the system message to the chat in Supabase
+      // The updated conversation will be picked up through useChatRealtime
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error analyzing file");
       console.error("Error analyzing file:", err);
