@@ -37,6 +37,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
+  const [isHoveringChat, setIsHoveringChat] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const handleRename = async (e: FormEvent) => {
@@ -118,17 +119,23 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
           <Link href={`/dashboard/c/${chat.id}`} passHref>
             <SidebarMenuButton 
               tooltip="Chat" 
-              className={`truncate ${isActive ? 'bg-neutral-200 hover:bg-neutral-300' : 'hover:bg-neutral-200'}`}
+              className={`truncate ${isActive ? 'bg-accent/100 hover:bg-accent/60' : isHoveringChat ? 'bg-accent/60' : 'hover:bg-accent/60'}`}
             >
-              <MessageSquare className="h-4 w-4 mr-2" />
-              <span>{chat.title}</span>
+              <MessageSquare className={`h-4 w-4 mr-2 ${isActive ? 'text-accent-foreground' : ''}`} />
+              <span className={`${isActive ? 'text-accent-foreground' : ''}`}>{chat.title}</span>
             </SidebarMenuButton>
           </Link>
           
           <div className={`absolute right-1 top-1.5 transition-opacity ${isHovering ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
             <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6 p-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-6 w-6 p-0 hover:bg-transparent hover:text-primary"
+                  onMouseEnter={() => setIsHoveringChat(true)}
+                  onMouseLeave={() => setIsHoveringChat(false)}
+                >
                   <MoreVertical className="h-4 w-4" />
                   <span className="sr-only">More options</span>
                 </Button>

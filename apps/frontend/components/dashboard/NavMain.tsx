@@ -85,7 +85,7 @@ export function NavMain({
         </SidebarMenu>
         
         {chats.length > 0 && (
-          <SidebarMenu>
+          <SidebarMenu className="mt-2">
             <SidebarMenuItem className="mb-1">
               <div className="px-3 text-xs font-medium text-muted-foreground">Recent Chats</div>
             </SidebarMenuItem>

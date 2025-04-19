@@ -23,18 +23,7 @@ export default function DashboardPage() {
 
   const [error, setError] = useState<string | null>(null);
 
-  // Early returns if user not loaded / not signed in
-  if (!isLoaded) {
-    return <div>Loading...</div>;
-  }
-  if (!isSignedIn) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <h1 className="text-2xl font-semibold mb-6 text-center">Please sign in to upload files</h1>
-      </div>
-    );
-  }
-
+ 
   const userId = user?.id;
 
   // Handle file upload
@@ -52,8 +41,8 @@ export default function DashboardPage() {
 
       // Create file + chat records in your DB
       await Promise.all([
-        createFile(fileId, "original", fileBlob.name, url, userId),
-        createChat(chatId, userId, fileId)
+        createFile(fileId, "original", fileBlob.name, url, userId ?? ""),
+        createChat(chatId, userId ?? "", fileId)
       ]);
 
       // Navigate to the new chat page
