@@ -69,11 +69,11 @@ export default function DashboardPage() {
     <div className="flex flex-col h-full overflow-hidden text-black">
       <SiteHeader />
       <div className="flex-1 overflow-auto">
-        <div className="flex flex-col justify-center items-center h-full">
+        <div className="flex flex-col justify-center items-center h-full px-4">
           <h1 className="text-2xl font-semibold mb-6 text-center">
             What data would you like to analyze?
           </h1>
-          <div className="w-full max-w-lg">
+          <div className="w-full max-w-2xl">
             <FilePond
               allowMultiple={false}
               maxFiles={1}

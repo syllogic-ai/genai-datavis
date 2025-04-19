@@ -118,7 +118,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
           <Link href={`/dashboard/c/${chat.id}`} passHref>
             <SidebarMenuButton 
               tooltip="Chat" 
-              className={`truncate ${isActive ? 'bg-neutral-200 hover:bg-neutral-300' : ''}`}
+              className={`truncate ${isActive ? 'bg-neutral-200 hover:bg-neutral-300' : 'hover:bg-neutral-200'}`}
             >
               <MessageSquare className="h-4 w-4 mr-2" />
               <span>{chat.title}</span>
@@ -133,7 +133,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
                   <span className="sr-only">More options</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="center">
                 <DropdownMenuItem 
                   onClick={() => {
                     setIsDropdownOpen(false);
@@ -151,7 +151,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
                   }}
                   className="text-destructive focus:text-destructive"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="h-4 w-4 mr-2 text-destructive" />
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>

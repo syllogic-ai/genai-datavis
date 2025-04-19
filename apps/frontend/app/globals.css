@@ -133,8 +133,14 @@
 }
 
 .filepond--panel-root {
-  background-color: #f8fafc;
-  border: 2px dashed #e2e8f0;
+  min-height: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #fafafa !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 15px !important;
+  /* box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); shadow-md equivalent */
 }
 
 .filepond--drop-label {
@@ -146,6 +152,7 @@
   color: #0284c7;
   text-decoration-color: #0284c7;
 }
+
 
 .filepond--drip {
   background-color: #0284c7;

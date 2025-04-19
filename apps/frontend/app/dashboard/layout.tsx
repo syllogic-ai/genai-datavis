@@ -30,8 +30,8 @@ export default async function DashboardLayout({
   const chats = userId ? await getChats(userId) : [];
   
   return (
-    <SidebarProvider>
-      <AppSidebar variant="inset" chats={chats} />
+    <SidebarProvider className="relative">
+      <AppSidebar variant="inset" chats={chats}/>
       <SidebarInset>
         
         <div className="flex flex-1 flex-col">
