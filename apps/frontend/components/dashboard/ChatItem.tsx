@@ -35,6 +35,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
   const [isRenaming, setIsRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState(chat.title);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -65,19 +66,19 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
     if (!user || isPending) return;
     
     try {
-      // First close the dialog to update UI immediately
+      // Close both the dialog and dropdown
       setIsDeleteDialogOpen(false);
+      setIsDropdownOpen(false);
       
-      // Use router.replace instead of push to completely replace the history entry
+      // Start transition to indicate loading state
       startTransition(() => {
-        // Redirect immediately to dashboard
+        // Redirect to dashboard first
         router.replace('/dashboard');
         
-        // Then perform the actual deletion after navigation has started
+        // Then delete the chat
         setTimeout(async () => {
           try {
             await deleteChat(chat.id, user.id);
-            // After successful deletion, refresh the page to update the chat list
             router.refresh();
           } catch (error) {
             console.error("Error during chat deletion:", error);
@@ -125,7 +126,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
           </Link>
           
           <div className={`absolute right-1 top-1.5 transition-opacity ${isHovering ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-            <DropdownMenu>
+            <DropdownMenu open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-6 w-6 p-0">
                   <MoreVertical className="h-4 w-4" />
@@ -135,6 +136,7 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
               <DropdownMenuContent align="end">
                 <DropdownMenuItem 
                   onClick={() => {
+                    setIsDropdownOpen(false);
                     setIsRenaming(true);
                     setNewTitle(chat.title);
                   }}
@@ -143,7 +145,10 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
                   Rename
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => setIsDeleteDialogOpen(true)}
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    setIsDeleteDialogOpen(true);
+                  }}
                   className="text-destructive focus:text-destructive"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
@@ -155,26 +160,39 @@ export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) 
         </>
       )}
       
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogPortal>
-          <DialogOverlay className="fixed inset-0 bg-black/50" />
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Chat</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this chat? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isPending}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
-                {isPending ? "Deleting..." : "Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </DialogPortal>
+      <Dialog 
+        open={isDeleteDialogOpen} 
+        onOpenChange={(open) => {
+          setIsDeleteDialogOpen(open);
+          if (!open) {
+            // Ensure dropdown is also closed when dialog is closed
+            setIsDropdownOpen(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Chat</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this chat? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setIsDropdownOpen(false);
+              }} 
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isPending}>
+              {isPending ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );
