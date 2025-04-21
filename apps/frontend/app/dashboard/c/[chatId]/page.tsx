@@ -1,18 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
 import { useUser } from "@clerk/nextjs";
-import * as z from "zod";
 
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChartBlock } from "@/components/blocks/ChartBlock";
 import { ConversationHistory } from "@/components/ConversationHistory";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
+import { ChatInput } from "@/components/ui/chat-input";
 
 import { API_URL } from "@/app/lib/env";
 import { updateChatConversation, appendChatMessage, getChat, getChartById } from "@/app/lib/actions";
@@ -20,13 +16,6 @@ import { ChatMessage } from "@/app/lib/types";
 import type { ChartSpec } from "@/types/chart-types";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
-
-// Zod schema for input
-const formSchema = z.object({
-  message: z.string().min(1, {
-    message: "Please enter a message.",
-  }),
-});
 
 // Custom hook for chat title updates
 function useChatTitle(chatId: string, userId: string | undefined) {
@@ -132,63 +121,8 @@ export default function ChatPage() {
     fetchChatDetails();
   }, [chatId, user]);
 
-  // Initialize form with RHF + Zod
-  const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
-    defaultValues: { message: "" },
-  });
-
-  // Set initial messages from the conversation when first loaded
-  useEffect(() => {
-    if (conversation && conversation.length > 0) {
-      setMessages(conversation);
-      
-      // Find the last message with role "chart"
-      const chartMessages = conversation.filter(msg => msg.role === "chart");
-      if (chartMessages.length > 0) {
-        const latestChartMessage = chartMessages[chartMessages.length - 1];
-        // Extract chartId from message content
-        const chartId = latestChartMessage.content;
-        
-        // Retrieve the chart specification
-        const loadChartSpec = async () => {
-          try {
-            const chartSpec = await getChartById(chartId);
-            if (chartSpec) {
-              setVisualization(chartSpec as ChartSpec);
-            }
-          } catch (err) {
-            console.error("Error fetching chart specification:", err);
-            setError(err instanceof Error ? err.message : "Error fetching chart");
-          }
-        };
-        
-        loadChartSpec();
-      }
-    }
-  }, [conversation]); // Only depend on conversation changes
-
-  // Handle conversation error
-  useEffect(() => {
-    if (conversationError) {
-      setError(conversationError.message);
-    }
-  }, [conversationError]);
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    if (scrollAreaRef.current) {
-      const scrollContainer = scrollAreaRef.current.querySelector(
-        "[data-radix-scroll-area-viewport]"
-      );
-      if (scrollContainer) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      }
-    }
-  }, [messages]);
-
   // A function to handle the analyze request
-  async function analyzeData(prompt: string) {
+  const analyzeData = useCallback(async (prompt: string) => {
     if (!user || !chatDetails) return;
     
     setAnalyzing(true);
@@ -241,17 +175,17 @@ export default function ChatPage() {
     } finally {
       setAnalyzing(false);
     }
-  }
+  }, [user, chatDetails, chatId, analysisResult]);
 
-  // Form submit
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  // Handle sending a message
+  const handleSendMessage = useCallback(async (message: string) => {
     if (!user) return;
     
     setIsChatLoading(true);
     setError(null);
 
     // Add user message to chat
-    const userMessage: ChatMessage = { role: "user", content: values.message };
+    const userMessage: ChatMessage = { role: "user", content: message };
     
     // Add to local state 
     const updatedMessages = [...messages, userMessage];
@@ -261,15 +195,119 @@ export default function ChatPage() {
       // Append the user message to the database conversation
       await appendChatMessage(chatId, userMessage, user.id);
       
-      await analyzeData(values.message);
-      // Reset form
-      form.reset({ message: "" });
+      // If this is the first message, generate a title for the chat
+      if (messages.length === 0) {
+        try {
+          console.log("First message detected, generating title...");
+          console.log("Chat details:", chatDetails);
+          
+          // Extract column names from file metadata - handle different possible structures
+          let columnNames: string[] = [];
+          
+          if (chatDetails?.files) {
+            // Try different possible locations for column data
+            if (chatDetails.files.metadata?.columns) {
+              columnNames = chatDetails.files.metadata.columns;
+            } else if (chatDetails.files.metadata?.schema?.fields) {
+              // Extract column names from schema fields if available
+              columnNames = chatDetails.files.metadata.schema.fields.map((field: {name: string}) => field.name);
+            } else if (chatDetails.files.metadata?.fields) {
+              columnNames = chatDetails.files.metadata.fields;
+            }
+            
+            console.log("Extracted column names:", columnNames);
+          }
+          
+          // Call the generate-title endpoint
+          console.log(`Calling ${API_URL}/generate-title`);
+          const titleResponse = await fetch(`${API_URL}/generate-title`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt: message,
+              column_names: columnNames,
+              chat_id: chatId
+            }),
+          });
+          
+          console.log("Title generation response status:", titleResponse.status);
+          
+          if (titleResponse.ok) {
+            const titleData = await titleResponse.json();
+            console.log("Generated title data:", titleData);
+            
+            // Emit event to update the title in the UI
+            chatEvents.emit(CHAT_EVENTS.CHAT_RENAMED, {
+              chatId: chatId,
+              newTitle: titleData.title
+            });
+          } else {
+            // Try to get error details
+            const errorData = await titleResponse.json().catch(() => ({}));
+            console.error("Title generation failed:", titleResponse.status, errorData);
+          }
+        } catch (titleErr) {
+          console.error("Error generating title:", titleErr);
+          // Don't fail the whole operation if title generation fails
+        }
+      }
+      
+      await analyzeData(message);
     } catch (err) {
       console.error(err);
     } finally {
       setIsChatLoading(false);
     }
-  };
+  }, [user, messages, chatId, analyzeData, chatDetails]);
+
+  // Set initial messages from the conversation when first loaded
+  useEffect(() => {
+    if (conversation && conversation.length > 0) {
+      setMessages(conversation);
+      
+      // Find the last message with role "chart"
+      const chartMessages = conversation.filter(msg => msg.role === "chart");
+      if (chartMessages.length > 0) {
+        const latestChartMessage = chartMessages[chartMessages.length - 1];
+        // Extract chartId from message content
+        const chartId = latestChartMessage.content;
+        
+        // Retrieve the chart specification
+        const loadChartSpec = async () => {
+          try {
+            const chartSpec = await getChartById(chartId);
+            if (chartSpec) {
+              setVisualization(chartSpec as ChartSpec);
+            }
+          } catch (err) {
+            console.error("Error fetching chart specification:", err);
+            setError(err instanceof Error ? err.message : "Error fetching chart");
+          }
+        };
+        
+        loadChartSpec();
+      }
+    }
+  }, [conversation]); // Only depend on conversation changes
+
+  // Handle conversation error
+  useEffect(() => {
+    if (conversationError) {
+      setError(conversationError.message);
+    }
+  }, [conversationError]);
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    if (scrollAreaRef.current) {
+      const scrollContainer = scrollAreaRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]"
+      );
+      if (scrollContainer) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
+    }
+  }, [messages]);
 
   // Render loading state while user or conversation is loading
   if (!isLoaded) {
@@ -318,52 +356,13 @@ export default function ChatPage() {
             </div>
 
             {/* Chat input - placed under messages */}
-            <div className="p-4 ">
-              <div className="max-w-2xl mx-auto">
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <div className="relative rounded-xl border border-gray-300/20 overflow-hidden">
-                    <Textarea
-                      {...form.register("message")}
-                      placeholder="Ask a question about your data..."
-                      className="min-h-24 py-4 pb-14 resize-none rounded-xl"
-                      disabled={isChatLoading || analyzing}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          form.handleSubmit(onSubmit)();
-                        }
-                      }}
-                    />
-                    <div className="absolute bottom-3 right-3">
-                      <Button
-                        type="submit"
-                        size="icon"
-                        className="rounded-full group"
-                        disabled={isChatLoading || analyzing}
-                      >
-                        {isChatLoading || analyzing ? (
-                          <span className="mx-1">...</span>
-                        ) : (
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={2.5}
-                            stroke="currentColor"
-                            className="w-5 h-5 group-hover:translate-x-0.5 transition-all duration-300"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M13.5 4.5L21 12m0 0-7.5 7.5M21 12H3"
-                            />
-                          </svg>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                </form>
-              </div>
+            <div className="p-4">
+              <ChatInput 
+                onSendMessage={handleSendMessage}
+                isLoading={isChatLoading || analyzing}
+                isDisabled={isChatLoading || analyzing}
+                placeholder="Ask a question about your data..."
+              />
             </div>
 
             {/* Error display */}

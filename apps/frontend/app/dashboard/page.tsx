@@ -14,6 +14,7 @@ import 'filepond-plugin-image-preview/dist/filepond-plugin-image-preview.css';
 import { uploadFileToSupabase } from "@/app/lib/supabase";
 import { createChat, createFile } from "@/app/lib/actions";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
+import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 registerPlugin(FilePondPluginFileValidateType);
 registerPlugin(FilePondPluginImagePreview);
 
@@ -65,10 +66,15 @@ export default function DashboardPage() {
       const chatId = uuidv4();
 
       // Create file + chat records in your DB
-      await Promise.all([
+      const [fileResult, chatResult] = await Promise.all([
         createFile(fileId, "original", fileBlob.name, url, user.id),
         createChat(chatId, user.id, fileId)
       ]);
+
+      // Emit event that a new chat was created
+      if (chatResult) {
+        chatEvents.emit(CHAT_EVENTS.CHAT_CREATED, chatResult);
+      }
 
       // Navigate to the new chat page
       router.push(`/dashboard/c/${chatId}`);

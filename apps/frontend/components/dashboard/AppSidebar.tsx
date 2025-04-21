@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/dashboard/NavMain";
 import { Chat } from "@/db/schema";
+import { SidebarChatList } from "./SidebarChatList";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   chats?: Chat[];
@@ -68,7 +69,6 @@ export function AppSidebar({
       </SidebarHeader>
       <SidebarContent className="bg-transparent">
         <NavMain items={[]} chats={chats} currentChatId={activeChatId} />
-       
       </SidebarContent>
       <SidebarFooter className="bg-transparent">
         {/* Add upgrade or usage button here */}

@@ -15,6 +15,7 @@ import {
 import { Chat } from "@/db/schema";
 import Link from "next/link";
 import { ChatItem } from "./ChatItem";
+import { SidebarChatList } from "./SidebarChatList";
 
 export function NavMain({
   items = [],
@@ -85,21 +86,14 @@ export function NavMain({
         </SidebarMenu>
         
         {chats.length > 0 && (
-          <SidebarMenu className="mt-2">
-            <SidebarMenuItem className="mb-1">
-              <div className="px-3 text-xs font-medium text-muted-foreground">Recent Chats</div>
-            </SidebarMenuItem>
-            {chats.map((chat) => {
-              const isActive = activeChatId === chat.id;
-              return (
-                <SidebarMenuItem key={chat.id}>
-                  <ChatItem chat={chat} isActive={isActive} />
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
+          <SidebarChatList 
+            initialChats={chats} 
+            currentChatId={activeChatId} 
+          />
         )}
       </SidebarGroupContent>
     </SidebarGroup>
   );
 }
+
+export { SidebarChatList };

@@ -35,4 +35,5 @@ export const chatEvents = new ChatEventBus();
 // Event names
 export const CHAT_EVENTS = {
   CHAT_RENAMED: 'chat_renamed',
+  CHAT_CREATED: 'chat_created',
 }; 
