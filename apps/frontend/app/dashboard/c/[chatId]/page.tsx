@@ -149,6 +149,7 @@ export default function ChatPage() {
           file_url: fileUrl, // Use the actual file URL from the database
           is_follow_up: Boolean(analysisResult),
           session_id: chatId, // The session_id is actually the chat_id
+          user_id: user.id, // Add the user ID from Clerk
         }),
       });
 

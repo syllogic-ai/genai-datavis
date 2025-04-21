@@ -1,4 +1,4 @@
-import { pgTable, foreignKey, text, jsonb, timestamp } from "drizzle-orm/pg-core"
+import { pgTable, foreignKey, text, jsonb, timestamp, integer, real } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
@@ -9,7 +9,6 @@ export const chats = pgTable("chats", {
 	fileId: text("file_id"),
 	title: text().default('New Chat').notNull(),
 	conversation: jsonb().notNull(),
-	usage: jsonb(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 }, (table) => {
@@ -65,4 +64,18 @@ export const files = pgTable("files", {
 			name: "files_user_id_users_id_fk"
 		}),
 	}
+});
+
+export const llmUsage = pgTable('llm_usage', {
+	id: text("id").primaryKey(),
+	userId: text("user_id").references(() => users.id),
+	chatId: text("chat_id").references(() => chats.id),
+	model: text('model').notNull(), 
+	equipment: text('equipment').notNull(),
+	apiRequest: text('api_request').notNull(),
+	inputTokens: integer('input_tokens').notNull(),
+	outputTokens: integer('output_tokens').notNull(),
+	computeTime: real('compute_time').notNull(),
+	totalCost: real('total_cost').notNull(),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 });

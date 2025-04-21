@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, integer, real } from "drizzle-orm/pg-core";
 
 // USERS
 export const users = pgTable("users", {
@@ -29,15 +29,6 @@ export const chats = pgTable("chats", {
     message: string;
     timestamp: string;
   }[]>(),
-  usage: jsonb("usage").$type<{
-    provider: "openai" | "huggingface";
-    model: string;
-    promptTokens?: number;
-    completionTokens?: number;
-    totalTokens?: number;
-    latencyMs?: number;
-    costUSD: number;
-  }>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -51,8 +42,23 @@ export const charts = pgTable("charts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const llmUsage = pgTable('llm_usage', {
+  id: text("id").primaryKey(), // Can be any string ID
+  userId: text("user_id").references(() => users.id),
+  chatId: text("chat_id").references(() => chats.id),
+  model: text('model').notNull(), // the model that was used retrieved from MODEL_ID variable
+  equipment: text('equipment').notNull(), // the equipment that was used e.g. "NVIDIA A100"
+  api_request: text('api_request').notNull(), // the api request that was made e.g. "/analyze"
+  inputTokens: integer('input_tokens').notNull(), // the number of input tokens used
+  outputTokens: integer('output_tokens').notNull(), // the number of output tokens used
+  computeTime: real('compute_time').notNull(),     // the time it took to compute the request
+  totalCost: real('total_cost').notNull(),         // the total cost of the request
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Define Chat type
 export type User = typeof users.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type File = typeof files.$inferSelect;
 export type Chart = typeof charts.$inferSelect;
+export type LLMUsage = typeof llmUsage.$inferSelect;
