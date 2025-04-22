@@ -225,9 +225,10 @@ export default function ChatPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              prompt: message,
+              query: message,
               column_names: columnNames,
-              chat_id: chatId
+              chat_id: chatId,
+              user_id: user.id
             }),
           });
           
