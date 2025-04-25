@@ -7,8 +7,9 @@ import sqlite3
 import numpy as np
 import ast
 import json
+import uuid
 
-def validate_data(data, query=None, context=None, ai_service=None):
+def validate_data(data, query=None, context=None, ai_service=None, user_id=None, chat_id=None):
         validation_output = []
         # validation_output.append("Validating your data...")
 
@@ -31,7 +32,7 @@ def validate_data(data, query=None, context=None, ai_service=None):
         data['month'] = pd.to_datetime(data['month'], errors='coerce')
         return validation_output
 
-def get_insights(data, query, context, ai_service):
+def get_insights(data, query, context, ai_service, user_id=None, chat_id=None):
         insights_output = []
         # print("Going for insights")
         data_text = data.to_string(index=False)
@@ -40,7 +41,13 @@ def get_insights(data, query, context, ai_service):
         Be specific and provide actionable insights. "
         print(" - DEBUG - Final query for insights: ", final_query)
         print(" - DEBUG - Context for insights: ", context)
-        response = ai_service.process_query(context, final_query)
+        response = ai_service.process_query(
+            context, 
+            final_query, 
+            user_id=user_id, 
+            chat_id=chat_id, 
+            api_request="/insights"
+        )
         # print(response)
         # print(response)
         insights_output.append(response)
@@ -66,7 +73,7 @@ def exec_with_timeout(code, local_vars, timeout=5):
     if "error" in local_vars:
         raise local_vars["error"]
 
-def  visualize(data, query, context, ai_service):
+def  visualize(data, query, context, ai_service, user_id=None, chat_id=None):
         """
         Generate visualization configuration based on data and query.
         
@@ -168,7 +175,13 @@ def  visualize(data, query, context, ai_service):
             extra_context = ""
         
         # First LLM Pass to get the visualization type
-        chart_type = ai_service.process_query(context, init_query).strip().lower()
+        chart_type = ai_service.process_query(
+            context, 
+            init_query,
+            user_id=user_id,
+            chat_id=chat_id,
+            api_request="/visualize/type"
+        ).strip().lower()
 
         # Validate and default to "line" if not valid
         if chart_type not in valid_chart_types: 
@@ -206,7 +219,13 @@ def  visualize(data, query, context, ai_service):
             """
             print(" - DEBUG - KPI query: ", kpi_query)
             
-            kpi_response = ai_service.process_query(context, kpi_query).replace("```", "").replace("json", "").strip()
+            kpi_response = ai_service.process_query(
+                context, 
+                kpi_query,
+                user_id=user_id,
+                chat_id=chat_id,
+                api_request="/visualize/kpi"
+            ).replace("```", "").replace("json", "").strip()
             try:
                 kpi_data = json.loads(kpi_response)
                 
@@ -576,7 +595,7 @@ def  visualize(data, query, context, ai_service):
                 
                 return [chart_spec]
 
-def calculate(data, query, context, ai_service):
+def calculate(data, query, context, ai_service, user_id=None, chat_id=None):
         calculation_output = []
         data_columns = data.columns
         final_query = f"Given a table with the following metadata: {data_columns} \
@@ -586,7 +605,13 @@ def calculate(data, query, context, ai_service):
               Provide the SQLlite code only, and nothing else, with no sql prefix. \
                 And example response could be: \
                 SELECT column1, column2 FROM data_table"
-        response = ai_service.process_query(context, final_query).replace("```", "")
+        response = ai_service.process_query(
+            context, 
+            final_query,
+            user_id=user_id,
+            chat_id=chat_id,
+            api_request="/calculate"
+        ).replace("```", "")
 
         # Create an in-memory SQLite database
         conn = sqlite3.connect(":memory:")
@@ -620,9 +645,13 @@ def debug_context(context, debug=True):
         print("----- CONTEXT DEBUG END -----\n")
     return context
 
-def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_analysis=None, conversation_history=None, debug_mode=True):
+def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_analysis=None, 
+               conversation_history=None, debug_mode=True, user_id=None, chat_id=None):
     # Set analysis status to false at the start
     ai_service.set_analysis_complete(False)
+    
+    # Debug logging for user_id and chat_id
+    print(f"agentic_flow called with user_id: '{user_id}', chat_id: '{chat_id}'")
     
     # Use the global functions directly
     tools_funcs = {
@@ -786,11 +815,17 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
         if first_time_flag:
             first_time_flag = False
             # Use the previously escaped user_query
-            cur_tool = ai_service.process_query(context_upd, master_query.format(
-                data=data_text, 
-                user_query=safe_user_query, 
-                tools=tools_expl
-            )).replace("'", "")
+            cur_tool = ai_service.process_query(
+                context_upd, 
+                master_query.format(
+                    data=data_text, 
+                    user_query=safe_user_query, 
+                    tools=tools_expl
+                ),
+                user_id=user_id,
+                chat_id=chat_id,
+                api_request="/agentic_flow/master_query"
+            ).replace("'", "")
             # print(f"Master query: {master_query.format(data=data_text, user_query=user_query)}")
             # print(f"Context: {context_upd}")
         else:
@@ -798,66 +833,71 @@ def agentic_flow(data, user_query, ai_service, is_follow_up=False, previous_anal
             # Escape tool_responses to avoid string formatting issues
             safe_tool_responses = tool_responses.replace("{", "{{").replace("}", "}}")
             # Already have safe_user_query from first iteration
-            cur_tool = ai_service.process_query(context_upd, feedback_query.format(
-                user_query=safe_user_query, 
-                tool_responses=safe_tool_responses, 
-                tools=tools_expl
-            )).replace("'", "")
+            cur_tool = ai_service.process_query(
+                context_upd, 
+                feedback_query.format(
+                    user_query=safe_user_query, 
+                    tool_responses=safe_tool_responses, 
+                    tools=tools_expl
+                ),
+                user_id=user_id,
+                chat_id=chat_id,
+                api_request="/agentic_flow/feedback_query"
+            ).replace("'", "")
             
             if cur_tool.lower() == "yes":
-                print(" - DEBUG - The tool has given you a proper response.")
-                final_response = ai_service.process_query(context_upd, response_query.format(
-                    user_query=safe_user_query, 
-                    tool_responses=safe_tool_responses
-                ))
-                # print(" - DEBUG - Final Response: ", final_response)
+                tool_responses = ", ".join([f"Iteration {k}: Tool: {v[0]}, Response: {v[1]}" for k, v in tools_responses.items()])
+                # Escape tool_responses to avoid string formatting issues
+                safe_tool_responses = tool_responses.replace("{", "{{").replace("}", "}}")
+                # Already have safe_user_query from first iteration
+                final_response = ai_service.process_query(
+                    context_upd, 
+                    response_query.format(
+                        user_query=safe_user_query, 
+                        tool_responses=safe_tool_responses
+                    ),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    api_request="/agentic_flow/response_query"
+                )
                 break
-            elif len(tools_responses.keys()) >= 2:
-                print("The tool has reached maximum amount of iterations.")
-                final_response = ai_service.process_query(context_upd, response_query.format(
-                    user_query=safe_user_query, 
-                    tool_responses=safe_tool_responses
-                ))
-                print(final_response)
+            
+            # check if any errors
+            if counter > 5 or cur_tool.strip() not in tools_funcs:
+                print("Max iterations or invalid tool")
+                tool_responses = ", ".join([f"Iteration {k}: Tool: {v[0]}, Response: {v[1]}" for k, v in tools_responses.items()])
+                # Escape tool_responses to avoid string formatting issues
+                safe_tool_responses = tool_responses.replace("{", "{{").replace("}", "}}")
+                # Already have safe_user_query from first iteration
+                final_response = ai_service.process_query(
+                    context_upd, 
+                    response_query.format(
+                        user_query=safe_user_query, 
+                        tool_responses=safe_tool_responses
+                    ),
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    api_request="/agentic_flow/response_query"
+                )
                 break
-            else:
-                cur_tool = cur_tool.strip()
-        
-        print(f"============================= Iteration {counter} ===============================")
+
+        # Using .get() and setting a default "Did nothing" response is safer
         print(f"Using tool: {cur_tool}")
         
-        # Handle follow-up queries that might not have data
-        if data is None and is_follow_up and cur_tool != "get_insights":
-            # For tools that require data but we don't have any, use insights tool instead
-            print(f"Data is required for {cur_tool} but none provided. Using get_insights instead.")
-            cur_tool = "get_insights"
-            
-        # Use provided data for tool operations
-        tool_data = data
+        # Call the appropriate tool function with context and tool-specific argument
+        if cur_tool.strip() == "validate_data":
+            func_response = tools_funcs[cur_tool.strip()](data, user_query, context_upd, ai_service, user_id, chat_id)
+        elif cur_tool.strip() == "get_insights":
+            func_response = tools_funcs[cur_tool.strip()](data, user_query, context_upd, ai_service, user_id, chat_id)
+        elif cur_tool.strip() == "visual":
+            func_response = tools_funcs[cur_tool.strip()](data, user_query, context_upd, ai_service, user_id, chat_id)
+        elif cur_tool.strip() == "calculate":
+            func_response = tools_funcs[cur_tool.strip()](data, user_query, context_upd, ai_service, user_id, chat_id)
+        else:
+            # Safe fallback for unknown tool
+            func_response = f"Unknown tool: {cur_tool.strip()}"
         
-        # If this is a follow-up query, ensure we're using the original data for tools
-        if is_follow_up and data is not None:
-            print(f"Using original data for {cur_tool} tool")
-        elif tool_data is None and is_follow_up:
-            # Create placeholder data with minimal structure if absolutely needed by tools
-            print(f"No data available for {cur_tool} tool, using placeholder")
-            tool_data = pd.DataFrame({"placeholder": [1]})
-            
-        cur_response = tools_funcs[cur_tool](tool_data, user_query, context_upd, ai_service)
-        
-        # Check if cur_response contains just the tool name - this indicates an error
-        if isinstance(cur_response, list) and len(cur_response) == 1 and cur_response[0] in ["get_insights", "visual", "calculate", "validate_data"]:
-            print(f"WARNING: Tool {cur_tool} returned just the tool name. Replacing with default response.")
-            if cur_tool == "get_insights":
-                cur_response = ["The data shows interesting patterns that merit further analysis."]
-            elif cur_tool == "visual":
-                cur_response = [{"chartType": "bar", "title": "Data Visualization", "description": "Overview of data trends"}]
-            elif cur_tool == "calculate":
-                cur_response = ["Data calculation completed successfully."]
-            elif cur_tool == "validate_data":
-                cur_response = ["Data validation completed with no major issues found."]
-        
-        tools_responses[str(counter)] = [cur_tool, cur_response]
+        tools_responses[str(counter)] = [cur_tool, func_response]
         # print(f"Response: {cur_response}")
     
     # Create output response dictionary
@@ -962,6 +1002,12 @@ def test_conversation_history():
     # Create mock AI service
     ai_service = MockAIService()
     
+    # Create test IDs
+    test_user_id = f"test-user-{uuid.uuid4()}"
+    test_chat_id = f"test-chat-{uuid.uuid4()}"
+    print(f"Using test_user_id: {test_user_id}")
+    print(f"Using test_chat_id: {test_chat_id}")
+    
     # Call agentic_flow with debug_mode=True
     print("Testing agentic_flow with conversation history...")
     result = agentic_flow(
@@ -971,7 +1017,9 @@ def test_conversation_history():
         is_follow_up=True,
         previous_analysis={"insights": "Sales are growing consistently."},
         conversation_history=conversation_history,
-        debug_mode=True
+        debug_mode=True,
+        user_id=test_user_id,
+        chat_id=test_chat_id
     )
     
     print("\nTest completed!")
@@ -1021,7 +1069,7 @@ class ConversationManager:
             self.current_analysis = analysis_result
             self.analysis_history.append(analysis_result)
     
-    def process_query(self, user_query, ai_service, debug_mode=False):
+    def process_query(self, user_query, ai_service, debug_mode=False, user_id=None, chat_id=None):
         """
         Process a user query with full conversation history context
         Returns the analysis result
@@ -1037,7 +1085,9 @@ class ConversationManager:
             is_follow_up=(len(self.conversation_history) > 1),  # True if not first interaction
             previous_analysis=self.current_analysis,
             conversation_history=self.conversation_history,
-            debug_mode=debug_mode
+            debug_mode=debug_mode,
+            user_id=user_id,
+            chat_id=chat_id
         )
         
         # Extract insights as the system message
@@ -1091,19 +1141,28 @@ def test_conversation_manager():
     # Initialize conversation manager with the original data
     manager = ConversationManager(original_data=sample_data)
     
+    # Create test IDs
+    test_user_id = f"test-user-{uuid.uuid4()}"
+    test_chat_id = f"test-chat-{uuid.uuid4()}"
+    print(f"Using test_user_id: {test_user_id}")
+    print(f"Using test_chat_id: {test_chat_id}")
+    
     # First query about sales
     print("\n\n=== FIRST QUERY ===")
-    result1 = manager.process_query("How are my sales trending?", ai_service, debug_mode=True)
+    result1 = manager.process_query("How are my sales trending?", ai_service, debug_mode=True, 
+                                  user_id=test_user_id, chat_id=test_chat_id)
     print("\nFirst query result:", result1.get("insights"))
     
     # Second query about expenses
     print("\n\n=== SECOND QUERY ===")
-    result2 = manager.process_query("What about my expenses?", ai_service, debug_mode=True)
+    result2 = manager.process_query("What about my expenses?", ai_service, debug_mode=True,
+                                  user_id=test_user_id, chat_id=test_chat_id)
     print("\nSecond query result:", result2.get("insights"))
     
     # Third query with reference to previous data
     print("\n\n=== THIRD QUERY ===")
-    result3 = manager.process_query("Summarize my financial situation", ai_service, debug_mode=True)
+    result3 = manager.process_query("Summarize my financial situation", ai_service, debug_mode=True,
+                                  user_id=test_user_id, chat_id=test_chat_id)
     print("\nThird query result:", result3.get("insights"))
     
     # Print final conversation history

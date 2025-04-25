@@ -14,6 +14,7 @@ import json
 from datetime import datetime
 from supabase import create_client, Client
 import uuid
+import time
 
 # Load environment variables
 load_dotenv()
@@ -115,6 +116,21 @@ async def analyze(request: Request):
     user_query = body.get("prompt", None)
     session_id = body.get("session_id", "default")
     is_follow_up = body.get("is_follow_up", False)
+    user_id = body.get("user_id", None)
+    
+    # Ensure user_id is not None
+    if user_id is None:
+        print(f"WARNING: No user_id provided in request, user_id will be NULL")
+        # Don't set a default - keep it as None since we have a foreign key constraint
+    else:
+        print(f"Using user_id from request: {user_id}")
+    
+    # Ensure session_id (chat_id) is not None
+    if session_id is None:
+        session_id = str(uuid.uuid4())
+        print(f"WARNING: No session_id provided in request, generated new one: {session_id}")
+    
+    print(f"Received analyze request with user_id: '{user_id}', chat_id (session_id): '{session_id}'")
     
     if not user_query:
         user_query = "What insights can you provide based on the given dataframe?"
@@ -165,19 +181,29 @@ async def analyze(request: Request):
                 print(f"Error loading new URL data: {str(e)}")
         
         # Call agentic_flow with is_follow_up=True flag and previous analysis
+        print(f"Calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
         agentic_output = agentic_flow(
             df, 
             user_query, 
             ai_service, 
             is_follow_up=True, 
-            previous_analysis=previous_analysis
+            previous_analysis=previous_analysis,
+            user_id=user_id,
+            chat_id=session_id
         )
     elif file_url:
         # Initial analysis with file URL
         try:
             df = await fetch_csv_from_url(file_url)
             print(f"Initial analysis using file URL for session {session_id}: {user_query}")
-            agentic_output = agentic_flow(df, user_query, ai_service)
+            print(f"Calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
+            agentic_output = agentic_flow(
+                df, 
+                user_query, 
+                ai_service,
+                user_id=user_id,
+                chat_id=session_id
+            )
             
             # Store the file URL with the analysis results
             agentic_output["file_url"] = file_url
@@ -188,7 +214,14 @@ async def analyze(request: Request):
         # Initial analysis of direct data
         df = pd.DataFrame(data)
         print(f"Initial analysis for session {session_id}: {user_query}")
-        agentic_output = agentic_flow(df, user_query, ai_service)
+        print(f"Calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
+        agentic_output = agentic_flow(
+            df, 
+            user_query, 
+            ai_service,
+            user_id=user_id,
+            chat_id=session_id
+        )
         
         # Store the original data with the analysis results
         agentic_output["original_data"] = data
@@ -278,6 +311,19 @@ async def debug_chat_with_analysis(request: Request):
     prompt = body.get("prompt", None)
     file_url = body.get("file_url", None)
     session_id = body.get("session_id", "default")  # Add session_id parameter
+    user_id = body.get("user_id", None)  # Add user_id parameter
+    
+    # Ensure user_id is not None
+    if user_id is None:
+        user_id = "debug-user"
+        print(f"WARNING: No user_id provided in debug request, using default: {user_id}")
+    
+    # Ensure session_id (chat_id) is not None
+    if session_id is None:
+        session_id = "debug-chat-" + str(uuid.uuid4())[:8]
+        print(f"WARNING: No session_id provided in debug request, generated new one: {session_id}")
+    
+    print(f"Received debug/chat-with-analysis request with user_id: '{user_id}', chat_id (session_id): '{session_id}'")
     
     if not prompt:
         raise HTTPException(status_code=400, detail="No prompt provided")
@@ -313,12 +359,15 @@ async def debug_chat_with_analysis(request: Request):
     }
     
     # Call agentic_flow with follow-up flag and predefined analysis
+    print(f"Debug endpoint calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
     response_dict = agentic_flow(
         sample_data,  # Provide the data as DataFrame
         prompt,
         ai_service,
         is_follow_up=True,
-        previous_analysis=test_analysis
+        previous_analysis=test_analysis,
+        user_id=user_id,
+        chat_id=session_id  # Pass session_id as chat_id
     )
     
     # If session_id is provided and not default, update the chat conversation in Supabase
@@ -393,73 +442,186 @@ async def debug_chat_with_analysis(request: Request):
 
 @app.post("/generate-title")
 async def generate_title(request: Request):
-    """
-    Generate a title for a chat based on the user's first prompt message and data column names.
-    The title will be maximum 5 words.
-    """
+    """Generate a title for a chat based on the initial user query."""
+    body = await request.json()
+    query = body.get("query", "")
+    chat_id = body.get("chat_id", None)
+    user_id = body.get("user_id", None)
+    
+    # Ensure user_id is not None
+    if user_id is None:
+        user_id = "title-user"
+        print(f"WARNING: No user_id provided in title request, using default: {user_id}")
+    
+    # Ensure chat_id is not None
+    if chat_id is None:
+        chat_id = "title-chat-" + str(uuid.uuid4())[:8]
+        print(f"WARNING: No chat_id provided in title request, generated new one: {chat_id}")
+    
+    print(f"Received generate-title request with user_id: '{user_id}', chat_id: '{chat_id}'")
+    
+    if not query:
+        return {"title": "New Chat"}
+    
     try:
-        body = await request.json()
-        prompt = body.get("prompt", "")
-        column_names = body.get("column_names", [])
-        chat_id = body.get("chat_id", "")
+        # Create context for the LLM
+        context = "You are a creative assistant who creates concise, descriptive titles."
         
-        print(f"Generating title for chat {chat_id} with prompt: {prompt}")
-        print(f"Column names: {column_names}")
+        # Keep the query for title generation very direct and simple
+        query = f"Generate a short, descriptive title (max 6 words) for a conversation about: {query}"
         
-        if not prompt:
-            raise HTTPException(status_code=400, detail="No prompt message provided")
+        # Generate the title
+        print(f"Processing title generation with user_id: {user_id}, chat_id: {chat_id}")
+        title = ai_service.process_query(
+            context, 
+            query,
+            user_id=user_id,
+            chat_id=chat_id,
+            api_request="/generate-title"
+        ).strip()
+        
+        # Truncate if too long (client-side should enforce this too)
+        if len(title) > 50:
+            title = title[:47] + "..."
             
-        if not chat_id:
-            raise HTTPException(status_code=400, detail="No chat ID provided")
-        
-        # Create a context with the prompt and column names
-        context = f"You are generating a short, descriptive title for a data analysis chat."
-        
-        # Create a specific query for the title generation
-        query = f"""
-        Generate a descriptive title for a data analysis chat based on:
-        1. User's query: "{prompt}"
-        2. Data columns: {', '.join(column_names) if column_names else 'Unknown'}
-        
-        Requirements:
-        - Maximum 5 words
-        - Descriptive and relevant to the data and query
-        - No quotes, special characters, or punctuation except spaces
-        - Return ONLY the title, nothing else
-        """
-        
-        # Process the query with the AI service
-        title = ai_service.process_query(context, query).strip()
-        print(f"Generated title: '{title}' for chat {chat_id}")
-        
-        # Ensure the title is no more than 5 words
-        words = title.split()
-        if len(words) > 5:
-            title = " ".join(words[:5])
-            print(f"Trimmed title to 5 words: '{title}'")
-        
-        # Update the chat title in Supabase
-        try:
-            update_result = supabase.table("chats").update({
-                "title": title,
-                "updated_at": datetime.now().isoformat()
-            }).eq("id", chat_id).execute()
-            
-            if not update_result.data or len(update_result.data) == 0:
-                print(f"Failed to update title for chat {chat_id}")
-                # Still return the title even if update failed
-            else:
-                print(f"Successfully updated title for chat {chat_id} to '{title}'")
+        # If chat_id is provided, update the chat title
+        if chat_id:
+            try:
+                update_result = supabase.table("chats").update({
+                    "title": title
+                }).eq("id", chat_id).execute()
                 
-            return {"title": title, "chat_id": chat_id}
-        except Exception as e:
-            print(f"Error updating chat title in Supabase: {str(e)}")
-            # Return the title even if we couldn't update it in the database
-            return {"title": title, "chat_id": chat_id, "error": "Failed to update in database"}
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+                print(f"Updated title for chat {chat_id}: {title}")
+            except Exception as e:
+                print(f"Error updating chat title: {str(e)}")
+        
+        return {"title": title}
     except Exception as e:
-        # Handle unexpected errors
         print(f"Error generating title: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Title generation failed: {str(e)}")
+        return {"title": "New Chat", "error": str(e)}
+
+@app.post("/test/llm-usage")
+async def test_llm_usage(request: Request):
+    """Test endpoint to verify LLM usage tracking with user_id and chat_id."""
+    body = await request.json()
+    user_id = body.get("user_id", "test-user-id")
+    chat_id = body.get("chat_id", "test-chat-id")
+    query = body.get("query", "Test query for LLM usage tracking")
+    debug = body.get("debug", False)
+    
+    # Ensure these IDs are never None
+    if user_id is None:
+        user_id = "test-user-" + str(uuid.uuid4())[:8]
+    if chat_id is None:
+        chat_id = "test-chat-" + str(uuid.uuid4())[:8]
+    
+    print(f"Testing LLM usage tracking with user_id: '{user_id}', chat_id: '{chat_id}', debug: {debug}")
+    
+    try:
+        # Create a simple context
+        context = "You are a helpful assistant testing LLM usage tracking."
+        
+        # Generate a more complex prompt if debug is True
+        if debug:
+            # More complex prompt to generate more tokens
+            context += " Please provide a detailed explanation of how neural networks work, including the basics of backpropagation, activation functions, and different layer types."
+            query += " Also, compare different machine learning frameworks and their pros and cons. Provide details on TensorFlow, PyTorch, and scikit-learn."
+        
+        # Set original_query for logging
+        original_query = query
+        
+        # Make a direct query to the LLM service
+        response = ai_service.process_query(
+            context,
+            query,
+            user_id=user_id,
+            chat_id=chat_id,
+            api_request="/test/llm-usage"
+        )
+        
+        # Wait a moment for the database to update
+        time.sleep(1)
+        
+        # Try to fetch the most recent usage record for this user/chat
+        if SUPABASE_URL and SUPABASE_KEY:
+            try:
+                print(f"Querying llm_usage with user_id='{user_id}' and chat_id='{chat_id}'")
+                # First try exact match
+                usage_records = supabase.table("llm_usage").select("*").eq("user_id", user_id).eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
+                
+                if not usage_records.data or len(usage_records.data) == 0:
+                    # If no exact match, try just by chat_id
+                    print(f"No exact match found, trying with only chat_id='{chat_id}'")
+                    usage_records = supabase.table("llm_usage").select("*").eq("chat_id", chat_id).order("created_at", desc=True).limit(3).execute()
+                
+                if not usage_records.data or len(usage_records.data) == 0:
+                    # If still no match, get the most recent records
+                    print("No match by chat_id either, fetching most recent records")
+                    usage_records = supabase.table("llm_usage").select("*").order("created_at", desc=True).limit(5).execute()
+                
+                if usage_records.data and len(usage_records.data) > 0:
+                    usage_record = usage_records.data[0]
+                    print(f"Found LLM usage record: {json.dumps(usage_record, default=str)}")
+                    
+                    # Check for token counts and user/chat IDs
+                    has_tokens = usage_record.get("input_tokens", 0) > 0 or usage_record.get("output_tokens", 0) > 0
+                    has_user_id = usage_record.get("user_id") == user_id
+                    has_chat_id = usage_record.get("chat_id") == chat_id
+                    
+                    return {
+                        "success": True,
+                        "message": "LLM usage test completed and record found",
+                        "response": response[:100] + "...",
+                        "usage_record": usage_record,
+                        "has_tokens": has_tokens,
+                        "has_user_id": has_user_id,
+                        "has_chat_id": has_chat_id,
+                        "expected_user_id": user_id,
+                        "expected_chat_id": chat_id,
+                        "original_query": original_query,
+                        "debug_mode": debug
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": "No LLM usage record found for this user/chat",
+                        "response": response[:100] + "...",
+                        "expected_user_id": user_id,
+                        "expected_chat_id": chat_id,
+                        "original_query": original_query,
+                        "debug_mode": debug
+                    }
+            except Exception as e:
+                print(f"Error fetching LLM usage record: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return {
+                    "success": False,
+                    "message": f"Error fetching LLM usage record: {str(e)}",
+                    "response": response[:100] + "...",
+                    "expected_user_id": user_id,
+                    "expected_chat_id": chat_id,
+                    "original_query": original_query,
+                    "debug_mode": debug
+                }
+        else:
+            return {
+                "success": True,
+                "message": "LLM usage test completed, but Supabase is not configured",
+                "response": response[:100] + "...",
+                "expected_user_id": user_id,
+                "expected_chat_id": chat_id,
+                "original_query": original_query,
+                "debug_mode": debug
+            }
+    except Exception as e:
+        print(f"Error in LLM usage test: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "message": f"Error in LLM usage test: {str(e)}",
+            "expected_user_id": user_id,
+            "expected_chat_id": chat_id,
+            "debug_mode": debug
+        }
