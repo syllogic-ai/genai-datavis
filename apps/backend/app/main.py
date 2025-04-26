@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 import os
+import sys
 from dotenv import load_dotenv
 import requests
 import io
@@ -14,13 +15,30 @@ from datetime import datetime
 from supabase import create_client, Client
 import uuid
 import time
-from ...utils.enqueue import enqueue_prompt   # adjust import path
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import utility functions
+try:
+    from utils.enqueue import enqueue_prompt
+except ImportError:
+    from ..utils.enqueue import enqueue_prompt
 
 # Load environment variables
 load_dotenv()
 
-# Fix imports to be correct based on the package structure
-from services.ai_service import AIService
+# Service imports
+try:
+    from services.ai_service import AIService
+except ImportError:
+    from ..services.ai_service import AIService
+
+# Import the flexible agent system
+try:
+    from core.flexible_agent import execute_flexible_agentic_flow, initialize_tools
+except ImportError:
+    from ..core.flexible_agent import execute_flexible_agentic_flow, initialize_tools
 
 # Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -107,7 +125,7 @@ async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:
         print(f"Error appending chat message: {str(e)}")
         return False
 
-def agentic_flow(
+async def agentic_flow(
     df: pd.DataFrame, 
     user_query: str, 
     ai_service: AIService, 
@@ -117,7 +135,7 @@ def agentic_flow(
     chat_id: str = None
 ) -> Dict[str, Any]:
     """
-    Orchestrates the AI-driven data analysis workflow.
+    Orchestrates the AI-driven data analysis workflow using flexible agent tool selection.
     
     Args:
         df: The pandas DataFrame to analyze
@@ -131,71 +149,15 @@ def agentic_flow(
     Returns:
         A dictionary containing the analysis results
     """
-    # Convert pandas DataFrame to polars (if services expect polars)
-    try:
-        import polars as pl
-        pl_df = pl.from_pandas(df)
-    except ImportError:
-        pl_df = df  # Continue with pandas if polars not available
-    
-    # Generate a unique request ID for tracking
-    request_id = str(uuid.uuid4())
-    
-    # Initialize the result dictionary
-    result = {
-        "query": user_query,
-        "timestamp": datetime.now().isoformat(),
-    }
-    
-    # If this is a follow-up, include previous context
-    if is_follow_up and previous_analysis:
-        result["follow_up"] = True
-        result["previous_query"] = previous_analysis.get("query")
-    
-    # Data Analysis Pipeline
-    try:
-        # 1. Get insights from the data
-        from services.insights import generate_insights
-        insights = generate_insights(
-            pl_df, 
-            user_query, 
-            chat_id or "default", 
-            request_id,
-            user_id
-        )
-        if insights:
-            result["insights"] = {
-                "points": insights.points,
-                "summary": insights.summary
-            }
-        
-        # 2. Generate chart visualization
-        from services.charts import choose_chart_type, build_chart_spec
-        chart_choice = choose_chart_type({
-            "prompt": user_query,
-            "profile": {
-                "columns": pl_df.columns,
-                "sample": pl_df.head(5).to_dicts()
-            }
-        })
-        
-        chart_spec = build_chart_spec(
-            chart_choice, 
-            pl_df, 
-            user_query, 
-            chat_id or "default", 
-            request_id,
-            user_id
-        )
-        
-        if chart_spec:
-            result["visualization"] = chart_spec.dict()
-        
-    except Exception as e:
-        print(f"Error in agentic_flow: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        result["error"] = str(e)
+    # Use the flexible agentic flow to process the query
+    result = await execute_flexible_agentic_flow(
+        df=df,
+        user_query=user_query,
+        chat_id=chat_id or "default",
+        user_id=user_id,
+        is_follow_up=is_follow_up,
+        previous_analysis=previous_analysis
+    )
     
     return result
 
@@ -273,7 +235,7 @@ async def analyze(request: Request):
         
         # Call agentic_flow with is_follow_up=True flag and previous analysis
         print(f"Calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
-        agentic_output = agentic_flow(
+        agentic_output = await agentic_flow(
             df, 
             user_query, 
             ai_service, 
@@ -288,7 +250,7 @@ async def analyze(request: Request):
             df = await fetch_csv_from_url(file_url)
             print(f"Initial analysis using file URL for session {session_id}: {user_query}")
             print(f"Calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
-            agentic_output = agentic_flow(
+            agentic_output = await agentic_flow(
                 df, 
                 user_query, 
                 ai_service,
@@ -306,7 +268,7 @@ async def analyze(request: Request):
         df = pd.DataFrame(data)
         print(f"Initial analysis for session {session_id}: {user_query}")
         print(f"Calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
-        agentic_output = agentic_flow(
+        agentic_output = await agentic_flow(
             df, 
             user_query, 
             ai_service,
@@ -344,6 +306,39 @@ async def analyze(request: Request):
     # Remove original_data from the response to avoid large payloads
     response_output = {k: v for k, v in agentic_output.items() if k != "original_data"}
     return jsonable_encoder(response_output)
+
+@app.get("/tools")
+async def list_tools():
+    """List all available tools registered in the system."""
+    # For the decorator based approach, let's just describe the available tools
+    tools_info = [
+        {
+            "name": "generate_insights",
+            "description": "Analyzes data and generates valuable insights in natural language",
+        },
+        {
+            "name": "choose_chart_type",
+            "description": "Determines the most appropriate chart type for visualizing data",
+        },
+        {
+            "name": "build_chart_spec",
+            "description": "Creates a complete chart specification for visualization",
+        },
+        {
+            "name": "validate_sql",
+            "description": "Validates SQL queries for safety and correctness",
+        },
+        {
+            "name": "execute_sql",
+            "description": "Executes SQL queries against the data",
+        },
+        {
+            "name": "calculate",
+            "description": "Performs calculations on the data",
+        }
+    ]
+    
+    return {"tools": tools_info}
 
 @app.post("/generate-title")
 async def generate_title(request: Request):
@@ -405,6 +400,8 @@ async def generate_title(request: Request):
         print(f"Error generating title: {str(e)}")
         return {"title": "New Chat", "error": str(e)}
 
+@app.post("/test/llm-usage")
+async def test_llm_usage(request: Request):
     """Test endpoint to verify LLM usage tracking with user_id and chat_id."""
     body = await request.json()
     user_id = body.get("user_id", "test-user-id")
