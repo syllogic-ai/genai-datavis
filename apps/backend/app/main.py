@@ -9,7 +9,6 @@ import os
 from dotenv import load_dotenv
 import requests
 import io
-import httpx
 import json
 from datetime import datetime
 from supabase import create_client, Client
@@ -304,142 +303,6 @@ async def analyze(request: Request):
     response_output = {k: v for k, v in agentic_output.items() if k != "original_data"}
     return jsonable_encoder(response_output)
 
-@app.post("/debug/chat-with-analysis")
-async def debug_chat_with_analysis(request: Request):
-    """Debug endpoint to test chat with predefined analysis results"""
-    body = await request.json()
-    prompt = body.get("prompt", None)
-    file_url = body.get("file_url", None)
-    session_id = body.get("session_id", "default")  # Add session_id parameter
-    user_id = body.get("user_id", None)  # Add user_id parameter
-    
-    # Ensure user_id is not None
-    if user_id is None:
-        user_id = "debug-user"
-        print(f"WARNING: No user_id provided in debug request, using default: {user_id}")
-    
-    # Ensure session_id (chat_id) is not None
-    if session_id is None:
-        session_id = "debug-chat-" + str(uuid.uuid4())[:8]
-        print(f"WARNING: No session_id provided in debug request, generated new one: {session_id}")
-    
-    print(f"Received debug/chat-with-analysis request with user_id: '{user_id}', chat_id (session_id): '{session_id}'")
-    
-    if not prompt:
-        raise HTTPException(status_code=400, detail="No prompt provided")
-    
-    # Create sample data for the debug endpoint
-    sample_data_list = [
-        {"month": "2023-01", "sales": 100, "profits": 30}, 
-        {"month": "2023-02", "sales": 150, "profits": 45}, 
-        {"month": "2023-03", "sales": 120, "profits": 35}
-    ]
-    sample_data = pd.DataFrame(sample_data_list)
-    
-    # Try to fetch data from URL if provided
-    if file_url:
-        try:
-            sample_data = await fetch_csv_from_url(file_url)
-            print(f"Debug endpoint using data from URL: {file_url}")
-        except Exception as e:
-            print(f"Error loading debug data from URL, using sample data: {str(e)}")
-    
-    # Use predefined analysis results for testing
-    test_analysis = {
-        "validation": "Data is valid with no missing values",
-        "insights": "The max sales value is 150 in February.",
-        "calculate": {
-            "MAX(sales)": {
-                "0": "150"
-            }
-        },
-        "visual": "",
-        "original_data": sample_data_list,  # Store the original data
-        "file_url": file_url  # Store the file URL if provided
-    }
-    
-    # Call agentic_flow with follow-up flag and predefined analysis
-    print(f"Debug endpoint calling agentic_flow with user_id: {user_id}, chat_id: {session_id}")
-    response_dict = agentic_flow(
-        sample_data,  # Provide the data as DataFrame
-        prompt,
-        ai_service,
-        is_follow_up=True,
-        previous_analysis=test_analysis,
-        user_id=user_id,
-        chat_id=session_id  # Pass session_id as chat_id
-    )
-    
-    # If session_id is provided and not default, update the chat conversation in Supabase
-    if session_id and session_id != "default":
-        # Extract insights from the response_dict
-        insights = response_dict.get("insights", "")
-        if isinstance(insights, list):
-            insights = "\n".join(insights)
-        elif not isinstance(insights, str):
-            insights = str(insights)
-            
-        # Create a system message
-        system_message = {
-            "role": "system",
-            "content": insights,
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        # Append the system message to the chat conversation
-        chat_id = session_id  # The session_id is actually the chat_id
-        success = await append_chat_message(chat_id, system_message)
-        if success:
-            print(f"Debug: Successfully appended system message to chat {chat_id}")
-        else:
-            print(f"Debug: Failed to append system message to chat {chat_id}")
-            
-        # Check if a visualization was created
-        if "visual" in response_dict and response_dict["visual"]:
-            visual_data = response_dict["visual"]
-            
-            try:
-                # Create a new chart record in Supabase
-                chart_type = visual_data[0]["chartType"] if isinstance(visual_data, list) and len(visual_data) > 0 else "unknown"
-                
-                # Get the chart specs - use only the first object in the array
-                chart_specs = visual_data[0] if isinstance(visual_data, list) and len(visual_data) > 0 else visual_data
-                
-                # Insert the chart record
-                chart_id = str(uuid.uuid4())  # Generate a unique ID
-                chart_insert = supabase.table("charts").insert({
-                    "id": chart_id,
-                    "chat_id": chat_id,
-                    "chart_type": chart_type,
-                    "chart_specs": chart_specs,
-                    "created_at": datetime.now().isoformat()
-                }).execute()
-                
-                if chart_insert.data and len(chart_insert.data) > 0:
-                    print(f"Debug: Successfully created chart record for chat {chat_id}")
-                    
-                    # Add a chart message to the conversation
-                    chart_message = {
-                        "role": "chart",
-                        "content": chart_id,  # Use the chart_id as the message content
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    
-                    # Append the chart message to the conversation
-                    chart_msg_success = await append_chat_message(chat_id, chart_message)
-                    if chart_msg_success:
-                        print(f"Debug: Successfully appended chart message to chat {chat_id}")
-                    else:
-                        print(f"Debug: Failed to append chart message to chat {chat_id}")
-                else:
-                    print(f"Debug: Failed to create chart record for chat {chat_id}")
-            except Exception as e:
-                print(f"Debug: Error creating chart record: {str(e)}")
-    
-    # Remove original_data from the response
-    response_output = {k: v for k, v in response_dict.items() if k != "original_data"}
-    return jsonable_encoder(response_output)
-
 @app.post("/generate-title")
 async def generate_title(request: Request):
     """Generate a title for a chat based on the initial user query."""
@@ -500,8 +363,6 @@ async def generate_title(request: Request):
         print(f"Error generating title: {str(e)}")
         return {"title": "New Chat", "error": str(e)}
 
-@app.post("/test/llm-usage")
-async def test_llm_usage(request: Request):
     """Test endpoint to verify LLM usage tracking with user_id and chat_id."""
     body = await request.json()
     user_id = body.get("user_id", "test-user-id")

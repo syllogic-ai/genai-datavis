@@ -42,12 +42,13 @@ export const charts = pgTable("charts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// LLM USAGE
 export const llmUsage = pgTable('llm_usage', {
   id: text("id").primaryKey(), // Can be any string ID
-  userId: text("user_id").references(() => users.id),
+  requestId: text("request_id").notNull(), // the request id that was used e.g. "1234567890"
   chatId: text("chat_id").references(() => chats.id),
   model: text('model').notNull(), // the model that was used retrieved from MODEL_ID variable
-  equipment: text('equipment').notNull(), // the equipment that was used e.g. "NVIDIA A100"
+  provider: text('provider').notNull(), // the provider that was used e.g. "OpenAI"
   api_request: text('api_request').notNull(), // the api request that was made e.g. "/analyze"
   inputTokens: integer('input_tokens').notNull(), // the number of input tokens used
   outputTokens: integer('output_tokens').notNull(), // the number of output tokens used
