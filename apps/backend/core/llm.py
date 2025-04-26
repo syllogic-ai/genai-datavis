@@ -4,6 +4,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from .config import supabase
 from .models import LLMUsageRow
 import os
+import uuid
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
@@ -15,10 +16,11 @@ async def llm_call(
     user: str,
     out_model: type[t.Any],
     chat_id: str,
-    request_id: str,
     api_request: str,
     user_id: str | None = None,
+    request_id: str | None = None,
 ) -> t.Any:
+    request_id = request_id or str(uuid.uuid4())
     t0 = time.perf_counter()
     
     # Create a function that will create the agent for each output type

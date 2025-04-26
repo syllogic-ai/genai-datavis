@@ -14,13 +14,13 @@ from datetime import datetime
 from supabase import create_client, Client
 import uuid
 import time
+from ...utils.enqueue import enqueue_prompt   # adjust import path
 
 # Load environment variables
 load_dotenv()
 
 # Fix imports to be correct based on the package structure
 from services.ai_service import AIService
-from utils.utils import validate_data, get_insights, visualize, agentic_flow
 
 # Supabase setup
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
@@ -106,6 +106,98 @@ async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:
     except Exception as e:
         print(f"Error appending chat message: {str(e)}")
         return False
+
+def agentic_flow(
+    df: pd.DataFrame, 
+    user_query: str, 
+    ai_service: AIService, 
+    is_follow_up: bool = False, 
+    previous_analysis: Dict[str, Any] = None,
+    user_id: str = None,
+    chat_id: str = None
+) -> Dict[str, Any]:
+    """
+    Orchestrates the AI-driven data analysis workflow.
+    
+    Args:
+        df: The pandas DataFrame to analyze
+        user_query: The user's query/prompt
+        ai_service: The AI service for LLM interactions
+        is_follow_up: Whether this is a follow-up to a previous analysis
+        previous_analysis: The results of the previous analysis if this is a follow-up
+        user_id: Optional user ID for tracking and logging
+        chat_id: Chat ID for tracking and logging
+        
+    Returns:
+        A dictionary containing the analysis results
+    """
+    # Convert pandas DataFrame to polars (if services expect polars)
+    try:
+        import polars as pl
+        pl_df = pl.from_pandas(df)
+    except ImportError:
+        pl_df = df  # Continue with pandas if polars not available
+    
+    # Generate a unique request ID for tracking
+    request_id = str(uuid.uuid4())
+    
+    # Initialize the result dictionary
+    result = {
+        "query": user_query,
+        "timestamp": datetime.now().isoformat(),
+    }
+    
+    # If this is a follow-up, include previous context
+    if is_follow_up and previous_analysis:
+        result["follow_up"] = True
+        result["previous_query"] = previous_analysis.get("query")
+    
+    # Data Analysis Pipeline
+    try:
+        # 1. Get insights from the data
+        from services.insights import generate_insights
+        insights = generate_insights(
+            pl_df, 
+            user_query, 
+            chat_id or "default", 
+            request_id,
+            user_id
+        )
+        if insights:
+            result["insights"] = {
+                "points": insights.points,
+                "summary": insights.summary
+            }
+        
+        # 2. Generate chart visualization
+        from services.charts import choose_chart_type, build_chart_spec
+        chart_choice = choose_chart_type({
+            "prompt": user_query,
+            "profile": {
+                "columns": pl_df.columns,
+                "sample": pl_df.head(5).to_dicts()
+            }
+        })
+        
+        chart_spec = build_chart_spec(
+            chart_choice, 
+            pl_df, 
+            user_query, 
+            chat_id or "default", 
+            request_id,
+            user_id
+        )
+        
+        if chart_spec:
+            result["visualization"] = chart_spec.dict()
+        
+    except Exception as e:
+        print(f"Error in agentic_flow: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        result["error"] = str(e)
+    
+    return result
 
 @app.post("/analyze")
 async def analyze(request: Request):
@@ -235,69 +327,19 @@ async def analyze(request: Request):
 
     # If session_id is provided (which is the chat_id), update the chat conversation in Supabase
     if session_id and session_id != "default":
-        # Extract insights from the agentic_output
-        insights = agentic_output.get("insights", "")
-        if isinstance(insights, list):
-            insights = "\n".join(insights)
-        elif not isinstance(insights, str):
-            insights = str(insights)
-            
-        # Create a system message
-        system_message = {
-            "role": "system",
-            "content": insights,
-            "timestamp": datetime.now().isoformat()
-        }
+        # ----- enqueue background job via Upstash Redis -----
+        frontend_request_id = body.get("request_id")
+        if not frontend_request_id:
+            raise HTTPException(status_code=400, detail="request_id is required")
         
-        # Append the system message to the chat conversation
-        chat_id = session_id  # The session_id is actually the chat_id
-        success = await append_chat_message(chat_id, system_message)
-        if success:
-            print(f"Successfully appended system message to chat {chat_id}")
-        else:
-            print(f"Failed to append system message to chat {chat_id}")
-            
-        # Check if a visualization was created
-        if "visual" in agentic_output and agentic_output["visual"]:
-            visual_data = agentic_output["visual"]
-            
-            try:
-                # Create a new chart record in Supabase
-                chart_type = visual_data[0]["chartType"] if isinstance(visual_data, list) and len(visual_data) > 0 else "unknown"
-                
-                # Get the chart specs - use only the first object in the array
-                chart_specs = visual_data[0] if isinstance(visual_data, list) and len(visual_data) > 0 else visual_data
-                
-                # Insert the chart record
-                chart_id = str(uuid.uuid4())  # Generate a unique ID
-                chart_insert = supabase.table("charts").insert({
-                    "id": chart_id,
-                    "chat_id": chat_id,
-                    "chart_type": chart_type,
-                    "chart_specs": chart_specs,
-                    "created_at": datetime.now().isoformat()
-                }).execute()
-                
-                if chart_insert.data and len(chart_insert.data) > 0:
-                    print(f"Successfully created chart record for chat {chat_id}")
-                    
-                    # Add a chart message to the conversation
-                    chart_message = {
-                        "role": "chart",
-                        "content": chart_id,  # Use the chart_id as the message content
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    
-                    # Append the chart message to the conversation
-                    chart_msg_success = await append_chat_message(chat_id, chart_message)
-                    if chart_msg_success:
-                        print(f"Successfully appended chart message to chat {chat_id}")
-                    else:
-                        print(f"Failed to append chart message to chat {chat_id}")
-                else:
-                    print(f"Failed to create chart record for chat {chat_id}")
-            except Exception as e:
-                print(f"Error creating chart record: {str(e)}")
+        enqueue_prompt(
+            request_id=frontend_request_id,
+            csv_url=file_url,
+            prompt=user_query,
+            chat_id=session_id,
+            user_id=user_id,
+        )
+        return {"status": "queued", "requestId": frontend_request_id}
 
     # Remove original_data from the response to avoid large payloads
     response_output = {k: v for k, v in agentic_output.items() if k != "original_data"}
