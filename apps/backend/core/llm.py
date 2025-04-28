@@ -5,8 +5,16 @@ from .config import supabase
 from .models import LLMUsageRow
 import os
 import uuid
+import openai
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+def get_openai_client():
+    """Return an initialized OpenAI client."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is not set")
+    return openai.OpenAI(api_key=api_key)
 
 async def _log(row: LLMUsageRow) -> None:
     supabase.table("llm_usage").insert(row.model_dump()).execute()

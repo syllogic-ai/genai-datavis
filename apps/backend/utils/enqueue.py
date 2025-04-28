@@ -1,6 +1,20 @@
 import rq
-from ..core.config import upstash_connection
-from ..workers.rq_worker import process_prompt
+from core.config import upstash_connection
+import asyncio
+
+# Async wrapper for process_prompt
+def _run_async_process_prompt(*args, **kwargs):
+    """
+    Run the async process_prompt function using asyncio.
+    This wrapper allows the async function to be called from a synchronous context.
+    """
+    from workers.rq_worker import process_prompt
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(process_prompt(**kwargs))
+    finally:
+        loop.close()
 
 _q = rq.Queue("prompts", connection=upstash_connection())
 
@@ -14,9 +28,10 @@ def enqueue_prompt(
 ) -> None:
     """
     Fire-and-forget enqueue; returns immediately.
+    Handles asynchronous process_prompt function through a synchronous wrapper.
     """
     _q.enqueue(
-        process_prompt,
+        _run_async_process_prompt,
         request_id=request_id,
         csv_url=csv_url,
         prompt=prompt,

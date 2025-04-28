@@ -2,63 +2,142 @@ from __future__ import annotations
 from datetime import datetime
 import traceback
 import asyncio
+import time
+import pandas as pd
 
 import rq
 from ..core.config import upstash_connection
 from ..services.files import insert_file_row, fetch_dataset, extract_schema_sample
-from ..services.sql import guard_sql, run_sql
-from ..services.charts import choose_chart_type, build_chart_spec
-from ..services.insights import generate_insights
+from ..core.ai_agent import execute_flexible_agentic_flow
 from ..services.chats import append_chat_msg, upsert_chart
-from ..core.models import SQLRequest
-from ..services.sql_llm import generate_sql
 
 queue = rq.Queue("prompts", connection=upstash_connection())
 
-def process_prompt(
+async def process_prompt(
     *,
     request_id: str,
     csv_url: str,
     prompt: str,
     chat_id: str,
     user_id: str | None,
+    max_retries: int = 3,
+    retry_delay: int = 5
 ) -> None:
     """
-    End-to-end pipeline executed in background; writes results back to Supabase.
+    End-to-end pipeline executed in background; uses the flexible agentic flow
+    and writes results back to Supabase.
+    
+    Args:
+        request_id: Unique identifier for this request
+        csv_url: URL to the CSV data file
+        prompt: User query to process
+        chat_id: Chat session identifier
+        user_id: User identifier
+        max_retries: Maximum number of retries on failure
+        retry_delay: Delay between retries in seconds
     """
-    try:
-        file_id = insert_file_row(user_id or "anonymous", csv_url)
-        fetch_dataset(csv_url, file_id)
-        profile = extract_schema_sample(file_id)
-
-        sql_req = SQLRequest(prompt=prompt, profile=profile)
-        chart_choice = choose_chart_type(sql_req)
-
-        sql_resp = asyncio.run(generate_sql(sql_req)) if asyncio.iscoroutinefunction(generate_sql) else generate_sql(sql_req)
-        safe_sql = guard_sql(sql_resp.sql)
-        df = run_sql(file_id, safe_sql)
-
-        insight = generate_insights(df, prompt, chat_id, user_id)
-        chart_spec = build_chart_spec(chart_choice, df, prompt, chat_id, user_id)
-        chart_id = upsert_chart(chat_id, chart_spec)
-
-        summary = "\n".join(insight.bullets) if insight else "Chart ready."
-        append_chat_msg(
-            chat_id,
-            {
-                "role": "system",
-                "message": f"{summary}\n\n[chart:{chart_id}]",
-                "timestamp": datetime.now(datetime.UTC).isoformat(),
-            },
-        )
-    except Exception as exc:
-        traceback.print_exc()
-        append_chat_msg(
-            chat_id,
-            {
-                "role": "system",
-                "message": f"❌ Failed: {exc}",
-                "timestamp": datetime.now(datetime.UTC).isoformat(),
-            },
-        )
-        raise 
+    retry_count = 0
+    last_error = None
+    
+    # Mark processing has started
+    append_chat_msg(
+        chat_id,
+        {
+            "role": "system",
+            "message": "Processing your request...",
+            "timestamp": datetime.now().isoformat(),
+            "status": "processing",
+            "request_id": request_id
+        }
+    )
+    
+    while retry_count <= max_retries:
+        try:
+            # Step 1: Register file and fetch dataset
+            file_id = insert_file_row(user_id or "anonymous", csv_url)
+            df = fetch_dataset(csv_url, file_id)
+            
+            # Step 2: Use the flexible agentic flow to process the request
+            result = await execute_flexible_agentic_flow(
+                df=df,
+                user_query=prompt,
+                chat_id=chat_id,
+                user_id=user_id,
+                is_follow_up=False,
+                previous_analysis=None
+            )
+            
+            # Step 3: Process the results
+            
+            # If there's a visualization, create it in the database
+            chart_id = None
+            if "visualization" in result and result["visualization"]:
+                chart_id = upsert_chart(chat_id, result["visualization"])
+            
+            # Create the message content based on the result
+            message_content = ""
+            
+            # Add insights if available
+            if "insights" in result and result["insights"]:
+                if "summary" in result["insights"]:
+                    message_content += f"{result['insights']['summary']}\n\n"
+                if "points" in result["insights"]:
+                    message_content += "\n".join([f"• {point}" for point in result["insights"]["points"]])
+                    message_content += "\n\n"
+            
+            # Add the answer
+            if "answer" in result:
+                message_content += result["answer"]
+            
+            # Add chart reference if available
+            if chart_id:
+                message_content += f"\n\n[chart:{chart_id}]"
+            
+            # Add the message to the chat
+            append_chat_msg(
+                chat_id,
+                {
+                    "role": "assistant",
+                    "message": message_content,
+                    "timestamp": datetime.now().isoformat(),
+                    "status": "completed",
+                    "request_id": request_id
+                }
+            )
+            
+            # Successfully processed, break out of retry loop
+            break
+            
+        except Exception as exc:
+            retry_count += 1
+            last_error = exc
+            traceback.print_exc()
+            
+            # If we've reached max retries, send error message
+            if retry_count > max_retries:
+                append_chat_msg(
+                    chat_id,
+                    {
+                        "role": "system",
+                        "message": f"❌ Failed to process your request: {str(exc)}",
+                        "timestamp": datetime.now().isoformat(),
+                        "status": "error",
+                        "request_id": request_id
+                    }
+                )
+                raise exc
+            else:
+                # Log retry attempt
+                append_chat_msg(
+                    chat_id,
+                    {
+                        "role": "system",
+                        "message": f"Retrying... (Attempt {retry_count} of {max_retries})",
+                        "timestamp": datetime.now().isoformat(),
+                        "status": "retrying",
+                        "request_id": request_id
+                    }
+                )
+                
+                # Wait before retrying
+                time.sleep(retry_delay) 

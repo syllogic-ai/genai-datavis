@@ -13,9 +13,10 @@ import pandas as pd
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext, Tool
 import inspect
+import json
 
-from ..core.models import ChartSpec, Insight, LLMUsageRow
-from ..core.config import supabase
+from .models import ChartSpec, Insight, LLMUsageRow
+from .config import supabase
 
 # Set the default model
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -126,6 +127,33 @@ async def synthesis_system_prompt() -> str:
     
     Do NOT mention the names of the tools used in your response.
     Focus on providing valuable insights that directly address the user's query.
+    """
+
+# Create the verification agent
+verification_agent = Agent(
+    OPENAI_MODEL,
+    output_type=bool,  # True if response is complete, False if not
+    deps_type=Dict[str, Any],
+    instrument=True,
+    retry=ModelRetry(max_retries=2, delay=0.5),
+)
+
+@verification_agent.system_prompt
+async def verification_system_prompt() -> str:
+    return """
+    You are a response verification expert. Your task is to determine if a given answer 
+    completely addresses the user's original query.
+    
+    You'll be given:
+    1. The original user query
+    2. The generated answer
+    3. Available data information
+    
+    Evaluate whether the answer fully addresses all aspects of the user's query.
+    Return TRUE if the answer is complete and addresses all parts of the query.
+    Return FALSE if the answer is incomplete or missing important information requested in the query.
+    
+    If the answer is incomplete, also provide a brief explanation of what's missing.
     """
 
 # Tool implementations with decorators
@@ -290,14 +318,15 @@ async def calculate(ctx: RunContext[AgentDependencies]) -> CalculationOutput:
 # Function to initialize the agents
 def initialize_agents():
     """
-    Initialize the planning and synthesis agents.
+    Initialize the planning, synthesis, and verification agents.
     
     Returns:
         Dictionary containing the initialized agents
     """
     return {
         "planning_agent": planning_agent,
-        "synthesis_agent": synthesis_agent
+        "synthesis_agent": synthesis_agent,
+        "verification_agent": verification_agent
     }
 
 # Execute the flexible agentic flow
@@ -353,6 +382,11 @@ async def execute_flexible_agentic_flow(
     Sample data: {str(df.head(3))}
     """
     
+    # Maximum number of iterations for tool selection
+    max_iterations = 3
+    iterations = 0
+    response_is_complete = False
+    
     try:
         # Create dependencies object for the planning agent
         deps = AgentDependencies(
@@ -363,44 +397,18 @@ async def execute_flexible_agentic_flow(
             user_id=user_id
         )
         
-        # Execute the planning agent to determine which tools to use
-        planning_prompt = f"""
-        User query: {user_query}
-        
-        Data description:
-        {data_description}
-        
-        Based on this query and data, create a plan for which tools to use.
-        """
-        
-        # Execute the planning agent
-        plan_result = await planning_agent.run(planning_prompt, deps=deps)
-        plan = plan_result.output
-        
-        print(f"Tool execution plan: {plan}")
-        
         # Store all tool outputs
         tool_outputs = {}
         
-        # Execute the primary tool - the agent will invoke the appropriate tool function
-        if plan.primary_tool == "generate_insights":
-            insights_result = await planning_agent.run("Generate insights from the data", deps=deps)
-            if hasattr(insights_result, "tool_outputs") and insights_result.tool_outputs:
-                for tool_name, tool_output in insights_result.tool_outputs.items():
-                    if tool_name == "generate_insights" and isinstance(tool_output, InsightsOutput):
-                        tool_outputs["insights"] = {
-                            "points": tool_output.points,
-                            "summary": tool_output.summary
-                        }
-                        
-                        # Add insights to result
-                        result["insights"] = {
-                            "points": tool_output.points,
-                            "summary": tool_output.summary
-                        }
+        # Available tool handlers - mapping tool names to execution functions
+        tool_handlers = {
+            "generate_insights": lambda: _execute_insights_tool(deps, tool_outputs, result),
+            "execute_sql": lambda: _execute_sql_tool(deps, tool_outputs, result),
+            "calculate": lambda: _execute_calculation_tool(deps, tool_outputs, result),
+        }
         
-        # Execute visualization tools if needed
-        if plan.requires_visualization:
+        # Visualization requires special handling with multiple tools
+        async def handle_visualization():
             # The agent will first determine chart type then build specification
             chart_result = await planning_agent.run("Create a visualization for this data", deps=deps)
             
@@ -412,37 +420,109 @@ async def execute_flexible_agentic_flow(
                         # Add visualization to result
                         result["visualization"] = tool_output.chart_spec.dict()
         
-        # If SQL execution is in the plan, execute it
-        if "execute_sql" in plan.additional_tools:
-            sql_result = await planning_agent.run("Execute SQL query on this data", deps=deps)
+        # Iterative tool selection and execution
+        while iterations < max_iterations and not response_is_complete:
+            iterations += 1
+            print(f"Tool selection iteration {iterations}/{max_iterations}")
             
-            if hasattr(sql_result, "tool_outputs") and sql_result.tool_outputs:
-                for tool_name, tool_output in sql_result.tool_outputs.items():
-                    if tool_name == "execute_sql" and isinstance(tool_output, SQLOutput):
-                        tool_outputs["sql_results"] = tool_output.results
-                        
-                        # Add SQL results to the final result
-                        result["sql_results"] = tool_output.results
-        
-        # Generate the final answer using the synthesis agent
-        synthesis_deps = {
-            "user_query": user_query,
-            "data_description": data_description,
-            "tool_outputs": tool_outputs
-        }
-        
-        synthesis_prompt = f"""
-        User query: {user_query}
-        
-        Please synthesize the tool results into a comprehensive answer that directly addresses the user's query.
-        """
-        
-        # Execute the synthesis agent
-        final_answer = await synthesis_agent.run(synthesis_prompt, deps=synthesis_deps)
-        
-        # Add the final answer to the result
-        result["answer"] = final_answer.output
-        
+            # Execute the planning agent to determine which tools to use
+            planning_prompt = f"""
+            User query: {user_query}
+            
+            Data description:
+            {data_description}
+            
+            {'This is a follow-up execution. Previous tools have been executed but the response was incomplete.' if iterations > 1 else 'Based on this query and data, create a plan for which tools to use.'}
+            {f'Current partial results: {json.dumps(tool_outputs)}' if iterations > 1 else ''}
+            """
+            
+            # Execute the planning agent
+            plan_result = await planning_agent.run(planning_prompt, deps=deps)
+            plan = plan_result.output
+            
+            print(f"Tool execution plan: {plan}")
+            
+            # Execute the primary tool 
+            if plan.primary_tool in tool_handlers:
+                await tool_handlers[plan.primary_tool]()
+            elif plan.primary_tool == "choose_chart_type" or plan.primary_tool == "build_chart_spec":
+                # Handle visualization tools
+                await handle_visualization()
+            else:
+                print(f"Warning: No handler for primary tool '{plan.primary_tool}'")
+            
+            # Execute additional tools
+            for tool_name in plan.additional_tools:
+                if tool_name in tool_handlers:
+                    await tool_handlers[tool_name]()
+                elif tool_name == "choose_chart_type" or tool_name == "build_chart_spec":
+                    if plan.requires_visualization:
+                        await handle_visualization()
+                else:
+                    print(f"Warning: No handler for additional tool '{tool_name}'")
+            
+            # Handle visualization if required but not in primary/additional tools
+            if plan.requires_visualization and not any(t in ["choose_chart_type", "build_chart_spec"] 
+                                                    for t in [plan.primary_tool] + plan.additional_tools):
+                await handle_visualization()
+                
+            # Handle calculations if required
+            if plan.requires_calculation and "calculate" not in [plan.primary_tool] + plan.additional_tools:
+                await tool_handlers["calculate"]()
+            
+            # Generate the final answer using the synthesis agent
+            synthesis_deps = {
+                "user_query": user_query,
+                "data_description": data_description,
+                "tool_outputs": tool_outputs
+            }
+            
+            synthesis_prompt = f"""
+            User query: {user_query}
+            
+            Please synthesize the tool results into a comprehensive answer that directly addresses the user's query.
+            """
+            
+            # Execute the synthesis agent
+            final_answer = await synthesis_agent.run(synthesis_prompt, deps=synthesis_deps)
+            
+            # Add the final answer to the result
+            result["answer"] = final_answer.output
+            
+            # Verify if the response is complete and addresses the user query
+            verification_deps = {
+                "user_query": user_query,
+                "answer": final_answer.output,
+                "data_description": data_description
+            }
+            
+            verification_prompt = f"""
+            Original user query: {user_query}
+            
+            Generated answer: {final_answer.output}
+            
+            Data description: {data_description}
+            
+            Verify if this answer completely addresses all aspects of the user's query.
+            """
+            
+            # Execute the verification agent
+            verification_result = await verification_agent.run(verification_prompt, deps=verification_deps)
+            
+            # Check if the response is complete
+            response_is_complete = verification_result.output
+            
+            if response_is_complete or iterations >= max_iterations:
+                # If response is complete or we've reached the maximum iterations, break the loop
+                result["verification"] = {
+                    "is_complete": response_is_complete,
+                    "iterations": iterations
+                }
+                break
+            
+            # Otherwise, continue to the next iteration to select additional tools
+            print(f"Response incomplete, selecting additional tools (iteration {iterations + 1})")
+            
     except Exception as e:
         print(f"Error in flexible agentic flow: {str(e)}")
         import traceback
@@ -451,11 +531,60 @@ async def execute_flexible_agentic_flow(
     
     return result
 
+# Helper function to execute insights tool
+async def _execute_insights_tool(deps, tool_outputs, result):
+    insights_result = await planning_agent.run("Generate insights from the data", deps=deps)
+    if hasattr(insights_result, "tool_outputs") and insights_result.tool_outputs:
+        for tool_name, tool_output in insights_result.tool_outputs.items():
+            if tool_name == "generate_insights" and isinstance(tool_output, InsightsOutput):
+                tool_outputs["insights"] = {
+                    "points": tool_output.points,
+                    "summary": tool_output.summary
+                }
+                
+                # Add insights to result
+                result["insights"] = {
+                    "points": tool_output.points,
+                    "summary": tool_output.summary
+                }
+
+# Helper function to execute SQL tool
+async def _execute_sql_tool(deps, tool_outputs, result):
+    sql_result = await planning_agent.run("Execute SQL query on this data", deps=deps)
+    
+    if hasattr(sql_result, "tool_outputs") and sql_result.tool_outputs:
+        for tool_name, tool_output in sql_result.tool_outputs.items():
+            if tool_name == "execute_sql" and isinstance(tool_output, SQLOutput):
+                tool_outputs["sql_results"] = tool_output.results
+                
+                # Add SQL results to the final result
+                result["sql_results"] = tool_output.results
+
+# Helper function to execute calculation tool
+async def _execute_calculation_tool(deps, tool_outputs, result):
+    calc_result = await planning_agent.run("Perform calculations on this data", deps=deps)
+    
+    if hasattr(calc_result, "tool_outputs") and calc_result.tool_outputs:
+        for tool_name, tool_output in calc_result.tool_outputs.items():
+            if tool_name == "calculate" and isinstance(tool_output, CalculationOutput):
+                tool_outputs["calculations"] = {
+                    "result": tool_output.result,
+                    "explanation": tool_output.explanation
+                }
+                
+                # Add calculation results to the final result
+                result["calculations"] = {
+                    "result": tool_output.result,
+                    "explanation": tool_output.explanation
+                }
+
 # No need for the old initialize_tools function since we're using decorators
 def initialize_tools():
     """
-    For backward compatibility, initialize agents and return empty dict.
-    In the decorator pattern, tools are registered during module initialization.
+    Initialize tools for the agent
     """
-    print("Tools are automatically registered via decorators")
-    return {} 
+    return {
+        "insight_tool": "Generate insights from data",
+        "visualization_tool": "Create data visualizations",
+        "sql_tool": "Execute SQL queries on data"
+    } 
