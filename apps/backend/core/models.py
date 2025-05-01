@@ -269,7 +269,6 @@ class LLMUsageRow(BaseModel):
     Represents LLM usage metrics in the database.
     Maps to the 'llm_usage' table and tracks API usage, tokens, and costs.
     """
-    id: str
     request_id: str
     chat_id: Optional[str] = None
     file_id: Optional[str] = None  # Keeping for backward compatibility
@@ -280,8 +279,5 @@ class LLMUsageRow(BaseModel):
     output_tokens: int  # tokens_out for backward compatibility
     compute_time: float
     total_cost: float  # cost for backward compatibility
-    tokens_in: int  # Keeping for backward compatibility
-    tokens_out: int  # Keeping for backward compatibility
-    cost: float  # Keeping for backward compatibility
-    created_at: str
     model_config = ConfigDict(extra="forbid") 
+    

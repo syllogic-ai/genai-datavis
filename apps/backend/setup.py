@@ -64,19 +64,6 @@ for package in critical_packages:
         print(f"Warning: {package} not found. Installing...")
         run_in_venv(f"{python_path} -m pip install {package}")
 
-# Create a basic app.py file if it doesn't exist
-if not os.path.exists("app.py"):
-    print("Creating basic app.py file...")
-    with open("app.py", "w") as f:
-        f.write("""from fastapi import FastAPI
-
-app = FastAPI()
-
-@app.get("/")
-def read_root():
-    return {"message": "Hello World"}
-""")
-
 print("✅ Backend setup complete.")
 
 # Start the server if --run was passed
