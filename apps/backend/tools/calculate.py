@@ -1,5 +1,7 @@
 import os
 from typing import Any
+import ssl
+import uuid
 
 import duckdb
 import logfire
@@ -7,73 +9,50 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent
 from supabase import create_client, Client
 from dotenv import dotenv_values
+import asyncio
+from httpx import AsyncClient
 
 
-from ..core.models import LLMUsageRow
-from ..utils.logging import _log_llm
-from ..core.config import supabase as sb
-from ..utils.files import extract_schema_sample
+from apps.backend.core.config import supabase as sb
+from apps.backend.utils.files import extract_schema_sample
+from apps.backend.core.models import DatasetProfile
+
+# Fix SSL certificate verification issues for macOS
+ssl._create_default_https_context = ssl._create_unverified_context
 
 class Deps(BaseModel):
     chat_id: str
     request_id: str
     file_id: str
     duck: duckdb.DuckDBPyConnection
-    
+    supabase: Client
     model_config = {"arbitrary_types_allowed": True}
 
 
-class CalcInput(BaseModel):
+class SQLInput(BaseModel):
     user_prompt: str = Field(description="The user's question about the data")
 
 
-class CalcOutput(BaseModel):
+class CalcInput(BaseModel):
     sql: str = Field(description="Generated DuckDB SQL query")
+    
+class SQLOutput(BaseModel):
+    chart_id: str = Field(description="The ID of the chart that has been created")
 
 
 # Create SQL generation agent
 sql_agent = Agent(
-    "openai:gpt-4-1-mini",
+    "openai:gpt-4o",
     deps_type=Deps,
-    output_type=CalcOutput,
-    system_prompt=(
-        "You are a SQL expert specializing in DuckDB. Given a dataset schema, sample data, "
-        "and a user's question, generate ONLY valid DuckDB SQL queries. "
-        "Your response must be a single SQL query terminated with a semicolon. "
-        "Do not include any explanations or commentary."
-    ),
+    output_type=SQLOutput,
 )
 
-async def persist_usage(span: Any, ctx: RunContext[Deps]) -> None:
-    """Post-run hook to persist LLM usage metrics using the existing _log_llm function."""
-    usage = LLMUsageRow(
-        request_id=ctx.deps.request_id,
-        chat_id=ctx.deps.chat_id,
-        model=span.attributes["model_name"],
-        provider=span.attributes["provider"],
-        api_request="calculate",
-        input_tokens=span.attributes["prompt_tokens"],
-        output_tokens=span.attributes["completion_tokens"],
-        compute_time=span.attributes["duration_ms"],
-        total_cost=span.attributes["cost_usd"]
-    )
-    _log_llm(usage)
-
-
-@Tool(name="calculate")
-async def calculate(input: CalcInput, ctx: RunContext[Deps]) -> CalcOutput:
+@sql_agent.system_prompt
+async def system_prompt(ctx: RunContext[Deps]) -> str:
     """
-    Generate SQL query based on user prompt and dataset profile.
+    Generate a system prompt that describes the database schema and sample data.
     
-    Args:
-        input: Contains the user's prompt
-        ctx: Context with dependencies including file_id
-        
-    Returns:
-        CalcOutput containing the generated SQL query
-        
-    Raises:
-        ValueError: If the generated SQL doesn't end with a semicolon
+    The user's query will be added by the agent framework.
     """
     # Get the dataset profile using extract_schema_sample
     profile = extract_schema_sample(ctx.deps.file_id)
@@ -98,30 +77,93 @@ async def calculate(input: CalcInput, ctx: RunContext[Deps]) -> CalcOutput:
         sample_table += "| " + " | ".join(str(row.get(col, "")) for col in col_names) + " |\n"
     
     prompt = f"""
-Schema:
-| Column | Type |
-|--------|------|
-{schema_table}
+    You are a SQL expert specializing in DuckDB. Given a dataset schema, sample data, 
+    and a user's question, generate ONLY valid DuckDB SQL queries. 
+    Your response must be a single SQL query terminated with a semicolon. 
+    Do not include any explanations or commentary.
+        
+    Here is the schema and sample data:
 
-Sample data:
-{sample_table}
+    Schema:
+    | Column | Type |
+    |--------|------|
+    {schema_table}
 
-User question: {input.user_prompt}
+    Sample data:
+    {sample_table}
+
 """
+
+    return prompt
+
+
+@sql_agent.tool
+async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
+    """
+    Execute the SQL query and create a chart record in Supabase.
     
-    # Create a modified input with the formatted prompt
-    modified_input = CalcInput(user_prompt=prompt)
+    Args:
+        ctx: The run context containing dependencies
+        input: The input containing the SQL query
+        
+    Returns:
+        SQLOutput with the chart ID
+    """
+    sql = input.sql
     
-    # Generate SQL with Logfire instrumentation
-    with logfire.span("generate_sql", attributes={"tool": "calculate"}) as sp:
-        result = await sql_agent.run(
-            input=modified_input,
-            ctx=ctx,
-            # post_run_hooks=[lambda: persist_usage(sp, ctx)]
+    # Convert to uppercase for case-insensitive comparison
+    sql_upper = sql.upper()
+    
+    # Check for disallowed operations
+    disallowed = ['DROP', 'DELETE', 'INSERT', 'UPDATE', 'ALTER', '--', '/*']
+    for term in disallowed:
+        if term.upper() in sql_upper:
+            raise ValueError(f"SQL query contains disallowed term: {term}")
+    
+    # Create a new chart record in Supabase
+    
+    # Get the chat_id from dependencies
+    chat_id = ctx.deps.chat_id
+    
+    # Generate chart id
+    chart_id = str(uuid.uuid4())
+    
+    # Insert the SQL query into the charts table using Supabase client
+    try:
+        # Use the Supabase client to insert the record
+        result = ctx.deps.supabase.table("charts").insert({
+            "id": chart_id,
+            "chat_id": chat_id,
+            "sql": sql
+        }).execute()
+        
+        # Verify the insertion was successful
+        if not result.data or len(result.data) == 0:
+            raise ValueError("Failed to create chart record")
+            
+    except Exception as e:
+        raise ValueError(f"Error creating chart record: {str(e)}")
+    
+    return SQLOutput(chart_id=result.data[0]["id"])
+    
+async def main():
+    async with AsyncClient() as client:
+        
+        # Create dependencies
+        deps = Deps(
+            chat_id="87939486-f970-4c1a-8b8d-85262607d47c",
+            request_id="request_123",
+            file_id="1da2a57e-a87c-4f0f-9046-3c980a1ade29",
+            duck=duckdb.connect(),
+            supabase=sb
         )
-    
-    # Validate SQL ends with semicolon
-    if not result.sql.strip().endswith(";"):
-        raise ValueError("Generated SQL must end with a semicolon")
-    
-    return result
+        
+        # The correct way to call run with the input
+        result = await sql_agent.run(
+            "Which date did we have the most sales?", 
+            deps=deps
+        )
+        print(result)
+        
+if __name__ == "__main__":
+    asyncio.run(main())
