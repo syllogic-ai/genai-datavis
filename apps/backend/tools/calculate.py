@@ -4,27 +4,23 @@ from typing import Any
 import duckdb
 import logfire
 from pydantic import BaseModel, Field
-from pydantic_ai import RunContext, tool, Agent
+from pydantic_ai import RunContext, Tool, Agent
 from supabase import create_client, Client
 from dotenv import dotenv_values
 
 
 from ..core.models import LLMUsageRow
 from ..utils.logging import _log_llm
-
-# Environment variable checks
-SUPABASE_URL = dotenv_values("SUPABASE_URL")
-SUPABASE_KEY = dotenv_values("SUPABASE_SERVICE_KEY")
-
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("Missing required environment variables: SUPABASE_URL and SUPABASE_KEY")
-
+from ..core.config import supabase as sb
+from ..utils.files import extract_schema_sample
 
 class Deps(BaseModel):
     chat_id: str
     request_id: str
     file_id: str
     duck: duckdb.DuckDBPyConnection
+    
+    model_config = {"arbitrary_types_allowed": True}
 
 
 class CalcInput(BaseModel):
@@ -48,7 +44,6 @@ sql_agent = Agent(
     ),
 )
 
-
 async def persist_usage(span: Any, ctx: RunContext[Deps]) -> None:
     """Post-run hook to persist LLM usage metrics using the existing _log_llm function."""
     usage = LLMUsageRow(
@@ -65,14 +60,14 @@ async def persist_usage(span: Any, ctx: RunContext[Deps]) -> None:
     _log_llm(usage)
 
 
-@tool(name="calculate")
+@Tool(name="calculate")
 async def calculate(input: CalcInput, ctx: RunContext[Deps]) -> CalcOutput:
     """
     Generate SQL query based on user prompt and dataset profile.
     
     Args:
         input: Contains the user's prompt
-        ctx: Context with dependencies including dataset profile
+        ctx: Context with dependencies including file_id
         
     Returns:
         CalcOutput containing the generated SQL query
@@ -80,35 +75,49 @@ async def calculate(input: CalcInput, ctx: RunContext[Deps]) -> CalcOutput:
     Raises:
         ValueError: If the generated SQL doesn't end with a semicolon
     """
+    # Get the dataset profile using extract_schema_sample
+    profile = extract_schema_sample(ctx.deps.file_id)
+    
     # Build prompt with schema and sample data
     schema_table = "\n".join([
-        f"| {col.name} | {col.dtype} | {col.null_percent}% |"
-        for col in ctx.deps.profile.schema
+        f"| {col_name} | {data_type} |"
+        for col_name, data_type in profile.columns.items()
     ])
     
-    sample_table = "\n".join([
-        "| " + " | ".join(str(val) for val in row) + " |"
-        for row in ctx.deps.profile.sample
-    ])
+    # Format sample rows as a table
+    # First get all column names to ensure consistent order
+    col_names = list(profile.columns.keys())
+    
+    # Create header row
+    sample_table = "| " + " | ".join(col_names) + " |\n"
+    # Add separator row
+    sample_table += "|" + "|".join(["---"] * len(col_names)) + "|\n"
+    
+    # Add data rows
+    for row in profile.sample_rows:
+        sample_table += "| " + " | ".join(str(row.get(col, "")) for col in col_names) + " |\n"
     
     prompt = f"""
 Schema:
-| Column | Type | Null % |
-|--------|------|--------|
+| Column | Type |
+|--------|------|
 {schema_table}
 
-Sample data (first 5 rows):
+Sample data:
 {sample_table}
 
 User question: {input.user_prompt}
 """
     
+    # Create a modified input with the formatted prompt
+    modified_input = CalcInput(user_prompt=prompt)
+    
     # Generate SQL with Logfire instrumentation
     with logfire.span("generate_sql", attributes={"tool": "calculate"}) as sp:
         result = await sql_agent.run(
-            input=input,
+            input=modified_input,
             ctx=ctx,
-            post_run_hooks=[lambda: persist_usage(sp, ctx)]
+            # post_run_hooks=[lambda: persist_usage(sp, ctx)]
         )
     
     # Validate SQL ends with semicolon

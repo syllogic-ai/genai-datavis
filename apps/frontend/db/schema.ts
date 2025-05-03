@@ -39,6 +39,7 @@ export const charts = pgTable("charts", {
   chatId: text("chat_id").references(() => chats.id),
   chartType: text("chart_type").notNull(),
   chartSpecs: jsonb("chart_specs").notNull(), // Next.js-compatible chart config
+  sql: text("sql"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

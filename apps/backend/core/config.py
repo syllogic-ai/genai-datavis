@@ -1,11 +1,19 @@
 import os
 from typing import Union
+from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import redis
 
 # Load environment variables from .env file
-load_dotenv()
+# Navigate to the correct .env.local path
+env_path = Path(__file__).resolve().parent.parent / ".env.local"
+
+print(f"Loading from: {env_path}")
+print("File exists:", env_path.exists())
+
+# Load environment variables
+load_dotenv(dotenv_path=env_path)
 
 # Environment variables
 SUPABASE_URL = os.getenv("SUPABASE_URL")

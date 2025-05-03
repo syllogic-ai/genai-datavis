@@ -1,0 +1,1 @@
+ALTER TABLE "charts" ALTER COLUMN "sql" DROP NOT NULL;
