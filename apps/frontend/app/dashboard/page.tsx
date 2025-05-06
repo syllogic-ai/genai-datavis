@@ -62,8 +62,8 @@ export default function DashboardPage() {
       const url = await uploadFileToSupabase(fileBlob);
 
       // Generate IDs
-      const fileId = uuidv4();
-      const chatId = uuidv4();
+      const fileId = 'file_' + uuidv4();
+      const chatId = 'chat_' + uuidv4();
 
       // Create file + chat records in your DB
       const [fileResult, chatResult] = await Promise.all([
