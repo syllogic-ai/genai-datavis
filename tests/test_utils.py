@@ -159,4 +159,64 @@ def test_extract_schema_sample():
         mock_supabase.storage.from_.assert_called_with(DATA_BUCKET)
         mock_bucket.upload.assert_called_once()
 
+def test_get_data():
+    """Test the get_data function fetches and processes chart data correctly."""
+    from apps.backend.app.main import get_data
+    import pandas as pd
+    
+    # Test file and chart IDs
+    file_id = "test-file-id"
+    chart_id = "test-chart-id"
+    
+    # Create mock for supabase client
+    mock_supabase = Mock()
+    mock_table = Mock()
+    mock_execute = Mock()
+    
+    # Setup the mock chain for chart query
+    mock_supabase.table.return_value = mock_table
+    mock_table.select.return_value = mock_table
+    mock_table.eq.return_value = mock_table
+    mock_table.execute.return_value = Mock(data=[{"sql": "SELECT * FROM csv_data LIMIT 10"}])
+    
+    # Create a sample DataFrame for the mock fetch_dataset to return
+    sample_data = pd.DataFrame({
+        'col1': [1, 2, 3, 4, 5],
+        'col2': ['a', 'b', 'c', 'd', 'e'],
+        'col3': [1.1, 2.2, 3.3, 4.4, 5.5]
+    })
+    
+    # Create a mock duckdb connection
+    mock_duck_connection = Mock()
+    mock_duck_result = Mock()
+    # The fetchdf method should return a dataframe with the query results
+    mock_duck_result.fetchdf.return_value = sample_data.head(3)  # Only first 3 rows as per the SQL LIMIT
+    mock_duck_connection.execute.return_value = mock_duck_result
+    
+    # Patch the dependencies
+    with patch('apps.backend.app.main.supabase', mock_supabase), \
+         patch('apps.backend.app.main.duck_connection', mock_duck_connection), \
+         patch('apps.backend.app.main.fetch_dataset', return_value=sample_data):
+        
+        # Call the function
+        result = get_data(file_id, chart_id)
+        
+        # Verify the results
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 3  # Should have 3 rows due to the LIMIT in SQL
+        assert list(result.columns) == ['col1', 'col2', 'col3']
+        
+        # Verify supabase was called to get the chart
+        mock_supabase.table.assert_any_call("charts")
+        mock_table.select.assert_any_call("sql")
+        mock_table.eq.assert_any_call("id", chart_id)
+        
+        # Verify supabase was called to get the file URL
+        mock_supabase.table.assert_any_call("storage_path")
+        
+        # Verify DuckDB was used correctly
+        mock_duck_connection.register.assert_called_once_with("csv_data", sample_data)
+        mock_duck_connection.execute.assert_called_once_with("SELECT * FROM csv_data LIMIT 10")
+        mock_duck_result.fetchdf.assert_called_once()
+
 

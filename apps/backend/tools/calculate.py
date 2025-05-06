@@ -147,6 +147,7 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - For visualizations, ensure you select appropriate columns.
     - AVOID using DELETE, DROP, UPDATE, ALTER, INSERT operations.
     - Avoid using comments (-- or /* */) in your SQL.
+    - The table name is ALWAYS "csv_data"
     
     Previous chart ID (if referenced): {ctx.deps.last_chart_id or "None"}
     User prompt: {ctx.deps.user_prompt}
@@ -359,6 +360,7 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     - Only use generate_insights when you have a chart_id (either from generate_sql or from last_chart_id)
     - If the user asks for insights or analysis based on previous results, use the last_chart_id
     - Always provide a clear, direct answer to the user's question
+    - ALWAYS run generate_insights after generate_sql
     
     Context:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
@@ -384,6 +386,8 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         
         end_time = time.time()
         
+        # Store the new chart_id in the context for other tools to use
+        ctx.deps.last_chart_id = result.output.chart_id
  
         
         return result.output
@@ -443,7 +447,7 @@ async def validate_analysis_output(
 ) -> AnalysisOutput:
     """Validate the intent analysis output."""
 
-    
+     
     # Ensure the answer is meaningful
     if not output.answer or len(output.answer.strip()) < 20:
         logfire.warn("Invalid analysis answer", 
