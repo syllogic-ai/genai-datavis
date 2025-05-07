@@ -1,4 +1,7 @@
+from apps.backend.tools.calculate import process_user_request
+from apps.backend.utils.chat import append_chat_message
 from apps.backend.utils.files import fetch_dataset
+from apps.backend.utils.utils import get_data
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 from pydantic import BaseModel
 import pandas as pd
@@ -28,26 +31,16 @@ from apps.backend.core.config import configure_logfire
 
 # Import utility functions
 try:
-    from utils.enqueue import enqueue_prompt
-    from utils.files import extract_schema_sample
-except ImportError:
-    print("Failed to import utility functions, trying alternative import path")
+    from apps.backend.utils.chat import append_chat_message
+except ImportError as e:
+    print(f"Failed to import utility functions: {str(e)}")
     # Try other import paths that might work
     try:
-        from backend.utils.enqueue import enqueue_prompt
-        from backend.utils.files import extract_schema_sample
-    except ImportError:
-        print("All import attempts for utility functions failed")
 
-# Import the multi-agent system
-try:
-    from services.multi_agent import process_user_request
-except ImportError:
-    print("Failed to import multi_agent, trying alternative import path")
-    try:
-        from backend.services.multi_agent import process_user_request
-    except ImportError:
-        print("All import attempts for multi_agent failed")
+        from utils.chat import append_chat_message
+    except ImportError as e2:
+        print(f"All import attempts for utility functions failed: {str(e2)}")
+
 
 # Load environment variables
 load_dotenv()
@@ -70,10 +63,10 @@ app = FastAPI(title="GenAI DataVis API",
 # Configure CORS with environment variables
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for debugging
+    allow_origins=["http://localhost:3000", "https://localhost:3000", "http://127.0.0.1:3000", "*"],  # Added wildcard as fallback
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept"],
 )
 
 # Add Logfire middleware to track all requests
@@ -81,41 +74,33 @@ app.add_middleware(
 async def logfire_middleware(request: Request, call_next):
     start_time = time.time()
     
-    # Create a span for the request
-    with logfire.span(
-        name="http_request",
-        attributes={
-            "http.method": request.method,
-            "http.url": str(request.url),
-            "http.client_ip": request.client.host if request.client else "unknown",
-        }
-    ):
-        # Process the request
-        try:
-            response = await call_next(request)
-            status_code = response.status_code
-            
-            # Log successful request
-            logfire.info(
-                "HTTP request processed",
-                method=request.method,
-                path=request.url.path,
-                status_code=status_code,
-                duration=time.time() - start_time
-            )
-            
-            return response
-        except Exception as e:
-            # Log failed request
-            logfire.error(
-                "HTTP request failed",
-                method=request.method,
-                path=request.url.path,
-                error=str(e),
-                error_type=type(e).__name__,
-                duration=time.time() - start_time
-            )
-            raise
+
+    # Process the request
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        
+        # Log successful request
+        logfire.info(
+            "HTTP request processed",
+            method=request.method,
+            path=request.url.path,
+            status_code=status_code,
+            duration=time.time() - start_time
+        )
+        
+        return response
+    except Exception as e:
+        # Log failed request
+        logfire.error(
+            "HTTP request failed",
+            method=request.method,
+            path=request.url.path,
+            error=str(e),
+            error_type=type(e).__name__,
+            duration=time.time() - start_time
+        )
+        raise
 
 # Dependency functions for database connections
 def get_supabase_client():
@@ -124,85 +109,6 @@ def get_supabase_client():
 def get_db_connection():
     return duck_connection
 
-# Helper function to get data from a chart
-def get_data(file_id: str, chart_id: str) -> pd.DataFrame:
-    """
-    Retrieve and execute SQL on a dataset associated with a chart.
-
-    Args:
-        file_id: ID of the uploaded file.
-        chart_id: ID of the chart.
-
-    Returns:
-        A DataFrame with the query results.
-    """
-    start_time = time.time()
-    logfire.info("Getting chart data", file_id=file_id, chart_id=chart_id)
-
-    try:
-        # Fetch the SQL query from the chart
-        chart_result = supabase.table("charts").select("sql").eq("id", chart_id).execute()
-
-        if not chart_result.data:
-            logfire.warn("No chart found", chart_id=chart_id)
-            return pd.DataFrame()
-
-        sql_query = chart_result.data[0].get("sql")
-        if not sql_query:
-            logfire.warn("No SQL query found", chart_id=chart_id)
-            return pd.DataFrame()
-
-        # Fetch the storage path for the file
-        file_result = supabase.table("files").select("storage_path").eq("id", file_id).execute()
-        if not file_result.data:
-            logfire.warn("No file found", file_id=file_id)
-            return pd.DataFrame()
-
-        storage_path = file_result.data[0]["storage_path"]
-
-        # Download the file from Supabase Storage (assumes public bucket or signed URL)
-        response = requests.get(storage_path)
-        if response.status_code != 200:
-            logfire.error("Failed to download CSV", storage_path=storage_path, status_code=response.status_code)
-            return pd.DataFrame()
-
-        df = pd.read_csv(io.StringIO(response.text))
-        print(df)
-
-        logfire.info(
-            "CSV loaded successfully",
-            row_count=len(df),
-            column_count=len(df.columns)
-        )
-
-        # Register DataFrame in DuckDB
-        duck_connection.register("csv_data", df)
-        
-        print(sql_query)
-
-        # Execute SQL query
-        result_df = duck_connection.execute(sql_query).fetchdf()
-
-        print(result_df)
-        
-        logfire.info(
-            "SQL executed successfully",
-            query=sql_query,
-            result_rows=len(result_df),
-            result_columns=len(result_df.columns),
-            duration=time.time() - start_time
-        )
-
-        return result_df
-
-    except Exception as e:
-        logfire.error(
-            "Error in get_data",
-            error=str(e),
-            error_type=type(e).__name__,
-            duration=time.time() - start_time
-        )
-        return pd.DataFrame()
 # Request model for the analysis endpoint
 class AnalysisRequest(BaseModel):
     """Request model for the analysis endpoint."""
@@ -252,6 +158,8 @@ async def analyze_data(
     
     try:
         # Process the request using our multi-agent system
+    
+        
         result = await process_user_request(
             chat_id=request.chat_id,
             request_id=request.request_id,
@@ -262,6 +170,14 @@ async def analyze_data(
             duck_connection=duck_connection,
             supabase_client=supabase_client
         )
+        
+        message = { 
+            "role": "system",
+            "content": result.get("answer"),
+            "created_at": datetime.now().isoformat()
+        }
+        
+        await append_chat_message(request.chat_id, message)
         
         # Log successful processing
         end_time = time.time()
@@ -337,6 +253,12 @@ async def health_check():
         "database": "healthy" if db_healthy else "unhealthy",
         "supabase": "healthy" if supabase_healthy else "unhealthy"
     }
+
+# Add OPTIONS route handler for CORS preflight requests
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(request: Request):
+    response = Response()
+    return response
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,12 +1,17 @@
 from typing import Dict, Any
 import os
 from datetime import datetime
-from supabase import create_client, Client
+from dotenv import load_dotenv
+import sys
+from supabase import Client
 
-# Supabase setup
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import supabase from the core configuration
+from apps.backend.core.config import supabase
+
 
 # Add a utility function to update the chat conversation in Supabase
 async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:

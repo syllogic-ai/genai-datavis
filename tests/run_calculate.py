@@ -40,7 +40,7 @@ async def run_process_user_request(user_prompt):
     # Generate unique IDs
     chat_id = "87939486-f970-4c1a-8b8d-85262607d47c"
     request_id = str(uuid.uuid4())
-    file_id = "0e708fc0-c8ff-4ab5-a77e-810d0462e765"
+    file_id = "077f9813-a21c-4520-81ae-414ba8e4bb10"
     
     # Create connections
     duck_connection = duckdb.connect(":memory:")

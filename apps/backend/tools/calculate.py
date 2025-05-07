@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 
-from apps.backend.app.main import get_data
+from apps.backend.utils.utils import get_data
 import duckdb
 import logfire
 from logfire import span
@@ -247,7 +247,7 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
     
     try:
         # Helper function to get the data (implemented elsewhere)
-        data_df = get_data(file_id, chart_id)
+        data_df = get_data(file_id, chart_id, ctx.deps.supabase, ctx.deps.duck)
         
         # Convert to records for display in the prompt
         if data_df is not None and not data_df.empty:
