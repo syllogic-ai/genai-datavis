@@ -90,7 +90,7 @@ class OrchestratorOutput(BaseModel):
 ################################
 
 sql_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:gpt-4o",
     deps_type=Deps,
     output_type=SQLOutput,
 )
@@ -148,6 +148,20 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - AVOID using DELETE, DROP, UPDATE, ALTER, INSERT operations.
     - Avoid using comments (-- or /* */) in your SQL.
     - The table name is ALWAYS "csv_data"
+    - Verify all parentheses are properly balanced in complex expressions
+    - Enclose column names containing spaces in double quotes (e.g., "Subscription Date")
+    - Ensure date functions are compatible with DuckDB (not SQLite-specific)
+    - Include NULL handling (NULLIF, COALESCE) when performing division
+    - For percentage calculations, use proper formula: ((new - old) / old) * 100
+    - Check that all referenced columns exist in the schema
+    - Use explicit type casting when mixing data types (CAST or ::)
+    - Ensure correct syntax for conditional logic (CASE WHEN, IF, etc.)
+    - Verify string literals are properly quoted (single quotes)
+    - For date operations, ensure proper format compatibility
+    - Limit the use of database-specific functions that may not be portable
+    - Avoid subqueries where window functions would be more efficient
+    - Include appropriate filtering criteria in WHERE clauses
+    - For temporal analysis, use consistent date/time extraction methods
     
     Previous chart ID (if referenced): {ctx.deps.last_chart_id or "None"}
     User prompt: {ctx.deps.user_prompt}
