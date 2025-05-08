@@ -23,6 +23,9 @@ import asyncio
 import duckdb
 import logfire
 
+# Import Redis utility
+from apps.backend.utils.redis import enqueue_task, UPSTASH_URL
+
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -128,26 +131,37 @@ class AnalysisResponse(BaseModel):
     chart_id: Optional[str] = None
     insights: Optional[Dict[str, str]] = None
 
-@app.post("/analyze", response_model=AnalysisResponse)
+# New response model for enqueued task
+class EnqueueResponse(BaseModel):
+    """Response model when a task is successfully enqueued."""
+    message: str
+    task_id: Optional[str] = None
+    queue_name: str
+    request_id: str
+    chat_id: str
+
+ANALYSIS_QUEUE_NAME = "analysis_tasks"
+
+@app.post("/analyze", response_model=EnqueueResponse)
 async def analyze_data(
     request: AnalysisRequest,
-    supabase_client: Client = Depends(get_supabase_client),
-    duck_connection: duckdb.DuckDBPyConnection = Depends(get_db_connection)
-) -> Dict[str, Any]:
+    # supabase_client: Client = Depends(get_supabase_client), # Not needed directly for enqueuing
+    # duck_connection: duckdb.DuckDBPyConnection = Depends(get_db_connection) # Not needed directly for enqueuing
+) -> EnqueueResponse:
     """
-    Process a natural language query against CSV data using the multi-agent system.
+    Receives an analysis request and enqueues it for background processing.
     
     Args:
         request: The analysis request containing prompt and context
         
     Returns:
-        Analysis response containing answer, chart ID, and insights
+        Acknowledgement that the task has been enqueued.
     """
     start_time = time.time()
     
     # Log the incoming request
     logfire.info(
-        "Analysis request received",
+        "Analysis request received for queueing",
         chat_id=request.chat_id,
         request_id=request.request_id,
         file_id=request.file_id,
@@ -156,63 +170,55 @@ async def analyze_data(
         has_last_chart=request.last_chart_id is not None
     )
     
-    try:
-        # Process the request using our multi-agent system
-    
-        
-        result = await process_user_request(
-            chat_id=request.chat_id,
-            request_id=request.request_id,
-            file_id=request.file_id,
-            user_prompt=request.prompt,
-            is_follow_up=request.is_follow_up,
-            last_chart_id=request.last_chart_id,
-            duck_connection=duck_connection,
-            supabase_client=supabase_client
-        )
-        
-        message = { 
-            "role": "system",
-            "content": result.get("answer"),
-            "created_at": datetime.now().isoformat()
-        }
-        
-        await append_chat_message(request.chat_id, message)
-        
-        # Log successful processing
-        end_time = time.time()
-        logfire.info(
-            "Analysis request processed successfully",
-            chat_id=request.chat_id,
-            request_id=request.request_id,
-            has_chart=result.get("chart_id") is not None,
-            has_insights=result.get("insights") is not None,
-            response_length=len(result.get("answer", "")),
-            processing_time=end_time - start_time
-        )
-        
-        return result
-        
-    except Exception as e:
-        # Log the error with Logfire
-        end_time = time.time()
+    if not UPSTASH_URL or not enqueue_task: # Check if Redis is configured and function is available
         logfire.error(
-            "Error processing analysis request",
+            "Redis not configured or enqueue_task not available. Cannot queue task.",
+            chat_id=request.chat_id,
+            request_id=request.request_id
+        )
+        raise HTTPException(
+            status_code=503, # Service Unavailable
+            detail="Analysis processing service is temporarily unavailable. Please try again later."
+        )
+
+    task_data = {
+        "chat_id": request.chat_id,
+        "request_id": request.request_id,
+        "file_id": request.file_id,
+        "user_prompt": request.prompt,
+        "is_follow_up": request.is_follow_up,
+        "last_chart_id": request.last_chart_id,
+        "received_at": datetime.now().isoformat()
+    }
+
+    task_id = enqueue_task(queue_name=ANALYSIS_QUEUE_NAME, task_data=task_data)
+
+    if task_id:
+        logfire.info(
+            "Analysis task enqueued successfully",
             chat_id=request.chat_id,
             request_id=request.request_id,
-            file_id=request.file_id,
-            error=str(e),
-            error_type=type(e).__name__,
-            processing_time=end_time - start_time
+            task_id=task_id,
+            queue_name=ANALYSIS_QUEUE_NAME,
+            processing_time=time.time() - start_time
         )
-        
-        # Log the error to console
-        print(f"Error processing analysis request: {str(e)}")
-        
-        # Raise HTTPException with appropriate status code
+        return EnqueueResponse(
+            message="Analysis task successfully enqueued.",
+            task_id=task_id,
+            queue_name=ANALYSIS_QUEUE_NAME,
+            request_id=request.request_id,
+            chat_id=request.chat_id
+        )
+    else:
+        logfire.error(
+            "Failed to enqueue analysis task",
+            chat_id=request.chat_id,
+            request_id=request.request_id,
+            processing_time=time.time() - start_time
+        )
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing request: {str(e)}"
+            detail="Failed to enqueue analysis task. Please try again."
         )
 
 # Add your existing endpoints here

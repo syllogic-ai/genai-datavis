@@ -10,9 +10,6 @@ import logfire
 # Navigate to the correct .env.local path
 env_path = Path(__file__).resolve().parent.parent / ".env.local"
 
-print(f"Loading from: {env_path}")
-print("File exists:", env_path.exists())
-
 # Load environment variables
 load_dotenv(dotenv_path=env_path)
 

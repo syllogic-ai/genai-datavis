@@ -23,6 +23,10 @@ typing_extensions>=4.10.0
 redis>=5.0
 rq>=1.15
 
+# Add other dependencies below
+redis
+upstash-redis
+
 
 
 
