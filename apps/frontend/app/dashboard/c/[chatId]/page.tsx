@@ -16,7 +16,7 @@ import { ChatMessage } from "@/app/lib/types";
 import type { ChartSpec } from "@/types/chart-types";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
-
+import { v4 as uuidv4 } from 'uuid';
 // Custom hook for chat title updates
 function useChatTitle(chatId: string, userId: string | undefined) {
   const [title, setTitle] = useState<string>("New Chat");
@@ -131,25 +131,28 @@ export default function ChatPage() {
     try {
       // Get the file URL from chat details
       // The files object now has both storage_path (for Supabase) and storagePath (from Drizzle)
-      const fileUrl = chatDetails.files?.storage_path || chatDetails.files?.storagePath;
+      const fileId = chatDetails.files?.id;
       
       // Ensure we have a valid file URL
-      if (!fileUrl) {
+      if (!fileId) {
         throw new Error("No file URL found for this chat");
       }
 
-      console.log("Using file URL:", fileUrl); // Log the URL being used
+      console.log("Using file ID:", fileId); // Log the URL being used
 
+      const lastChartId = ""
+      
       // Call your /analyze or /chat endpoint
       const response = await fetch(`${API_URL}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt,
-          file_url: fileUrl, // Use the actual file URL from the database
+          file_id: fileId,
+          chat_id: chatId,
+          request_id: 'req_' + uuidv4(),
           is_follow_up: Boolean(analysisResult),
-          session_id: chatId, // The session_id is actually the chat_id
-          user_id: user.id, // Add the user ID from Clerk
+          last_chart_id: lastChartId,
         }),
       });
 

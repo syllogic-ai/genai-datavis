@@ -37,8 +37,9 @@ export const chats = pgTable("chats", {
 export const charts = pgTable("charts", {
   id: text("id").primaryKey(), // Can be any string ID
   chatId: text("chat_id").references(() => chats.id),
-  chartType: text("chart_type").notNull(),
-  chartSpecs: jsonb("chart_specs").notNull(), // Next.js-compatible chart config
+  chartType: text("chart_type"),
+  chartSpecs: jsonb("chart_specs"), // Next.js-compatible chart config
+  sql: text("sql"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
