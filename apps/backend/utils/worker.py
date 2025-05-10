@@ -151,7 +151,7 @@ async def process_task_from_queue():
                         print(f"Failed to send KeyError notification for task {request_id} to chat {chat_id}: {notify_err}")
                 else:
                     error_content = f"Sorry, an unexpected error occurred while processing your request (ID: {request_id}). Please try again later."
-                    print(error_content)
+                    # print(error_content)
                 if chat_id: # Check if chat_id is available
                     try:
                         await append_chat_message(chat_id, {

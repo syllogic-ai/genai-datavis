@@ -100,3 +100,30 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
     except Exception as e:
         print(f"Error getting message history for chat {chat_id}: {str(e)}")
         return []
+
+async def get_last_chart_id(chat_id: str) -> str | None:
+    """
+    Get the last chart message ID for a given chat ID.
+
+    Args:
+        chat_id: The ID of the chat to get the last chart message for.
+
+    Returns:
+        str | None: The message content of the last chart message, or None if not found.
+    """
+    try:
+        result = supabase.rpc('get_last_chart_message', {
+            'chat_id': chat_id
+        }).execute()
+
+        if result.data is None or result.data == '':
+            print(f"No chart message found for chat ID {chat_id}")
+            return None
+            
+        # The RPC function is expected to return a single text value
+        return result.data
+        
+    except Exception as e:
+        print(f"Error getting last chart ID for chat {chat_id}: {str(e)}")
+        return None
+

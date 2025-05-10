@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 
-from apps.backend.utils.chat import get_message_history
+from apps.backend.utils.chat import get_message_history, get_last_chart_id
 from apps.backend.utils.utils import get_data
 import duckdb
 import logfire
@@ -622,9 +622,20 @@ async def process_user_request(
         supabase_key = os.environ.get("SUPABASE_KEY") or sb.SUPABASE_KEY
         supabase_client = create_client(supabase_url, supabase_key)
         
-    message_history = json.dumps(get_message_history(chat_id))
+    # Run tasks in parallel
+    message_history_task = asyncio.create_task(get_message_history(chat_id))
+    last_chart_id_task = asyncio.create_task(get_last_chart_id(chat_id))
     
-    print(message_history)
+    # Await both tasks
+    message_history_result, last_chart_id_result = await asyncio.gather(
+        message_history_task, 
+        last_chart_id_task
+    )
+    
+    message_history = json.dumps(message_history_result)
+    last_chart_id = last_chart_id_result
+    
+    print(last_chart_id)
 
     # Create dependencies object
     deps = Deps(
