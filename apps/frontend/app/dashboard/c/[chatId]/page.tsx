@@ -11,19 +11,24 @@ import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 import { ChatInput } from "@/components/ui/chat-input";
 
 import { API_URL } from "@/app/lib/env";
-import { updateChatConversation, appendChatMessage, getChat, getChartById } from "@/app/lib/actions";
+import {
+  updateChatConversation,
+  appendChatMessage,
+  getChat,
+  getChartById,
+} from "@/app/lib/actions";
 import { ChatMessage } from "@/app/lib/types";
 import type { ChartSpec } from "@/types/chart-types";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from "uuid";
 // Custom hook for chat title updates
 function useChatTitle(chatId: string, userId: string | undefined) {
   const [title, setTitle] = useState<string>("New Chat");
-  
+
   useEffect(() => {
     if (!chatId || !userId) return;
-    
+
     const fetchChatTitle = async () => {
       try {
         const chatData = await getChat(chatId, userId);
@@ -34,26 +39,26 @@ function useChatTitle(chatId: string, userId: string | undefined) {
         console.error("Error fetching chat title:", err);
       }
     };
-    
+
     // Fetch the title initially
     fetchChatTitle();
-    
+
     // Listen for rename events
-    const handleChatRenamed = (data: {chatId: string, newTitle: string}) => {
+    const handleChatRenamed = (data: { chatId: string; newTitle: string }) => {
       if (data.chatId === chatId) {
         setTitle(data.newTitle);
       }
     };
-    
+
     // Subscribe to rename events
     chatEvents.on(CHAT_EVENTS.CHAT_RENAMED, handleChatRenamed);
-    
+
     // Cleanup: unsubscribe when component unmounts
     return () => {
       chatEvents.off(CHAT_EVENTS.CHAT_RENAMED, handleChatRenamed);
     };
   }, [chatId, userId]);
-  
+
   return title;
 }
 
@@ -61,7 +66,7 @@ export default function ChatPage() {
   // Grab chatId from the route
   const params = useParams();
   const chatId = params.chatId as string; // e.g. "1234-5678-..."
-  
+
   // Get user from Clerk
   const { user, isLoaded, isSignedIn } = useUser();
 
@@ -74,22 +79,28 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [chatDetails, setChatDetails] = useState<any>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  
+
   // Get real-time updated chat title
   const chatTitle = useChatTitle(chatId, user?.id);
 
   // Subscribe to real-time updates on the chat - MUST be called unconditionally
-  const { conversation, isLoading: isConversationLoading, error: conversationError } = useChatRealtime(chatId, {
+  const {
+    conversation,
+    isLoading: isConversationLoading,
+    error: conversationError,
+  } = useChatRealtime(chatId, {
     onUpdate: async (updatedConversation) => {
       setMessages(updatedConversation);
-      
+
       // Check for chart messages
-      const chartMessages = updatedConversation.filter(msg => msg.role === "chart");
+      const chartMessages = updatedConversation.filter(
+        (msg) => msg.role === "chart"
+      );
       if (chartMessages.length > 0) {
         const latestChartMessage = chartMessages[chartMessages.length - 1];
         // Extract chartId from message content
         const chartId = latestChartMessage.content;
-        
+
         try {
           // Retrieve the chart specification using Drizzle
           const chartSpec = await getChartById(chartId);
@@ -114,7 +125,9 @@ export default function ChatPage() {
         setChatDetails(chatData);
       } catch (err) {
         console.error("Error fetching chat details:", err);
-        setError(err instanceof Error ? err.message : "Error fetching chat details");
+        setError(
+          err instanceof Error ? err.message : "Error fetching chat details"
+        );
       }
     };
 
@@ -122,178 +135,218 @@ export default function ChatPage() {
   }, [chatId, user]);
 
   // A function to handle the analyze request
-  const analyzeData = useCallback(async (prompt: string) => {
-    if (!user || !chatDetails) return;
-    
-    setAnalyzing(true);
-    setError(null);
+  const analyzeData = useCallback(
+    async (prompt: string) => {
+      if (!user || !chatDetails) return;
 
-    try {
-      // Get the file URL from chat details
-      // The files object now has both storage_path (for Supabase) and storagePath (from Drizzle)
-      const fileId = chatDetails.files?.id;
-      
-      // Ensure we have a valid file URL
-      if (!fileId) {
-        throw new Error("No file URL found for this chat");
+      setAnalyzing(true);
+      setError(null);
+
+      try {
+        // Get the file URL from chat details
+        // The files object now has both storage_path (for Supabase) and storagePath (from Drizzle)
+        const fileId = chatDetails.files?.id;
+
+        // Ensure we have a valid file URL
+        if (!fileId) {
+          throw new Error("No file URL found for this chat");
+        }
+
+        console.log("Using file ID:", fileId); // Log the URL being used
+
+        const lastChartId = "";
+
+        // Call your /analyze or /chat endpoint
+        const response = await fetch(`${API_URL}/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt,
+            file_id: fileId,
+            chat_id: chatId,
+            request_id: "req_" + uuidv4(),
+            is_follow_up: Boolean(analysisResult),
+            last_chart_id: lastChartId,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.detail ?? `Analysis failed with status ${response.status}`
+          );
+        }
+
+        const result = await response.json();
+        setAnalysisResult(result);
+
+        // If there's a new chart, store it
+        if (result.visual && result.visual[0]) {
+          setVisualization(result.visual[0]);
+        }
+
+        // The backend will now handle appending the system message to the chat in Supabase
+        // The updated conversation will be picked up through useChatRealtime
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Error analyzing file");
+        console.error("Error analyzing file:", err);
+      } finally {
+        setAnalyzing(false);
       }
-
-      console.log("Using file ID:", fileId); // Log the URL being used
-
-      const lastChartId = ""
-      
-      // Call your /analyze or /chat endpoint
-      const response = await fetch(`${API_URL}/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          file_id: fileId,
-          chat_id: chatId,
-          request_id: 'req_' + uuidv4(),
-          is_follow_up: Boolean(analysisResult),
-          last_chart_id: lastChartId,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.detail ?? `Analysis failed with status ${response.status}`
-        );
-      }
-
-      const result = await response.json();
-      setAnalysisResult(result);
-
-      // If there's a new chart, store it
-      if (result.visual && result.visual[0]) {
-        setVisualization(result.visual[0]);
-      }
-
-      // The backend will now handle appending the system message to the chat in Supabase
-      // The updated conversation will be picked up through useChatRealtime
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error analyzing file");
-      console.error("Error analyzing file:", err);
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [user, chatDetails, chatId, analysisResult]);
+    },
+    [user, chatDetails, chatId, analysisResult]
+  );
 
   // Handle sending a message
-  const handleSendMessage = useCallback(async (message: string) => {
-    if (!user) return;
-    
-    setIsChatLoading(true);
-    setError(null);
+  const handleSendMessage = useCallback(
+    async (message: string) => {
+      if (!user) return;
 
-    // Add user message to chat
-    const userMessage: ChatMessage = { role: "user", content: message };
-    
-    // Add to local state 
-    const updatedMessages = [...messages, userMessage];
-    setMessages(updatedMessages);
+      setIsChatLoading(true);
+      setError(null);
 
-    try {
-      // Append the user message to the database conversation
-      await appendChatMessage(chatId, userMessage, user.id);
-      
-      // If this is the first message, generate a title for the chat
-      if (messages.length === 0) {
-        try {
-          console.log("First message detected, generating title...");
-          console.log("Chat details:", chatDetails);
-          
-          // Extract column names from file metadata - handle different possible structures
-          let columnNames: string[] = [];
-          
-          if (chatDetails?.files) {
-            // Try different possible locations for column data
-            if (chatDetails.files.metadata?.columns) {
-              columnNames = chatDetails.files.metadata.columns;
-            } else if (chatDetails.files.metadata?.schema?.fields) {
-              // Extract column names from schema fields if available
-              columnNames = chatDetails.files.metadata.schema.fields.map((field: {name: string}) => field.name);
-            } else if (chatDetails.files.metadata?.fields) {
-              columnNames = chatDetails.files.metadata.fields;
+      // Add user message to chat
+      const userMessage: ChatMessage = { role: "user", content: message };
+
+      // Add to local state
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
+
+      try {
+        // Append the user message to the database conversation
+        await appendChatMessage(chatId, userMessage, user.id);
+
+        // If this is the first message, generate a title for the chat
+        if (messages.length === 0) {
+          try {
+            console.log("First message detected, generating title...");
+            console.log("Chat details:", chatDetails);
+
+            // Extract column names from file metadata - handle different possible structures
+            let columnNames: string[] = [];
+
+            if (chatDetails?.files) {
+              // Try different possible locations for column data
+              if (chatDetails.files.metadata?.columns) {
+                columnNames = chatDetails.files.metadata.columns;
+              } else if (chatDetails.files.metadata?.schema?.fields) {
+                // Extract column names from schema fields if available
+                columnNames = chatDetails.files.metadata.schema.fields.map(
+                  (field: { name: string }) => field.name
+                );
+              } else if (chatDetails.files.metadata?.fields) {
+                columnNames = chatDetails.files.metadata.fields;
+              }
+
+              console.log("Extracted column names:", columnNames);
             }
-            
-            console.log("Extracted column names:", columnNames);
-          }
-          
-          // Call the generate-title endpoint
-          console.log(`Calling ${API_URL}/generate-title`);
-          const titleResponse = await fetch(`${API_URL}/generate-title`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              query: message,
-              column_names: columnNames,
-              chat_id: chatId,
-              user_id: user.id
-            }),
-          });
-          
-          console.log("Title generation response status:", titleResponse.status);
-          
-          if (titleResponse.ok) {
-            const titleData = await titleResponse.json();
-            console.log("Generated title data:", titleData);
-            
-            // Emit event to update the title in the UI
-            chatEvents.emit(CHAT_EVENTS.CHAT_RENAMED, {
-              chatId: chatId,
-              newTitle: titleData.title
+
+            // Call the generate-title endpoint
+            console.log(`Calling ${API_URL}/generate-title`);
+            const titleResponse = await fetch(`${API_URL}/generate-title`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                query: message,
+                column_names: columnNames,
+                chat_id: chatId,
+                user_id: user.id,
+              }),
             });
-          } else {
-            // Try to get error details
-            const errorData = await titleResponse.json().catch(() => ({}));
-            console.error("Title generation failed:", titleResponse.status, errorData);
+
+            console.log(
+              "Title generation response status:",
+              titleResponse.status
+            );
+
+            if (titleResponse.ok) {
+              const titleData = await titleResponse.json();
+              console.log("Generated title data:", titleData);
+
+              // Emit event to update the title in the UI
+              chatEvents.emit(CHAT_EVENTS.CHAT_RENAMED, {
+                chatId: chatId,
+                newTitle: titleData.title,
+              });
+            } else {
+              // Try to get error details
+              const errorData = await titleResponse.json().catch(() => ({}));
+              console.error(
+                "Title generation failed:",
+                titleResponse.status,
+                errorData
+              );
+            }
+          } catch (titleErr) {
+            console.error("Error generating title:", titleErr);
+            // Don't fail the whole operation if title generation fails
           }
-        } catch (titleErr) {
-          console.error("Error generating title:", titleErr);
-          // Don't fail the whole operation if title generation fails
         }
+
+        await analyzeData(message);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsChatLoading(false);
       }
-      
-      await analyzeData(message);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsChatLoading(false);
-    }
-  }, [user, messages, chatId, analyzeData, chatDetails]);
+    },
+    [user, messages, chatId, analyzeData, chatDetails]
+  );
 
   // Set initial messages from the conversation when first loaded
   useEffect(() => {
-    if (conversation && conversation.length > 0) {
-      setMessages(conversation);
-      
-      // Find the last message with role "chart"
-      const chartMessages = conversation.filter(msg => msg.role === "chart");
-      if (chartMessages.length > 0) {
-        const latestChartMessage = chartMessages[chartMessages.length - 1];
-        // Extract chartId from message content
-        const chartId = latestChartMessage.content;
-        
-        // Retrieve the chart specification
-        const loadChartSpec = async () => {
-          try {
-            const chartSpec = await getChartById(chartId);
-            if (chartSpec) {
-              setVisualization(chartSpec as ChartSpec);
+    const fetchData = async () => {
+      if (conversation && conversation.length > 0) {
+        setMessages(conversation);
+
+        // Find the last message with role "chart"
+        const chartMessages = conversation.filter(
+          (msg) => msg.role === "chart"
+        );
+        if (chartMessages.length > 0) {
+          // Extract chartId from message content
+          const latestChartMessage = chartMessages[chartMessages.length - 1];
+          const chartId = latestChartMessage.content;
+          const fileId = chatDetails?.files?.id;
+
+          const chartSpecResponse = await fetch( // Renamed for clarity
+            `${API_URL}/compute_chart_spec_data`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                file_id: fileId,
+                chart_id: chartId,
+              }),
             }
-          } catch (err) {
-            console.error("Error fetching chart specification:", err);
-            setError(err instanceof Error ? err.message : "Error fetching chart");
+          );
+
+          // It seems like chartSpecResponse might be the actual data,
+          // or you might need to call .json() on it.
+          // The original code had a `loadChartSpec` function that fetched `chartSpec`
+          // but then used `chartSpec` (which was the result of `getChartById`)
+          // instead of the result of the fetch call.
+          // Assuming the fetch call is what's needed for the visualization:
+          if (chartSpecResponse.ok) {
+            const chartSpecData = await chartSpecResponse.json();
+            // Assuming chartSpecData is in the correct format for setVisualization
+            if (chartSpecData) {
+              setVisualization(chartSpecData as ChartSpec);
+            }
+          } else {
+            console.error(
+              "Error fetching chart spec data:",
+              await chartSpecResponse.text()
+            );
+            setError("Error fetching chart data");
           }
-        };
-        
-        loadChartSpec();
+
+        }
       }
-    }
-  }, [conversation]); // Only depend on conversation changes
+    };
+
+    fetchData();
+  }, [conversation, chatDetails]); // Added chatDetails to dependency array
 
   // Handle conversation error
   useEffect(() => {
@@ -316,40 +369,65 @@ export default function ChatPage() {
 
   // Render loading state while user or conversation is loading
   if (!isLoaded) {
-    return <div className="flex items-center justify-center h-screen">Loading user...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading user...
+      </div>
+    );
   }
-  
+
   if (!isSignedIn || !user) {
-    return <div className="flex items-center justify-center h-screen">Please sign in to access this chat.</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Please sign in to access this chat.
+      </div>
+    );
   }
 
   if (isConversationLoading) {
-    return <div className="flex items-center justify-center h-screen">Loading conversation...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading conversation...
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col h-full overflow-hidden text-black">
-      <SiteHeader 
-        chatTitle={chatTitle} 
-        fileName={chatDetails?.files?.originalFilename} 
+      <SiteHeader
+        chatTitle={chatTitle}
+        fileName={chatDetails?.files?.originalFilename}
         fileStatus="available"
-        filePath={chatDetails?.files?.storage_path || chatDetails?.files?.url || chatDetails?.files?.storagePath}
+        filePath={
+          chatDetails?.files?.storage_path ||
+          chatDetails?.files?.url ||
+          chatDetails?.files?.storagePath
+        }
       />
       <div className="flex-1 overflow-auto">
         {/* Main content container with side-by-side layout */}
         <div className="flex h-full pt-4">
           {/* Chat column - messages and input */}
-          <div className={`flex flex-col transition-all duration-300 ease-in-out ${visualization ? 'md:w-1/2' : 'w-full'}`}>
+          <div
+            className={`flex flex-col transition-all duration-300 ease-in-out ${
+              visualization ? "md:w-1/2" : "w-full"
+            }`}
+          >
             {/* Chat messages */}
             <div className="flex-1 flex items-start justify-center">
               <div className="w-full max-w-2xl">
-                <ScrollArea ref={scrollAreaRef} className="h-[calc(100vh-18rem)] pr-4">
+                <ScrollArea
+                  ref={scrollAreaRef}
+                  className="h-[calc(100vh-18rem)] pr-4"
+                >
                   <div className="space-y-4 p-4">
                     {messages.map((message, index) => (
                       <div
                         key={index}
                         className={`px-4 py-2 rounded-xl shadow-md border border-gray-300/20  ${
-                          message.role === "user" ? "bg-neutral-800 text-white ml-12" : "bg-[#f9f9f9ba] mr-12"
+                          message.role === "user"
+                            ? "bg-neutral-800 text-white ml-12"
+                            : "bg-[#f9f9f9ba] mr-12"
                         }`}
                       >
                         <p className="whitespace-pre-line">{message.content}</p>
@@ -362,7 +440,7 @@ export default function ChatPage() {
 
             {/* Chat input - placed under messages */}
             <div className="p-4">
-              <ChatInput 
+              <ChatInput
                 onSendMessage={handleSendMessage}
                 isLoading={isChatLoading || analyzing}
                 isDisabled={isChatLoading || analyzing}
@@ -383,7 +461,13 @@ export default function ChatPage() {
           </div>
 
           {/* Visualization - right side, appears with smooth transition */}
-          <div className={`md:w-1/2 p-4 flex transition-all duration-300 ease-in-out ${visualization ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'}`}>
+          <div
+            className={`md:w-1/2 p-4 flex transition-all duration-300 ease-in-out ${
+              visualization
+                ? "opacity-100 max-w-full"
+                : "opacity-0 max-w-0 overflow-hidden"
+            }`}
+          >
             {visualization && <ChartBlock spec={visualization} />}
           </div>
         </div>
