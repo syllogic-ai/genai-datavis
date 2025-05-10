@@ -194,14 +194,7 @@ async def analyze_data(
     task_id = enqueue_task(queue_name=ANALYSIS_QUEUE_NAME, task_data=task_data)
 
     if task_id:
-        logfire.info(
-            "Analysis task enqueued successfully",
-            chat_id=request.chat_id,
-            request_id=request.request_id,
-            task_id=task_id,
-            queue_name=ANALYSIS_QUEUE_NAME,
-            processing_time=time.time() - start_time
-        )
+        
         return EnqueueResponse(
             message="Analysis task successfully enqueued.",
             task_id=task_id,

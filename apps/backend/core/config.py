@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 import redis
 import logfire
+from urllib.parse import urlparse
 
 # Load environment variables from .env file
 # Navigate to the correct .env.local path
@@ -54,13 +55,7 @@ def configure_logfire():
             logfire.configure()
         except Exception as e:
             print(f"Failed to configure Logfire: {e}. Run 'logfire auth' to authenticate.")
-            
-    # Enable auto-tracing for key libraries
-    logfire.instrument_httpx()  # HTTP client monitoring
-    logfire.instrument_psycopg()  # PostgreSQL monitoring - if used
-    logfire.instrument_sqlalchemy()  # SQLAlchemy monitoring - if used
-    logfire.instrument_asyncpg()  # Asyncpg monitoring - if used
-    logfire.instrument_redis()  # Redis monitoring
+        
     
     # Set up OpenAI instrumentation if we're using it
     if OPENAI_API_KEY:

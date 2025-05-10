@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 
+from apps.backend.utils.chat import get_message_history
 from apps.backend.utils.utils import get_data
 import duckdb
 import logfire
@@ -43,6 +44,7 @@ class Deps(BaseModel):
     is_follow_up: bool = False
     duck: duckdb.DuckDBPyConnection
     supabase: Client
+    message_history: str
     model_config = {"arbitrary_types_allowed": True}
 
 
@@ -396,6 +398,7 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         result = await sql_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
+            message_history=ctx.deps.message_history
         )
         
         end_time = time.time()
@@ -436,6 +439,7 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         result = await business_insight_agent.run(
             ctx.deps.user_prompt,
             deps=new_deps,
+            message_history=ctx.deps.message_history
         )
         
         end_time = time.time()
@@ -529,6 +533,7 @@ async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
         result = await intent_analysis_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
+            message_history=ctx.deps.message_history
         )
         
         end_time = time.time()
@@ -573,6 +578,7 @@ async def validate_orchestrator_output(
 
 async def process_user_request(
     chat_id: str,
+    
     request_id: str,
     file_id: str,
     user_prompt: str,
@@ -616,6 +622,10 @@ async def process_user_request(
         supabase_key = os.environ.get("SUPABASE_KEY") or sb.SUPABASE_KEY
         supabase_client = create_client(supabase_url, supabase_key)
         
+    message_history = json.dumps(get_message_history(chat_id))
+    
+    print(message_history)
+
     # Create dependencies object
     deps = Deps(
         chat_id=chat_id,
@@ -625,14 +635,18 @@ async def process_user_request(
         last_chart_id=last_chart_id,
         is_follow_up=is_follow_up,
         duck=duck_connection,
-        supabase=supabase_client
+        supabase=supabase_client,
+        message_history=message_history
     )
+    
+
     
     try:
         # Run the orchestrator agent which will manage the workflow
         result = await orchestrator_agent.run(
             user_prompt,
             deps=deps,
+            message_history=deps.message_history
         )
         
         output = result.output
