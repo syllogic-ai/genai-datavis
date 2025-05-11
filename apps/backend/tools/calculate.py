@@ -7,7 +7,7 @@ import json
 import time
 
 from apps.backend.utils.chat import get_message_history, get_last_chart_id
-from apps.backend.utils.utils import get_data
+from apps.backend.utils.utils import get_data, filter_messages_to_role_content
 import duckdb
 import logfire
 from logfire import span
@@ -45,7 +45,7 @@ class Deps(BaseModel):
     is_follow_up: bool = False
     duck: duckdb.DuckDBPyConnection
     supabase: Client
-    message_history: str
+    message_history: List[Dict[str, str]]
     model_config = {"arbitrary_types_allowed": True}
 
 
@@ -383,6 +383,7 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
+    - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
     """
 
     return prompt
@@ -399,7 +400,7 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         result = await sql_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
-            message_history=ctx.deps.message_history
+            
         )
         
         end_time = time.time()
@@ -435,13 +436,14 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         duck=ctx.deps.duck,
         supabase=ctx.deps.supabase,
         message_history=ctx.deps.message_history
+        
     )
     
     try:
         result = await business_insight_agent.run(
             ctx.deps.user_prompt,
             deps=new_deps,
-            message_history=ctx.deps.message_history
+            
         )
         
         end_time = time.time()
@@ -519,12 +521,11 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
-    
+    - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
     Your job is to coordinate the workflow and ensure the user gets a complete answer.
     """
-    
+  
     return prompt
-
 
 @orchestrator_agent.tool
 async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
@@ -536,7 +537,7 @@ async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
         result = await intent_analysis_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
-            message_history=ctx.deps.message_history
+            
         )
         
         end_time = time.time()
@@ -637,13 +638,10 @@ async def process_user_request(
         last_chart_id_task
     )
     
-    print(message_history_result)
     print(last_chart_id_result)
 
-    
-    message_history = json.dumps(message_history_result)
-    
-    print(last_chart_id)
+    message_history = filter_messages_to_role_content(message_history_result)
+
 
     # Create dependencies object
     deps = Deps(
@@ -655,7 +653,7 @@ async def process_user_request(
         is_follow_up=is_follow_up,
         duck=duck_connection,
         supabase=supabase_client,
-        message_history=""
+        message_history=message_history
     )
     
 
@@ -665,7 +663,6 @@ async def process_user_request(
         result = await orchestrator_agent.run(
             user_prompt,
             deps=deps,
-            message_history=deps.message_history
         )
         
         
