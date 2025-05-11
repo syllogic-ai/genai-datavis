@@ -1,5 +1,5 @@
 from apps.backend.tools.calculate import process_user_request
-from apps.backend.utils.chat import append_chat_message
+from apps.backend.utils.chat import append_chat_message, get_chart_specs, convert_data_to_chart_data
 from apps.backend.utils.files import fetch_dataset
 from apps.backend.utils.utils import get_data
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
@@ -122,6 +122,14 @@ class AnalysisRequest(BaseModel):
     is_follow_up: bool = False
     last_chart_id: Optional[str] = None
 
+# Request model for the chart spec data endpoint
+class ChartSpecRequest(BaseModel):
+    """Request model for computing chart spec data."""
+    file_id: str
+    chart_id: str
+    chat_id: str
+    chart_specs: Dict[str, Any]
+
 # Response model for the analysis endpoint
 class AnalysisResponse(BaseModel):
     """Response model for the analysis endpoint."""
@@ -139,6 +147,11 @@ class EnqueueResponse(BaseModel):
     queue_name: str
     request_id: str
     chat_id: str
+
+# Response model for the chart spec data endpoint
+class ChartSpecResponse(BaseModel):
+    """Response model for computed chart spec data."""
+    chart_specs: Dict[str, Any]
 
 ANALYSIS_QUEUE_NAME = "analysis_tasks"
 
@@ -212,6 +225,91 @@ async def analyze_data(
         raise HTTPException(
             status_code=500,
             detail="Failed to enqueue analysis task. Please try again."
+        )
+
+@app.post("/compute_chart_spec_data", response_model=ChartSpecResponse)
+async def compute_chart_spec_data(
+    chart_id: str,
+    file_id: str,
+) -> ChartSpecResponse:
+    """
+    Computes chart data based on chart specifications.
+    
+    Args:
+        chart_id: The ID of the chart
+        file_id: The ID of the file
+        
+    Returns:
+        The chart data response with success status and data if successful.
+    """
+    start_time = time.time()
+    
+    # Log the incoming request
+    logfire.info(
+        "Chart spec data request received",
+        file_id=request.file_id,
+        chart_id=request.chart_id
+    )
+    
+    try:
+        # Get the data using the utility function
+        data_df = get_data(
+            file_id=request.file_id, 
+            chart_id=request.chart_id,
+            supabase=get_supabase_client(),
+            duck_connection=get_db_connection()
+        )
+        
+        if data_df.empty:
+            logfire.warn(
+                "No data returned from get_data",
+                file_id=request.file_id,
+                chart_id=request.chart_id
+            )
+            return ChartSpecResponse(
+                chart_specs=chart_specs
+            )
+        
+        chart_specs = get_chart_specs(
+            chart_id=chart_id,
+            supabase=get_supabase_client()
+        )
+
+        if chart_specs["chartType"] != "kpi":
+            data_cols = list(chart_specs["chartConfig"].keys())
+            x_key = chart_specs["xAxisConfig"]["dataKey"]
+
+            # Update chart specs in the database
+            chart_specs = await convert_data_to_chart_data(
+                data_df,
+                data_cols,
+                x_key
+            )
+        
+        
+        logfire.info(
+            "Chart spec data computed successfully",
+            chat_id=request.chat_id,
+            chart_id=request.chart_id,
+            row_count=len(chart_specs["data"]),
+            processing_time=time.time() - start_time
+        )
+        
+        return ChartSpecResponse(
+            chart_specs=chart_specs
+        )
+        
+    except Exception as e:
+        logfire.error(
+            "Error computing chart spec data",
+            chart_id=request.chart_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            processing_time=time.time() - start_time
+        )
+        
+        return ChartSpecResponse(
+            chart_specs=chart_specs
         )
 
 # Add your existing endpoints here

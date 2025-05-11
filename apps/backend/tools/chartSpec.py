@@ -66,6 +66,7 @@ class BarChartInput(BaseModel):
     title: str = Field(description="The title of the chart")
     description: str = Field(description="a 5 word description of the chart")
     dataColumns: list[str] = Field(description="The columns to use for the bars")
+    xAxisConfig: xAxisConfigClass = Field(description="The configuration for the x-axis")
     xColumn: str = Field(description="The column to use for the x-axis. Should be one of the input dataframe's available columns.")
     
     barConfig: barConfigClass = Field(description="The configuration for the bars")
@@ -227,15 +228,7 @@ def convert_value(value):
         return bool(value)
     return value
 
-def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str], x_key: str) -> list[dict]:
-    chart_data_array = []
-    for i in range(min(len(data_cur), 100)):  # Limit to 100 data points
-        item = {}
-        item[x_key] = data_cur.iloc[i][x_key]
-        for col in data_cols:
-            item[col] = convert_value(data_cur.iloc[i][col])
-        chart_data_array.append(item)
-    return chart_data_array 
+
 
 def convert_chart_data_to_chart_config(data_cur: pd.DataFrame, data_cols: list[str], colors: list[str]) -> dict:
     chart_config = {}
@@ -295,20 +288,28 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
     data_cols = input.dataColumns
     x_key = input.xColumn
     # Calculate the data field
-    chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
+    # chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
     chart_config = convert_chart_data_to_chart_config(data_cur, data_cols, colors)
 
-    return BarChartOutput(
+    response = BarChartOutput(
         chartType=chartType,    
         title=input.title,
         description=input.description,
-        data=chart_data_array,
+        # data=chart_data_array,
         xAxisConfig=xAxisConfigClass(dataKey=input.xColumn),
         chartConfig=chart_config,
         barConfig=input.barConfig,
-        yAxisConfig=input.yAxisConfig,
-        
+        yAxisConfig=input.yAxisConfig, 
     )
+
+    # Update the chart_specs entry in the given chat_id
+    try:
+        chat_id = ctx.deps.chat_id
+        await update_chart_specs(chat_id, response.model_dump())
+    except:
+        print(f"No chat ID in context! Supabase entry not updated.")
+
+    return response
 
 # @viz_agent.tool
 async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaChartOutput:
@@ -323,14 +324,14 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
     data_cols = input.dataColumns
     x_key = input.xColumn
     # Calculate the data field
-    chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
+    # chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
     chart_config = convert_chart_data_to_chart_config(data_cur, data_cols, colors)
 
-    return AreaChartOutput(
+    response = AreaChartOutput(
         chartType=chartType,    
         title=input.title,
         description=input.description,
-        data=chart_data_array,
+        # data=chart_data_array,
         xAxisConfig=xAxisConfigClass(dataKey=input.xColumn),
         chartConfig=chart_config,
         lineType=input.lineType,
@@ -338,11 +339,19 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
         dot=input.dot,
         areaConfig=input.areaConfig,
         stacked=input.stacked,
-        yAxisConfig=input.yAxisConfig,
-        
+        yAxisConfig=input.yAxisConfig,  
     )
 
-def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineChartOutput:
+    # Update the chart_specs entry in the given chat_id
+    try:
+        chat_id = ctx.deps.chat_id
+        await update_chart_specs(chat_id, response.model_dump())
+    except:
+        print(f"No chat ID in context! Supabase entry not updated.")
+
+    return response
+
+async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineChartOutput:
     """
     Enhance the line chart specs with additional information in order to later give it to the frontend to visualize.
     """
@@ -354,14 +363,14 @@ def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineChartOut
     data_cols = input.dataColumns
     x_key = input.xColumn
     # Calculate the data field
-    chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
+    # chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
     chart_config = convert_chart_data_to_chart_config(data_cur, data_cols, colors)  
 
-    return LineChartOutput(
+    response = LineChartOutput(
         chartType=chartType,
         title=input.title,
         description=input.description,
-        data=chart_data_array,
+        # data=chart_data_array,
         xAxisConfig=input.xAxisConfig,
         yAxisConfig=input.yAxisConfig,
         lineType=input.lineType,
@@ -370,7 +379,16 @@ def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineChartOut
         chartConfig=chart_config
     )
 
-def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
+    # Update the chart_specs entry in the given chat_id
+    try:
+        chat_id = ctx.deps.chat_id
+        await update_chart_specs(chat_id, response.model_dump())
+    except:
+        print(f"No chat ID in context! Supabase entry not updated.")
+
+    return response
+
+async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
     """
     Enhance the KPI specs with additional information in order to later give it to the frontend to visualize.
     """
@@ -389,7 +407,7 @@ def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
         change_direction = None
         change_value = None
 
-    return KPIOutput(
+    response = KPIOutput(
         chartType=chartType,
         kpiValue=data_cur.iloc[0][data_col],
         kpiSuffix=input.kpiSuffix,
@@ -404,6 +422,15 @@ def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
         title=input.title,
         description=input.description
     )
+
+    # Update the chart_specs entry in the given chat_id
+    try:
+        chat_id = ctx.deps.chat_id
+        await update_chart_specs(chat_id, response.model_dump())
+    except:
+        print(f"No chat ID in context! Supabase entry not updated.")
+
+    return response
 
 # =============================================== Agent run ===============================================
 # Declare the agent
@@ -461,16 +488,28 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     return prompt
 
 
-async def main():
+async def main(user_prompt, data_cur):
+
+    available_columns = data_cur.columns.tolist()
+
+    viz_deps = Deps(
+        available_columns=available_columns,
+        data_cur=data_cur
+    )
+
     # Run the agent
     async with viz_agent.run_stream(user_prompt=user_prompt, deps=viz_deps) as response:
         tool_return_part = response.all_messages()[-1].parts[0]
         tool_used = tool_return_part.tool_name
         tool_output = tool_return_part.content
+
+        response = remove_null_pairs(tool_output.model_dump())
         # pprint( response.all_messages())
 
         print("tool_used: ", tool_used)
-        print("tool Output: ", remove_null_pairs(tool_output.model_dump()))
+        print("tool Output: ", response)
+
+        return response
 
 
 if __name__ == "__main__":
@@ -481,11 +520,6 @@ if __name__ == "__main__":
         "sales": [100, 200, 300],
         "region": ["North", "South", "East"]
     })
-    available_columns = data_cur.columns.tolist()
+    
 
-    viz_deps = Deps(
-        available_columns=available_columns,
-        data_cur=data_cur
-    )
-
-    asyncio.run(main())
+    response = asyncio.run(main(user_prompt, data_cur))
