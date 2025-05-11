@@ -10,7 +10,7 @@ from supabase import create_client, Client
 import duckdb
 
 # Utility imports
-from apps.backend.utils.redis import dequeue_task, redis_client, UPSTASH_URL
+from apps.backend.utils.redis import dequeue_task, redis_client, UPSTASH_URL, SmartRedisQueue
 from apps.backend.utils.chat import append_chat_message
 from apps.backend.core.config import configure_logfire # For Logfire setup
 
@@ -23,13 +23,18 @@ ANALYSIS_QUEUE_NAME = "analysis_tasks"  # Should match the queue name in app/mai
 # These will be initialized in the main worker function/setup
 supabase_worker_client: Client | None = None
 duckdb_worker_connection: duckdb.DuckDBPyConnection | None = None
+redis_queue: SmartRedisQueue | None = None
 
-print("[DEBUG] Worker module loaded.")
+# Configure local logger for worker-specific output
+import logging
+logger = logging.getLogger("worker")
+logger.setLevel(logging.INFO)
+
+logger.info("Worker module loaded.")
 
 async def initialize_worker_dependencies():
     """Initializes necessary dependencies for the worker like DB connections and Logfire."""
-    global supabase_worker_client, duckdb_worker_connection
-
+    global supabase_worker_client, duckdb_worker_connection, redis_queue
 
     # Supabase setup
     SUPABASE_URL_WORKER = os.getenv("SUPABASE_URL")
@@ -47,50 +52,49 @@ async def initialize_worker_dependencies():
         raise ConnectionError("Redis client not available in worker. Check UPSTASH_REDIS_URL and Redis service.")
     try:
         redis_client.ping()
+        # Initialize the SmartRedisQueue for analysis tasks
+        redis_queue = SmartRedisQueue(ANALYSIS_QUEUE_NAME, redis_client)
+        logfire.info(f"SmartRedisQueue initialized for {ANALYSIS_QUEUE_NAME}")
     except Exception as e:
         raise ConnectionError(f"Worker failed to connect to Redis: {e}")
 
 
 async def process_task_from_queue():
     """
-    Dequeues a task using the synchronous 'dequeue_task', then processes it asynchronously.
+    Dequeues a task using SmartRedisQueue, then processes it asynchronously.
     Handles results and errors, sending messages back to the chat.
     Returns True if a task was dequeued (even if processing failed), False otherwise.
     """
     
-    # 'dequeue_task' is synchronous and blocks until a task is available or an error occurs.
-    # This call will block this coroutine's execution at this point.
+    # Check if redis_queue is initialized
+    if not redis_queue:
+        logger.error("Redis queue not initialized. Cannot dequeue tasks.")
+        return False
+    
     raw_task_data = None
     task_data = None # Initialize task_data to None
     request_id = f"unknown_task_no_data_{int(time.time())}" # Default request_id
     chat_id = None # Default chat_id
 
     try:
-        raw_task_data = dequeue_task(ANALYSIS_QUEUE_NAME)
+        # Use the smart queue to dequeue a task
+        # This will handle backoff internally when the queue is empty
+        task_data = redis_queue.dequeue(timeout=0)
 
-        if raw_task_data:
-            if isinstance(raw_task_data, (str, bytes)):
-                try:
-                    if isinstance(raw_task_data, bytes):
-                        task_data_str = raw_task_data.decode('utf-8')
-                    else:
-                        task_data_str = raw_task_data
-                    task_data = json.loads(task_data_str)
-                except json.JSONDecodeError as jde:
-                    # Optionally, notify an admin or a dead-letter queue here
-                    return True # Task was dequeued, but parsing failed
-                except Exception as e:
-                    return True # Task was dequeued, but parsing failed
-            elif isinstance(raw_task_data, dict):
-                task_data = raw_task_data
-            else:
-                return True # Task was dequeued, but it's an unexpected type
-
-            # Extract request_id and chat_id early for logging, if available
+        if task_data:
+            # Extract request_id and chat_id early for logging
             request_id = task_data.get("request_id", f"unknown_task_{int(time.time())}")
             chat_id = task_data.get("chat_id")
+            
+            logfire.info(
+                "Task dequeued from queue",
+                request_id=request_id,
+                queue_name=ANALYSIS_QUEUE_NAME,
+                chat_id=chat_id
+            )
 
             if not chat_id:
+                logger.error(f"Dequeued task has no chat_id, cannot process: {request_id}")
                 # No chat_id, so we cannot send an error message to the user.
                 return True # Task was dequeued, but essential info missing
 
@@ -102,8 +106,9 @@ async def process_task_from_queue():
                 user_prompt = task_data["user_prompt"]
                 is_follow_up = task_data.get("is_follow_up", False)
                 last_chart_id = task_data.get("last_chart_id")
-
                 
+                logger.info(f"Processing task {request_id} for chat {chat_id}, file {file_id}")
+
                 # Call the main analysis function (this is async)
                 # It requires initialized supabase_worker_client and duckdb_worker_connection
                 if not supabase_worker_client or not duckdb_worker_connection:
@@ -121,6 +126,13 @@ async def process_task_from_queue():
                 )
                 
                 processing_time = time.time() - task_start_time
+                
+                logfire.info(
+                    "Task processed successfully", 
+                    request_id=request_id,
+                    processing_time=processing_time,
+                    has_chart=result.get("chart_id") is not None
+                )
                
                 # Construct the message payload for append_chat_message
                 chat_message_payload = {
@@ -132,104 +144,164 @@ async def process_task_from_queue():
                 if result.get("chart_id"):
                     chat_message_payload["chart_id"] = result.get("chart_id")
                 
-                # If insights are separate and need to be stored/sent, handle here.
-                # For now, assuming result["answer"] contains the textual insight.
-
+                # Send message to the chat
                 await append_chat_message(chat_id, chat_message_payload)
+                logger.info(f"Sent analysis results to chat {chat_id} for request {request_id}")
 
             except KeyError as e:
                 processing_time = time.time() - task_start_time
+                error_message = f"Missing required field: {e}"
+                
+                logfire.error(
+                    "Task processing failed due to missing required field",
+                    request_id=request_id,
+                    chat_id=chat_id,
+                    error=error_message,
+                    processing_time=processing_time
+                )
                 
                 error_content = f"Sorry, there was an issue with your request (ID: {request_id}). It was missing some information: {e}."
-                if chat_id: # Check if chat_id is available before attempting to send message
+                if chat_id: 
                     try:
                         await append_chat_message(chat_id, {
-                            "role": "system", "content": error_content, 
-                            "created_at": datetime.now().isoformat(), "request_id": request_id, "error": True
+                            "role": "system", 
+                            "content": error_content, 
+                            "created_at": datetime.now().isoformat(), 
+                            "request_id": request_id, 
+                            "error": True
                         })
                     except Exception as notify_err:
-                        print(f"Failed to send KeyError notification for task {request_id} to chat {chat_id}: {notify_err}")
-                else:
-                    error_content = f"Sorry, an unexpected error occurred while processing your request (ID: {request_id}). Please try again later."
-                    # print(error_content)
-                if chat_id: # Check if chat_id is available
+                        logger.error(f"Failed to send KeyError notification for task {request_id} to chat {chat_id}: {notify_err}")
+            
+            except Exception as e:
+                processing_time = time.time() - task_start_time
+                error_message = str(e)
+                
+                logfire.error(
+                    "Task processing failed with exception",
+                    request_id=request_id,
+                    chat_id=chat_id,
+                    error=error_message,
+                    error_type=type(e).__name__,
+                    processing_time=processing_time
+                )
+                
+                error_content = f"Sorry, an unexpected error occurred while processing your request (ID: {request_id}). Please try again later."
+                if chat_id:
                     try:
                         await append_chat_message(chat_id, {
-                            "role": "system", "content": error_content,
-                            "created_at": datetime.now().isoformat(), "request_id": request_id, "error": True
+                            "role": "system", 
+                            "content": error_content,
+                            "created_at": datetime.now().isoformat(), 
+                            "request_id": request_id, 
+                            "error": True
                         })
                     except Exception as notify_err:
-                        print(f"Failed to send general error notification for task {request_id} to chat {chat_id}: {notify_err}")
-                else:
-                    print(f"Cannot send general error notification for task {request_id} as chat_id is missing.")
-        else:
-            # This case implies dequeue_task returned None without raising an exception,
-            # which might happen if redis_client became None after startup OR if the queue was empty and dequeue_task has a timeout.
-            print("dequeue_task returned None. No task available or Redis issue.")
-            return False # No task was dequeued
-            # No sleep here, main_worker_loop's sleep/retry logic will handle pauses if this becomes frequent
-            # If dequeue_task is blocking, this branch should rarely be hit unless redis connection itself is lost
-            # and dequeue_task is designed to return None in that case rather than raise.
+                        logger.error(f"Failed to send error notification for task {request_id} to chat {chat_id}: {notify_err}")
+            
+            return True # Task was processed (successfully or not)
+        
+        return False # No task was dequeued
+    
     except Exception as e:
-        print(f"Error during dequeue_task from '{ANALYSIS_QUEUE_NAME}': {e}")
-        # Consider if this case implies a task was "attempted" to be dequeued.
-        # If dequeue_task itself raises an exception, it means an attempt was made.
-        # However, if the goal is to count *successful* dequeues (even if processing fails later),
-        # this might still be considered a "no task obtained" scenario.
-        # For simplicity, let's say an error *during* dequeue means no task was effectively obtained.
-        await asyncio.sleep(5) # Wait before trying to listen again if dequeue itself fails
+        logger.error(f"Unhandled exception in process_task_from_queue: {e}")
+        import traceback
+        traceback.print_exc()
+        logfire.error(
+            "Unhandled exception in worker",
+            error=str(e),
+            error_type=type(e).__name__,
+            request_id=request_id
+        )
         return False # Error during dequeue attempt
-
-    return True # If we reached here, a task was dequeued and processing was attempted
 
 async def main_worker_loop():
     """Main loop for the worker. Initializes dependencies and continuously processes tasks."""
     try:
         await initialize_worker_dependencies()
     except Exception as e:
-        print(f"Worker failed to initialize dependencies: {e}. Exiting.")
+        logger.error(f"Worker failed to initialize dependencies: {e}. Exiting.")
+        logfire.error("Worker initialization failed", error=str(e))
         return # Cannot run without dependencies
 
-    print("Worker initialized successfully. Starting main processing loop.")
-    consecutive_empty_dequeues = 0
-    max_empty_before_log_spam_reduction = 5 # Log every empty dequeue for the first few times, then less often
+    logger.info("Worker initialized successfully. Starting main processing loop.")
+    logfire.info("Worker initialized and ready for processing")
+    
+    # Track metrics for monitoring
+    tasks_processed = 0
+    last_activity_time = time.time()
+    health_check_interval = 300  # 5 minutes
+    last_health_check = time.time()
     
     while True:
         try:
-            task_processed_or_attempted = await process_task_from_queue()
-            if not task_processed_or_attempted:
-                consecutive_empty_dequeues += 1
-            else:
-                consecutive_empty_dequeues = 0
-
-            if consecutive_empty_dequeues > 0:
-                # Log every empty dequeue for the first few times, then only every 100th attempt
-                if consecutive_empty_dequeues <= max_empty_before_log_spam_reduction or consecutive_empty_dequeues % 100 == 0:
-                    print(f"Worker polling... No task dequeued for {consecutive_empty_dequeues} attempts. Will continue listening.")
-                await asyncio.sleep(1)
-            else:
-                pass
+            task_processed = await process_task_from_queue()
+            
+            if task_processed:
+                tasks_processed += 1
+                last_activity_time = time.time()
+            
+            # Periodically log health metrics (every 5 minutes or after processing 100 tasks)
+            current_time = time.time()
+            if (current_time - last_health_check > health_check_interval or 
+                tasks_processed % 100 == 0 and tasks_processed > 0):
+                
+                # Get queue length for metrics
+                queue_length = redis_queue.get_length() if redis_queue else -1
+                
+                logfire.info(
+                    "Worker health check",
+                    uptime=int(current_time - last_health_check),
+                    tasks_processed=tasks_processed,
+                    current_queue_length=queue_length,
+                    time_since_last_task=int(current_time - last_activity_time)
+                )
+                last_health_check = current_time
+            
+            # The SmartRedisQueue handles its own backoff, so we don't need to add sleep here
+            # Just a minimal sleep to prevent CPU throttling in case of issues
+            await asyncio.sleep(0.01)
 
         except ConnectionRefusedError as e: # More specific Redis connection errors
-            print(f"Redis connection refused: {e}. Is Redis running/accessible? Retrying in 30s...")
+            logger.error(f"Redis connection refused: {e}. Is Redis running/accessible? Retrying in 30s...")
+            logfire.error("Redis connection refused", error=str(e))
             await asyncio.sleep(30)
-        except ConnectionError as e: # Catch Redis connection errors from initialize_worker_dependencies or redis ops
-            print(f"Redis Connection Error: {e}. Attempting to re-initialize and retry in 30s...")
+            # Try to re-initialize
+            try:
+                await initialize_worker_dependencies()
+            except Exception:
+                pass  # Already logged in initialize_worker_dependencies
+                
+        except ConnectionError as e: # Catch Redis connection errors
+            logger.error(f"Redis Connection Error: {e}. Attempting to re-initialize and retry in 30s...")
+            logfire.error("Redis connection error", error=str(e))
             await asyncio.sleep(30)
             try:
                 await initialize_worker_dependencies() # Re-initialize all, including Redis check
             except Exception as init_e:
-                print(f"Failed to re-initialize dependencies after connection error: {init_e}. Waiting longer (60s).")
+                logger.error(f"Failed to re-initialize dependencies after connection error: {init_e}. Waiting longer (60s).")
                 await asyncio.sleep(60)
+                
         except Exception as e:
-            print(f"Unhandled exception in main_worker_loop: {e}")
+            logger.error(f"Unhandled exception in main_worker_loop: {e}")
+            import traceback
+            traceback.print_exc()
+            logfire.error(
+                "Unhandled exception in worker main loop",
+                error=str(e),
+                error_type=type(e).__name__
+            )
             # Avoid rapid restart loops for unknown critical errors
             await asyncio.sleep(15)
-            consecutive_empty_dequeues = 0 # Reset counter after a major unhandled exception
 
 if __name__ == "__main__":
-    # The worker uses asyncio for its core processing logic (process_user_request, append_chat_message).
-    # The dequeue_task is currently synchronous. asyncio.run will manage the event loop.
-    print("Starting GenAI DataVis Background Worker...")
+    # Configure Logfire for observability
+    configure_logfire()
+    
+    logger.info("Starting GenAI DataVis Background Worker...")
+    logfire.info("Worker process starting")
+    
     asyncio.run(main_worker_loop())
-    print("GenAI DataVis Background Worker stopped.") 
+    
+    logger.info("GenAI DataVis Background Worker stopped.")
+    logfire.info("Worker process stopped") 

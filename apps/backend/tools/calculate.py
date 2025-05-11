@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 from supabase import create_client, Client
 from dotenv import dotenv_values
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 from httpx import AsyncClient
 
 from apps.backend.core.config import supabase as sb
@@ -407,12 +408,12 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         ctx.deps.last_chart_id = result.output.chart_id
  
         
+        
         return result.output
     
     except Exception as e:
         end_time = time.time()
         
-
         raise
 
 
@@ -432,7 +433,8 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         last_chart_id=chart_id,  # Set the chart_id
         is_follow_up=ctx.deps.is_follow_up,
         duck=ctx.deps.duck,
-        supabase=ctx.deps.supabase
+        supabase=ctx.deps.supabase,
+        message_history=ctx.deps.message_history
     )
     
     try:
@@ -444,6 +446,7 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         
         end_time = time.time()
 
+        
         
         return result.output
     
@@ -542,6 +545,8 @@ async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
                     chat_id=ctx.deps.chat_id, 
                     request_id=ctx.deps.request_id)
         
+        
+        
         return result.output
     
     except Exception as e:
@@ -623,7 +628,7 @@ async def process_user_request(
         supabase_client = create_client(supabase_url, supabase_key)
         
     # Run tasks in parallel
-    message_history_task = asyncio.create_task(get_message_history(chat_id))
+    message_history_task = asyncio.create_task(get_message_history(chat_id, 5))
     last_chart_id_task = asyncio.create_task(get_last_chart_id(chat_id))
     
     # Await both tasks
@@ -632,8 +637,11 @@ async def process_user_request(
         last_chart_id_task
     )
     
+    print(message_history_result)
+    print(last_chart_id_result)
+
+    
     message_history = json.dumps(message_history_result)
-    last_chart_id = last_chart_id_result
     
     print(last_chart_id)
 
@@ -643,11 +651,11 @@ async def process_user_request(
         request_id=request_id,
         file_id=file_id,
         user_prompt=user_prompt,
-        last_chart_id=last_chart_id,
+        last_chart_id=last_chart_id_result,
         is_follow_up=is_follow_up,
         duck=duck_connection,
         supabase=supabase_client,
-        message_history=message_history
+        message_history=""
     )
     
 
@@ -659,6 +667,8 @@ async def process_user_request(
             deps=deps,
             message_history=deps.message_history
         )
+        
+        
         
         output = result.output
         
