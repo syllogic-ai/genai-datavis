@@ -100,3 +100,61 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
     except Exception as e:
         print(f"Error getting message history for chat {chat_id}: {str(e)}")
         return []
+
+async def update_chart_specs(chat_id: str, chart_specs: Dict[str, Any]) -> bool:
+    """
+    Update the chart_specs entry in the given chat_id.
+    
+    Args:
+        chat_id: The ID of the chat to update
+        chart_specs: The chart specs to update
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Update the chart_specs for the given chat_id
+        update_result = supabase.table("chats").update({
+            "chart_specs": chart_specs,
+            "chart_type": chart_specs["chartType"]
+        }).eq("id", chat_id).execute()
+            
+        if not update_result.data or len(update_result.data) == 0:
+            print(f"Failed to update chart_specs for chat {chat_id}")
+            return False
+            
+        print(f"Successfully updated chart_specs for chat {chat_id}")
+        return True
+        
+    except Exception as e:
+        print(f"Error updating chart_specs: {str(e)}")
+        return False
+
+async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str], x_key: str) -> list[dict]:
+    """
+    Convert the data to a chart data array.
+
+    Args:
+        data_cur: The current data
+        data_cols: The Y-axis columns to convert
+        x_key: The X-axis column to use
+
+    Returns:
+        list[dict]: The chart data array
+    """
+    chart_data_array = []
+    for i in range(min(len(data_cur), 100)):  # Limit to 100 data points
+        item = {}
+        item[x_key] = data_cur.iloc[i][x_key]
+        for col in data_cols:
+            item[col] = convert_value(data_cur.iloc[i][col])
+        chart_data_array.append(item)
+    return chart_data_array 
+
+
+def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
+    """
+    Get the chart specs for a given chart ID.
+    """
+    chart_specs = supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
+    return chart_specs.data[0]["chart_specs"]
