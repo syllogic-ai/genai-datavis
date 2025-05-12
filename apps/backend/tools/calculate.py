@@ -7,6 +7,7 @@ import json
 import time
 
 from apps.backend.utils.chat import get_message_history, get_last_chart_id
+from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.utils import get_data, filter_messages_to_role_content
 import duckdb
 import logfire
@@ -408,7 +409,8 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         # Store the new chart_id in the context for other tools to use
         ctx.deps.last_chart_id = result.output.chart_id
  
-        
+        _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+
         
         return result.output
     
@@ -436,7 +438,6 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         duck=ctx.deps.duck,
         supabase=ctx.deps.supabase,
         message_history=ctx.deps.message_history
-        
     )
     
     try:
@@ -448,7 +449,8 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         
         end_time = time.time()
 
-        
+        _log_llm(result.usage(), business_insight_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+
         
         return result.output
     
@@ -540,13 +542,20 @@ async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
             
         )
         
+        logfire.info(
+            "Intent analysis result",
+            usage=result.usage
+        )
+
+        
         end_time = time.time()
         logfire.info("Intent analysis completed", 
                     execution_time=end_time - start_time,
                     chat_id=ctx.deps.chat_id, 
                     request_id=ctx.deps.request_id)
         
-        
+        _log_llm(result.usage(), intent_analysis_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+
         
         return result.output
     
@@ -584,7 +593,6 @@ async def validate_orchestrator_output(
 
 async def process_user_request(
     chat_id: str,
-    
     request_id: str,
     file_id: str,
     user_prompt: str,
@@ -665,8 +673,11 @@ async def process_user_request(
             deps=deps,
         )
         
-        
-        
+        logfire.info(
+            "Orchestrator result",
+            usage=result.usage
+        )
+       
         output = result.output
         
         # Format the response
@@ -685,6 +696,11 @@ async def process_user_request(
             response["insights"] = output.insights
         
         end_time = time.time()
+        duration = end_time - start_time
+        
+        _log_llm(result.usage(), orchestrator_agent, duration, deps.chat_id, deps.request_id)  
+        
+
         
         logfire.info("Request processed successfully", 
                    execution_time=end_time - start_time,
