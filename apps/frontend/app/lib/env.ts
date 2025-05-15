@@ -33,7 +33,7 @@ export function getEnv<T extends string | boolean | number>(
 /**
  * API URL from environment variables
  */
-export const API_URL = getEnv("API_URL", "http://localhost:8000");
+export const API_URL = getEnv("NEXT_PUBLIC_API_URL", "http://localhost:8000");
 
 /**
  * Feature flags

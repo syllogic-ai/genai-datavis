@@ -4,6 +4,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 import sys
 from supabase import Client
+import pandas as pd
 
 
 # Add parent directory to path for imports
@@ -151,10 +152,36 @@ async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str
         chart_data_array.append(item)
     return chart_data_array 
 
-
 def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
     """
     Get the chart specs for a given chart ID.
     """
     chart_specs = supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
     return chart_specs.data[0]["chart_specs"]
+
+async def get_last_chart_id(chat_id: str) -> str | None:
+    """
+    Get the last chart message ID for a given chat ID.
+
+    Args:
+        chat_id: The ID of the chat to get the last chart message for.
+
+    Returns:
+        str | None: The message content of the last chart message, or None if not found.
+    """
+    try:
+        result = supabase.rpc('get_last_chart_message', {
+            'chat_id': chat_id
+        }).execute()
+
+        if result.data is None or result.data == '':
+            print(f"No chart message found for chat ID {chat_id}")
+            return None
+            
+        # The RPC function is expected to return a single text value
+        return result.data
+        
+    except Exception as e:
+        print(f"Error getting last chart ID for chat {chat_id}: {str(e)}")
+        return None
+

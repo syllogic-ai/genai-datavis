@@ -68,7 +68,6 @@ class BarChartInput(BaseModel):
     dataColumns: list[str] = Field(description="The columns to use for the bars")
     xAxisConfig: xAxisConfigClass = Field(description="The configuration for the x-axis")
     xColumn: str = Field(description="The column to use for the x-axis. Should be one of the input dataframe's available columns.")
-    
     barConfig: barConfigClass = Field(description="The configuration for the bars")
     yAxisConfig: yAxisConfigClass = Field(description="The configuration for the y-axis")
     

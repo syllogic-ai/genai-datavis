@@ -23,6 +23,9 @@ import asyncio
 import duckdb
 import logfire
 
+# Load environment variables
+load_dotenv()
+
 # Import Redis utility
 from apps.backend.utils.redis import enqueue_task, UPSTASH_URL
 
@@ -45,8 +48,7 @@ except ImportError as e:
         print(f"All import attempts for utility functions failed: {str(e2)}")
 
 
-# Load environment variables
-load_dotenv()
+
 
 # Initialize Logfire for observability
 configure_logfire()
