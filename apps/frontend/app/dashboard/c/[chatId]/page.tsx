@@ -321,12 +321,7 @@ export default function ChatPage() {
             }
           );
 
-          // It seems like chartSpecResponse might be the actual data,
-          // or you might need to call .json() on it.
-          // The original code had a `loadChartSpec` function that fetched `chartSpec`
-          // but then used `chartSpec` (which was the result of `getChartById`)
-          // instead of the result of the fetch call.
-          // Assuming the fetch call is what's needed for the visualization:
+          
           if (chartSpecResponse.ok) {
             const chartSpecData = await chartSpecResponse.json();
             // Assuming chartSpecData is in the correct format for setVisualization

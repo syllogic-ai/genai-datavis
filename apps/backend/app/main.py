@@ -2,7 +2,7 @@ from apps.backend.tools.calculate import process_user_request
 from apps.backend.utils.chat import append_chat_message, get_chart_specs, convert_data_to_chart_data
 from apps.backend.utils.files import fetch_dataset
 from apps.backend.utils.utils import get_data
-from fastapi import FastAPI, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, HTTPException, Request, Response, Depends, Header
 from pydantic import BaseModel
 import pandas as pd
 import numpy as np
@@ -21,13 +21,14 @@ import uuid
 import time
 import asyncio
 import duckdb
+import logging
 import logfire
 
 # Load environment variables
 load_dotenv()
 
-# Import Redis utility
-from apps.backend.utils.redis import enqueue_task, UPSTASH_URL
+# Import QStash utilities (replacing Redis)
+from apps.backend.utils.qstash_queue import enqueue_task, verify_qstash_signature, qstash_client
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -42,7 +43,6 @@ except ImportError as e:
     print(f"Failed to import utility functions: {str(e)}")
     # Try other import paths that might work
     try:
-
         from utils.chat import append_chat_message
     except ImportError as e2:
         print(f"All import attempts for utility functions failed: {str(e2)}")
@@ -60,6 +60,9 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # DuckDB setup
 duck_connection = duckdb.connect(":memory:")
+
+# Define queue name as a constant
+ANALYSIS_QUEUE_NAME = "analysis_tasks"
 
 app = FastAPI(title="GenAI DataVis API", 
               description="API for generating data visualizations with AI",
@@ -160,11 +163,9 @@ ANALYSIS_QUEUE_NAME = "analysis_tasks"
 @app.post("/analyze", response_model=EnqueueResponse)
 async def analyze_data(
     request: AnalysisRequest,
-    # supabase_client: Client = Depends(get_supabase_client), # Not needed directly for enqueuing
-    # duck_connection: duckdb.DuckDBPyConnection = Depends(get_db_connection) # Not needed directly for enqueuing
 ) -> EnqueueResponse:
     """
-    Receives an analysis request and enqueues it for background processing.
+    Receives an analysis request and enqueues it for background processing via QStash.
     
     Args:
         request: The analysis request containing prompt and context
@@ -185,17 +186,7 @@ async def analyze_data(
         has_last_chart=request.last_chart_id is not None
     )
     
-    if not UPSTASH_URL or not enqueue_task: # Check if Redis is configured and function is available
-        logfire.error(
-            "Redis not configured or enqueue_task not available. Cannot queue task.",
-            chat_id=request.chat_id,
-            request_id=request.request_id
-        )
-        raise HTTPException(
-            status_code=503, # Service Unavailable
-            detail="Analysis processing service is temporarily unavailable. Please try again later."
-        )
-
+    # Prepare task data
     task_data = {
         "chat_id": request.chat_id,
         "request_id": request.request_id,
@@ -206,9 +197,25 @@ async def analyze_data(
         "received_at": datetime.now().isoformat()
     }
 
-    task_id = enqueue_task(queue_name=ANALYSIS_QUEUE_NAME, task_data=task_data)
-
-    if task_id:
+    try:
+        # Use QStash to enqueue the task
+        task_id = enqueue_task(ANALYSIS_QUEUE_NAME, task_data)
+        
+        if not task_id:
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to enqueue task to QStash"
+            )
+        
+        processing_time = time.time() - start_time
+        logfire.info(
+            "Task successfully enqueued to QStash",
+            request_id=request.request_id,
+            chat_id=request.chat_id,
+            task_id=task_id,
+            queue_name=ANALYSIS_QUEUE_NAME,
+            processing_time=processing_time
+        )
         
         return EnqueueResponse(
             message="Analysis task successfully enqueued.",
@@ -217,14 +224,175 @@ async def analyze_data(
             request_id=request.request_id,
             chat_id=request.chat_id
         )
-    else:
+        
+    except Exception as e:
+        processing_time = time.time() - start_time
+        error_message = str(e)
+        
         logfire.error(
             "Failed to enqueue analysis task",
             chat_id=request.chat_id,
             request_id=request.request_id,
-            processing_time=time.time() - start_time
+            error=error_message,
+            error_type=type(e).__name__,
+            processing_time=processing_time
         )
+        
         raise HTTPException(
+            status_code=503,
+            detail=f"Analysis processing service is temporarily unavailable: {error_message}"
+        )
+
+@app.post("/internal/process-analysis_tasks")
+async def process_analysis_task(
+    request: Request,
+    upstash_signature: Optional[str] = Header(None)
+) -> dict:
+    """
+    Internal endpoint that receives and processes analysis tasks from QStash.
+    This endpoint verifies the QStash signature for security.
+    
+    Args:
+        request: The FastAPI request object containing the task data
+        upstash_signature: The Upstash-Signature header for verification
+        
+    Returns:
+        A response indicating the result of processing the task
+    """
+    start_time = time.time()
+    
+        # Log all headers for debugging
+    print("=== Incoming Request Debug ===")
+    print(f"All headers: {dict(request.headers)}")
+    print(f"Upstash signature: {upstash_signature}")
+    print(f"Request URL: {request.url}")
+    print(f"Request method: {request.method}")
+    
+    # Get the raw request body for signature verification
+    body = await request.body()
+    request_url = str(request.url)
+    
+    # Verify the QStash signature
+    if not verify_qstash_signature(upstash_signature, body, request_url):
+        return Response(
+            content=json.dumps({"error": "Invalid signature"}),
+            status_code=401,
+            media_type="application/json"
+        )
+    
+    # Parse the task data
+    try:
+        task_data = await request.json()
+    except Exception as e:
+        logfire.error("Failed to parse JSON from QStash request", error=str(e))
+        return Response(
+            content=json.dumps({"error": "Invalid JSON payload"}),
+            status_code=400,
+            media_type="application/json"
+        )
+    
+    # Extract the necessary fields
+    try:
+        chat_id = task_data.get("chat_id")
+        request_id = task_data.get("request_id")
+        file_id = task_data.get("file_id")
+        user_prompt = task_data.get("user_prompt")
+        is_follow_up = task_data.get("is_follow_up", False)
+        last_chart_id = task_data.get("last_chart_id")
+        
+        if not all([chat_id, request_id, file_id, user_prompt]):
+            missing = [field for field, value in {
+                "chat_id": chat_id, 
+                "request_id": request_id,
+                "file_id": file_id,
+                "user_prompt": user_prompt
+            }.items() if not value]
+            
+            logfire.error(f"Missing required fields in task: {missing}", request_id=request_id)
+            return Response(
+                content=json.dumps({"error": f"Missing required fields: {missing}"}),
+                status_code=400,
+                media_type="application/json"
+            )
+            
+        # Log the task we're about to process
+        logfire.info(
+            "Processing analysis task from QStash",
+            request_id=request_id,
+            chat_id=chat_id,
+            file_id=file_id
+        )
+        
+        # Call the main analysis function
+        result = await process_user_request(
+            chat_id=chat_id,
+            request_id=request_id,
+            file_id=file_id,
+            user_prompt=user_prompt,
+            is_follow_up=is_follow_up,
+            last_chart_id=last_chart_id,
+            duck_connection=duck_connection,
+            supabase_client=supabase
+        )
+        
+        processing_time = time.time() - start_time
+        
+        logfire.info(
+            "Task processed successfully", 
+            request_id=request_id,
+            processing_time=processing_time,
+            has_chart=result.get("chart_id") is not None
+        )
+        
+        # Construct the message payload for append_chat_message
+        chat_message_payload = {
+            "role": "system", # Or "assistant"
+            "content": result.get("answer", "Analysis complete."),
+            "created_at": datetime.now().isoformat(),
+            "request_id": request_id,
+        }
+        if result.get("chart_id"):
+            chat_message_payload["chart_id"] = result.get("chart_id")
+        
+        # Send message to the chat
+        await append_chat_message(chat_id, chat_message_payload)
+        
+        return Response(
+            content=json.dumps({"success": True, "request_id": request_id}),
+            status_code=200,
+            media_type="application/json"
+        )
+        
+    except Exception as e:
+        error_message = str(e)
+        request_id = task_data.get("request_id", "unknown")
+        chat_id = task_data.get("chat_id")
+        
+        logfire.error(
+            "Error processing task from QStash",
+            request_id=request_id,
+            chat_id=chat_id,
+            error=error_message,
+            error_type=type(e).__name__
+        )
+        
+        # If we have a chat_id, send an error message
+        if chat_id:
+            try:
+                error_content = f"Sorry, an unexpected error occurred while processing your request (ID: {request_id}). Please try again later."
+                await append_chat_message(chat_id, {
+                    "role": "system", 
+                    "content": error_content,
+                    "created_at": datetime.now().isoformat(), 
+                    "request_id": request_id, 
+                    "error": True
+                })
+            except Exception as notify_err:
+                logfire.error(f"Failed to send error notification: {notify_err}")
+        
+        # Return a 500 status to trigger QStash retry logic
+        return Response(
+            content=json.dumps({"error": error_message}),
             status_code=500,
             detail="Failed to enqueue analysis task. Please try again."
         )
@@ -327,6 +495,7 @@ async def health_check():
     # Check database connections
     db_healthy = True
     supabase_healthy = True
+    qstash_healthy = qstash_client is not None
     
     try:
         # Try a simple query on DuckDB
@@ -342,15 +511,22 @@ async def health_check():
         supabase_healthy = False
         logfire.error("Supabase health check failed", error=str(e))
     
-    status = "healthy" if db_healthy and supabase_healthy else "unhealthy"
+    status = "healthy" if db_healthy and supabase_healthy and qstash_healthy else "unhealthy"
     
-    logfire.info("Health check", status=status, db_healthy=db_healthy, supabase_healthy=supabase_healthy)
+    logfire.info(
+        "Health check", 
+        status=status, 
+        db_healthy=db_healthy, 
+        supabase_healthy=supabase_healthy,
+        qstash_healthy=qstash_healthy
+    )
     
     return {
         "status": status,
         "timestamp": datetime.now().isoformat(),
         "database": "healthy" if db_healthy else "unhealthy",
-        "supabase": "healthy" if supabase_healthy else "unhealthy"
+        "supabase": "healthy" if supabase_healthy else "unhealthy",
+        "qstash": "healthy" if qstash_healthy else "unhealthy",
     }
 
 # Add OPTIONS route handler for CORS preflight requests

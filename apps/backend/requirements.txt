@@ -25,11 +25,12 @@ devtools>=0.12.2
 asyncpg>=0.29.0
 annotated_types>=0.6.0
 typing_extensions>=4.10.0
-redis>=5.0
-rq>=1.15
 
-# Add other dependencies below
-redis
+# QStash for background task processing
+qstash>=3.0.0
+
+# Redis client kept for backward compatibility with other features
+# Remove these if Redis is not used elsewhere in the app
 upstash-redis
 
 

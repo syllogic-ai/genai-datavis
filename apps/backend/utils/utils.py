@@ -5,6 +5,25 @@ import pandas as pd
 import duckdb
 import logfire
 from supabase import Client
+from typing import Union, List, Dict, Any
+import json
+
+def filter_messages_to_role_content(json_array: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, str]]:
+    """
+    Compact version of the filter function using list comprehension.
+    """
+    # Parse JSON string if needed
+    if isinstance(json_array, str):
+        messages = json.loads(json_array)
+    else:
+        messages = json_array
+    
+    # Use list comprehension for filtering
+    return [
+        {k: v for k, v in message.items() if k in ['role', 'content']}
+        for message in messages
+        if isinstance(message, dict) and any(k in message for k in ['role', 'content'])
+    ]
 
 def get_data(file_id: str, chart_id: str, supabase: Client = None, duck_connection: duckdb.DuckDBPyConnection = None) -> pd.DataFrame:
     """

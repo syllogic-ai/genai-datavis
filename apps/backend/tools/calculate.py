@@ -7,7 +7,8 @@ import json
 import time
 
 from apps.backend.utils.chat import get_message_history, get_last_chart_id
-from apps.backend.utils.utils import get_data
+from apps.backend.utils.logging import _log_llm
+from apps.backend.utils.utils import get_data, filter_messages_to_role_content
 import duckdb
 import logfire
 from logfire import span
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 from supabase import create_client, Client
 from dotenv import dotenv_values
+from pydantic_ai.messages import ModelMessagesTypeAdapter
 from httpx import AsyncClient
 
 from apps.backend.core.config import supabase as sb
@@ -44,7 +46,7 @@ class Deps(BaseModel):
     is_follow_up: bool = False
     duck: duckdb.DuckDBPyConnection
     supabase: Client
-    message_history: str
+    message_history: List[Dict[str, str]]
     model_config = {"arbitrary_types_allowed": True}
 
 
@@ -382,6 +384,7 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
+    - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
     """
 
     return prompt
@@ -398,7 +401,7 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         result = await sql_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
-            message_history=ctx.deps.message_history
+            
         )
         
         end_time = time.time()
@@ -406,13 +409,14 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         # Store the new chart_id in the context for other tools to use
         ctx.deps.last_chart_id = result.output.chart_id
  
+        _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+
         
         return result.output
     
     except Exception as e:
         end_time = time.time()
         
-
         raise
 
 
@@ -432,17 +436,20 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         last_chart_id=chart_id,  # Set the chart_id
         is_follow_up=ctx.deps.is_follow_up,
         duck=ctx.deps.duck,
-        supabase=ctx.deps.supabase
+        supabase=ctx.deps.supabase,
+        message_history=ctx.deps.message_history
     )
     
     try:
         result = await business_insight_agent.run(
             ctx.deps.user_prompt,
             deps=new_deps,
-            message_history=ctx.deps.message_history
+            
         )
         
         end_time = time.time()
+
+        _log_llm(result.usage(), business_insight_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
 
         
         return result.output
@@ -516,12 +523,11 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
-    
+    - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
     Your job is to coordinate the workflow and ensure the user gets a complete answer.
     """
-    
+  
     return prompt
-
 
 @orchestrator_agent.tool
 async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
@@ -533,14 +539,23 @@ async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
         result = await intent_analysis_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
-            message_history=ctx.deps.message_history
+            
         )
+        
+        logfire.info(
+            "Intent analysis result",
+            usage=result.usage
+        )
+
         
         end_time = time.time()
         logfire.info("Intent analysis completed", 
                     execution_time=end_time - start_time,
                     chat_id=ctx.deps.chat_id, 
                     request_id=ctx.deps.request_id)
+        
+        _log_llm(result.usage(), intent_analysis_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+
         
         return result.output
     
@@ -578,7 +593,6 @@ async def validate_orchestrator_output(
 
 async def process_user_request(
     chat_id: str,
-    
     request_id: str,
     file_id: str,
     user_prompt: str,
@@ -623,7 +637,7 @@ async def process_user_request(
         supabase_client = create_client(supabase_url, supabase_key)
         
     # Run tasks in parallel
-    message_history_task = asyncio.create_task(get_message_history(chat_id))
+    message_history_task = asyncio.create_task(get_message_history(chat_id, 5))
     last_chart_id_task = asyncio.create_task(get_last_chart_id(chat_id))
     
     # Await both tasks
@@ -632,10 +646,10 @@ async def process_user_request(
         last_chart_id_task
     )
     
-    message_history = json.dumps(message_history_result)
-    last_chart_id = last_chart_id_result
-    
-    print(last_chart_id)
+    print(last_chart_id_result)
+
+    message_history = filter_messages_to_role_content(message_history_result)
+
 
     # Create dependencies object
     deps = Deps(
@@ -643,7 +657,7 @@ async def process_user_request(
         request_id=request_id,
         file_id=file_id,
         user_prompt=user_prompt,
-        last_chart_id=last_chart_id,
+        last_chart_id=last_chart_id_result,
         is_follow_up=is_follow_up,
         duck=duck_connection,
         supabase=supabase_client,
@@ -657,9 +671,13 @@ async def process_user_request(
         result = await orchestrator_agent.run(
             user_prompt,
             deps=deps,
-            message_history=deps.message_history
         )
         
+        logfire.info(
+            "Orchestrator result",
+            usage=result.usage
+        )
+       
         output = result.output
         
         # Format the response
@@ -678,6 +696,11 @@ async def process_user_request(
             response["insights"] = output.insights
         
         end_time = time.time()
+        duration = end_time - start_time
+        
+        _log_llm(result.usage(), orchestrator_agent, duration, deps.chat_id, deps.request_id)  
+        
+
         
         logfire.info("Request processed successfully", 
                    execution_time=end_time - start_time,
