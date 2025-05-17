@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 
-from apps.backend.utils.chat import get_message_history, get_last_chart_id, update_chart_specs
+from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, update_chart_specs
 from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.utils import get_data, filter_messages_to_role_content
 import duckdb
@@ -146,7 +146,6 @@ class BarChartOutput(BaseModel):
     chartType: Literal["bar"]
     title: str = Field(description="The title of the chart")
     description: str = Field(description="a 5 word description of the chart")
-    data: list[dict] = Field(description="The data to display in the chart")
     xAxisConfig: xAxisConfigClass = Field(description="The configuration for the x-axis")
     chartConfig: dict = Field(description="The configuration for the chart, including the colors and labels for each column")
     barConfig: barConfigClass = Field(description="The configuration for the bars")
@@ -349,6 +348,7 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - Verify all parentheses are properly balanced in complex expressions
     - Enclose column names containing spaces in double quotes (e.g., "Subscription Date")
     - Ensure date functions are compatible with DuckDB (not SQLite-specific)
+    - If you need to use date functions (like strftime) on a column that is a string (VARCHAR), always cast it to DATE or TIMESTAMP first. For example: strftime('%Y', CAST("Subscription Date" AS DATE))
     - Include NULL handling (NULLIF, COALESCE) when performing division
     - For percentage calculations, use proper formula: ((new - old) / old) * 100
     - Check that all referenced columns exist in the schema
@@ -938,12 +938,27 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
     The input viz_input should be an instance of BarChartInput, AreaChartInput, LineChartInput, or KPIInput.
     """
     start_time = time.time()
+    
+    chart_id = await get_last_chart_id_from_chat_id(ctx.deps.chat_id)
+    print("chart_id: ", chart_id)
+    
+    newDeps = Deps(
+        chat_id=ctx.deps.chat_id,
+        request_id=ctx.deps.request_id,
+        file_id=ctx.deps.file_id,
+        user_prompt=ctx.deps.user_prompt,
+        last_chart_id=chart_id,
+        is_follow_up=ctx.deps.is_follow_up,
+        duck=ctx.deps.duck,
+        supabase=ctx.deps.supabase,
+        message_history=ctx.deps.message_history
+    )
 
     try:
         # Run the viz_agent with the provided input and dependencies
         result = await viz_agent.run(
             ctx.deps.user_prompt,
-            deps=ctx.deps,
+            deps=newDeps,
         )
         
         end_time = time.time()
@@ -966,6 +981,8 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     
     data_cur = get_data(ctx.deps.file_id, ctx.deps.last_chart_id, ctx.deps.supabase, ctx.deps.duck)
     data_cols = data_cur.columns.tolist()
+    
+    logfire.info("Data columns", data_cols=data_cols)
     
     prompt = f"""
     You are a data visualization expert. You are given a user prompt and a dataset.
@@ -995,18 +1012,6 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     """
     return prompt
 
-@viz_agent.output_validator
-async def validate_visual(
-    ctx: RunContext[Deps],
-    output: BarChartOutput
-) -> BarChartOutput:
-    """Validate business insights output."""
-
-    # Ensure the title is not empty
-    if not output.data:
-        raise ValueError("No data to display in the chart")
-    if not output.chartConfig:
-        raise ValueError("No chart config to display in the chart")
 
 # =============================================== Tools definitions ===============================================
 @viz_agent.tool
@@ -1018,20 +1023,16 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
     chartType = "bar"
     colors = colorPaletteClass().colors
 
-    data_cur = get_data(ctx.deps.file_id, ctx.deps.chart_id, ctx.deps.supabase, ctx.deps.duck)
-    data_cols = data_cur.columns.tolist()
-    
     data_cols = input.dataColumns
     x_key = input.xColumn
     # Calculate the data field
     # chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
-    chart_config = convert_chart_data_to_chart_config(data_cur, data_cols, colors)
+    chart_config = convert_chart_data_to_chart_config(data_cols, colors)
 
     response = BarChartOutput(
         chartType=chartType,    
         title=input.title,
         description=input.description,
-        # data=chart_data_array,
         xAxisConfig=xAxisConfigClass(dataKey=input.xColumn),
         chartConfig=chart_config,
         barConfig=input.barConfig,
@@ -1040,8 +1041,16 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
 
     # Update the chart_specs entry in the given chat_id
     try:
-        chat_id = ctx.deps.chat_id
-        await update_chart_specs(chat_id, response.model_dump())
+        chart_id = ctx.deps.last_chart_id
+        await update_chart_specs(chart_id, response.model_dump())
+        
+        message = {
+            "role": "charts",
+            "content": chart_id,
+        }
+        
+        await append_chat_message(ctx.deps.chat_id, message=message)
+        
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
 
@@ -1080,8 +1089,9 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
 
     # Update the chart_specs entry in the given chat_id
     try:
-        chat_id = ctx.deps.chat_id
-        await update_chart_specs(chat_id, response.model_dump())
+        chart_id = ctx.deps.last_chart_id
+        await update_chart_specs(chart_id, response.model_dump())
+        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
 
@@ -1118,8 +1128,9 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
 
     # Update the chart_specs entry in the given chat_id
     try:
-        chat_id = ctx.deps.chat_id
-        await update_chart_specs(chat_id, response.model_dump())
+        chart_id = ctx.deps.last_chart_id
+        await update_chart_specs(chart_id, response.model_dump())
+        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
 
@@ -1163,65 +1174,10 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
 
     # Update the chart_specs entry in the given chat_id
     try:
-        chat_id = ctx.deps.chat_id
-        await update_chart_specs(chat_id, response.model_dump())
+        chart_id = ctx.deps.last_chart_id
+        await update_chart_specs(chart_id, response.model_dump())
+        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
 
     return response
-
-# =============================================== Helper functions ===============================================
-def convert_value(value):
-    if pd.isna(value):
-        return None
-    if isinstance(value, (pd.Timestamp, pd.DatetimeTZDtype)):
-        return value.isoformat()
-    if isinstance(value, (np.integer, np.floating)):
-        return value.item()
-    if isinstance(value, (np.bool_)):
-        return bool(value)
-    return value
-
-def convert_chart_data_to_chart_config(data_cur: pd.DataFrame, data_cols: list[str], colors: list[str]) -> dict:
-    chart_config = {}
-    for i, col in enumerate(data_cols):
-        chart_config[col] = {
-            "color": colors[i % len(colors)],
-            "label": col.replace("_", " ").lower()
-        }
-    return chart_config
-
-def remove_null_pairs(d):
-    """
-    Recursively removes key-value pairs from a dictionary where the value is None.
-    Args:
-        d (dict): The dictionary to process
-    Returns:
-        dict: A new dictionary with None values removed
-    """
-    if not isinstance(d, dict):
-        return d
-        
-    result = {}
-    for key, value in d.items():
-        if value is None:
-            # Skip None values
-            continue
-            
-        if isinstance(value, dict):
-            # Recursively process nested dictionaries
-            nested_result = remove_null_pairs(value)
-            if nested_result:  # Only add if the nested dict is not empty
-                result[key] = nested_result
-        elif isinstance(value, list):
-            # Process lists that might contain dictionaries
-            processed_list = [remove_null_pairs(item) if isinstance(item, dict) else item for item in value]
-            # Filter out None values from the list
-            processed_list = [item for item in processed_list if item is not None]
-            if processed_list:  # Only add if the list is not empty
-                result[key] = processed_list
-        else:
-            # For non-dict, non-list values, keep them as is
-            result[key] = value
-            
-    return result

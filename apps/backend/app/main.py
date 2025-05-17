@@ -1,3 +1,4 @@
+from httpx import request
 from apps.backend.tools.calculate import process_user_request
 from apps.backend.utils.chat import append_chat_message, get_chart_specs, convert_data_to_chart_data
 from apps.backend.utils.files import fetch_dataset
@@ -417,15 +418,15 @@ async def compute_chart_spec_data(
     # Log the incoming request
     logfire.info(
         "Chart spec data request received",
-        file_id=request.file_id,
-        chart_id=request.chart_id
+        file_id=file_id,
+        chart_id=chart_id
     )
     
     try:
         # Get the data using the utility function
         data_df = get_data(
-            file_id=request.file_id, 
-            chart_id=request.chart_id,
+            file_id=file_id, 
+            chart_id=chart_id,
             supabase=get_supabase_client(),
             duck_connection=get_db_connection()
         )
@@ -433,8 +434,8 @@ async def compute_chart_spec_data(
         if data_df.empty:
             logfire.warn(
                 "No data returned from get_data",
-                file_id=request.file_id,
-                chart_id=request.chart_id
+                file_id=file_id,
+                chart_id=chart_id
             )
             return ChartSpecResponse(
                 chart_specs=chart_specs
@@ -459,8 +460,7 @@ async def compute_chart_spec_data(
         
         logfire.info(
             "Chart spec data computed successfully",
-            chat_id=request.chat_id,
-            chart_id=request.chart_id,
+            chart_id=chart_id,
             row_count=len(chart_specs["data"]),
             processing_time=time.time() - start_time
         )
@@ -472,7 +472,7 @@ async def compute_chart_spec_data(
     except Exception as e:
         logfire.error(
             "Error computing chart spec data",
-            chart_id=request.chart_id,
+            chart_id=chart_id,
             error=str(e),
             error_type=type(e).__name__,
             processing_time=time.time() - start_time
