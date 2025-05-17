@@ -6,7 +6,7 @@ import asyncio
 import json
 import time
 
-from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, update_chart_specs
+from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, remove_null_pairs, update_chart_specs
 from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.utils import get_data, filter_messages_to_role_content
 import duckdb
@@ -961,6 +961,19 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
             deps=newDeps,
         )
         
+        response = remove_null_pairs(result.output)
+        
+        chart_id = await get_last_chart_id_from_chat_id(ctx.deps.chat_id)
+        
+        await update_chart_specs(chart_id, response)
+        
+        message = {
+            "role": "charts",
+            "content": chart_id,
+        }
+        
+        await append_chat_message(ctx.deps.chat_id, message=message)
+        
         end_time = time.time()
         # Optionally log usage or timing here
         
@@ -1041,15 +1054,16 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
 
     # Update the chart_specs entry in the given chat_id
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        # chart_id = ctx.deps.last_chart_id
+        # await update_chart_specs(chart_id, response.model_dump())
         
-        message = {
-            "role": "charts",
-            "content": chart_id,
-        }
+        # message = {
+        #     "role": "charts",
+        #     "content": chart_id,
+        # }
         
-        await append_chat_message(ctx.deps.chat_id, message=message)
+        # await append_chat_message(ctx.deps.chat_id, message=message)
+        print("response: ", response.model_dump())
         
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
