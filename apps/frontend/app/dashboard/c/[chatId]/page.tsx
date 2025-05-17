@@ -17,7 +17,7 @@ import {
   getChat,
   getChartById,
 } from "@/app/lib/actions";
-import { ChatMessage } from "@/app/lib/types";
+import { ChartMessage, ChatMessage } from "@/app/lib/types";
 import type { ChartSpec } from "@/types/chart-types";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
@@ -74,6 +74,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [visualization, setVisualization] = useState<ChartSpec | null>(null);
+  const [chartMessages, setChartMessages] = useState<ChartMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,10 +90,7 @@ export default function ChatPage() {
     isLoading: isConversationLoading,
     error: conversationError,
   } = useChatRealtime(chatId, {
-    onUpdate: async (updatedConversation) => {
-
-      
-    },
+    onUpdate: async (updatedConversation) => {},
   });
 
   // Fetch the chat details including the associated file
@@ -274,7 +272,6 @@ export default function ChatPage() {
   );
 
   useEffect(() => {
-
     console.log("chatDetails");
 
     const fetchData = async () => {
@@ -282,17 +279,14 @@ export default function ChatPage() {
         setMessages(conversation);
 
         console.log("conversation hello");
-        // Find the last message with role "chart"
-        const chartMessages = conversation.filter(
+        // Find all messages with role "chart"
+        const chartMsgs = conversation.filter(
           (msg) => msg.role === "chart"
         );
 
-        console.log("chartMessages: ", chartMessages);
+        console.log("chartMessages: ", chartMsgs);
 
-        if (chartMessages.length > 0) {
-          // Extract chartId from message content
-          const latestChartMessage = chartMessages[chartMessages.length - 1];
-          const chartId = latestChartMessage.content;
+        if (chartMsgs.length > 0) {
           const fileId = chatDetails?.files?.id;
 
           // Only proceed if we have a valid fileId
@@ -301,42 +295,60 @@ export default function ChatPage() {
             return; // Exit the function early
           }
 
-          console.log("Fetching chart with fileId:", fileId);
+          const newChartMessages: ChartMessage[] = [];
 
-          const chartSpecResponse = await fetch( // Renamed for clarity
-            `${API_URL}/compute_chart_spec_data`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                chart_id: chartId,
-                file_id: fileId
-              })
-            }
-          );
-          
-          if (chartSpecResponse.ok) {
-            const chartSpecData = await chartSpecResponse.json();
+          // Process each chart message
+          for (const chartMsg of chartMsgs) {
+            const chartId = chartMsg.content;
             
-            
-            const chartSpecDataJson = chartSpecData.chart_specs;
-            
-            console.log("--------------------------------");
-            console.log(chartSpecDataJson);
-            console.log("--------------------------------");
+            console.log(`Fetching chart with ID: ${chartId}, fileId: ${fileId}`);
 
-            // Assuming chartSpecData is in the correct format for setVisualization
-            if (chartSpecData) {
-              setVisualization(chartSpecDataJson as ChartSpec);
+            try {
+              const chartSpecResponse = await fetch(
+                `${API_URL}/compute_chart_spec_data`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    chart_id: chartId,
+                    file_id: fileId,
+                  }),
+                }
+              );
+
+              if (chartSpecResponse.ok) {
+                const chartSpecData = await chartSpecResponse.json();
+                const chartSpecDataJson = chartSpecData.chart_specs;
+
+                // Create a ChartMessage object for this chart
+                if (chartSpecDataJson) {
+                  newChartMessages.push({
+                    id: chartId,
+                    title: chartSpecDataJson.title || "Untitled Chart",
+                    description: chartSpecDataJson.description || "",
+                    type: chartSpecDataJson.type || "bar",
+                    icon: chartSpecDataJson.type || "chart",
+                    timestamp: chartMsg.timestamp
+                  });
+                }
+
+                // For the most recent chart, update the visualization
+                if (chartMsg === chartMsgs[chartMsgs.length - 1]) {
+                  setVisualization(chartSpecDataJson as ChartSpec);
+                }
+              } else {
+                console.error(
+                  `Error fetching chart spec data for chart ${chartId}:`,
+                  await chartSpecResponse.text()
+                );
+              }
+            } catch (error) {
+              console.error(`Error processing chart ${chartId}:`, error);
             }
-          } else {
-            console.error(
-              "Error fetching chart spec data:",
-              await chartSpecResponse.text()
-            );
-            setError("Error fetching chart data");
           }
 
+          // Update chartMessages state with all fetched chart messages
+          setChartMessages(newChartMessages);
         }
       }
     };
@@ -412,21 +424,24 @@ export default function ChatPage() {
             {/* Chat messages */}
             <div className="flex-1 flex items-start justify-center">
               <div className="w-full max-w-2xl">
-                <ScrollArea
-                  ref={scrollAreaRef}
-                  className="h-[calc(100vh-18rem)] pr-4"
-                >
+                <ScrollArea className="h-[calc(100vh-18rem)] pr-4">
                   <div className="space-y-4 p-4">
                     {messages.map((message, index) => (
                       <div
                         key={index}
-                        className={`px-4 py-2 rounded-xl shadow-md border border-gray-300/20  ${
-                          message.role === "user"
-                            ? "bg-neutral-800 text-white ml-12"
-                            : "bg-[#f9f9f9ba] mr-12"
+                        className={`px-4 py-2.5   ${
+                            message.role === "user"
+                            ? "bg-secondary text-primary ml-12 rounded-xl shadow-md border border-gray-300/20"
+                            
+                            : message.role === "system"
+                            ? ""
+                            
+                            : message.role === "chart"
+                            ? "bg-accent text-accent-foreground py-8 rounded-xl shadow-md border border-gray-300/20"
+                            : ""
                         }`}
                       >
-                        <p className="whitespace-pre-line">{message.content}</p>
+                        <p className="whitespace-pre-line">{message.role === "chart" ? <ChartMessage spec={message.content} /> : message.content}</p>
                       </div>
                     ))}
                   </div>

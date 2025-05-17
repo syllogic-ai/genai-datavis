@@ -6,30 +6,32 @@ import { Chat } from "@/db/schema";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import { SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
 import { ChatItem } from "./ChatItem";
+import { ScrollArea } from "@radix-ui/react-scroll-area";
 
 interface SidebarChatListProps {
   initialChats: Chat[];
   currentChatId?: string;
 }
 
-export function SidebarChatList({ 
-  initialChats, 
-  currentChatId 
+export function SidebarChatList({
+  initialChats,
+  currentChatId,
 }: SidebarChatListProps) {
   const [chats, setChats] = useState<Chat[]>(initialChats);
   const router = useRouter();
 
   // Listen for chat renamed events
   useEffect(() => {
-    const handleChatRenamed = async (data: { chatId: string; newTitle: string }) => {
+    const handleChatRenamed = async (data: {
+      chatId: string;
+      newTitle: string;
+    }) => {
       console.log("Chat renamed event received in sidebar:", data);
-      
+
       // Update the chat title in the local state
-      setChats(prevChats => 
-        prevChats.map(chat => 
-          chat.id === data.chatId 
-            ? { ...chat, title: data.newTitle } 
-            : chat
+      setChats((prevChats) =>
+        prevChats.map((chat) =>
+          chat.id === data.chatId ? { ...chat, title: data.newTitle } : chat
         )
       );
     };
@@ -37,12 +39,12 @@ export function SidebarChatList({
     // Handle new chat creation
     const handleChatCreated = async (data: Chat) => {
       console.log("Chat created event received in sidebar:", data);
-      
+
       // Add the new chat to the list (setChats will handle de-duplication)
-      setChats(prevChats => {
+      setChats((prevChats) => {
         // Check if the chat already exists in our list
-        const chatExists = prevChats.some(chat => chat.id === data.id);
-        
+        const chatExists = prevChats.some((chat) => chat.id === data.id);
+
         // Only add the chat if it doesn't already exist
         if (!chatExists) {
           return [data, ...prevChats];
@@ -67,16 +69,20 @@ export function SidebarChatList({
   return (
     <SidebarMenu className="mt-2">
       <SidebarMenuItem className="mb-1">
-        <div className="px-3 text-xs font-medium text-muted-foreground">Recent Chats</div>
+        <div className="px-3 text-xs font-medium text-muted-foreground">
+          Recent Chats
+        </div>
       </SidebarMenuItem>
-      {chats.map((chat) => {
-        const isActive = currentChatId === chat.id;
-        return (
-          <SidebarMenuItem key={chat.id}>
-            <ChatItem chat={chat} isActive={isActive} />
-          </SidebarMenuItem>
-        );
-      })}
+      <ScrollArea className="h-full w-full">
+        {chats.map((chat) => {
+          const isActive = currentChatId === chat.id;
+          return (
+            <SidebarMenuItem key={chat.id} className="mb-1">
+              <ChatItem chat={chat} isActive={isActive} />
+            </SidebarMenuItem>
+          );
+        })}
+      </ScrollArea>
     </SidebarMenu>
   );
-} 
+}

@@ -7,6 +7,15 @@ export type ChatMessage = {
   timestamp?: string;
 };
 
+export type ChartMessage = {
+  id: string;
+  title: string;
+  type: string;
+  description: string;
+  icon: string;
+  timestamp?: string;
+};
+
 // Import ChartSpec from the chart-types file
 export type { ChartSpec } from "@/types/chart-types";
 
