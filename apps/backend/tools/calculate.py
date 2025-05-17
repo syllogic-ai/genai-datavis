@@ -5,6 +5,7 @@ import uuid
 import asyncio
 import json
 import time
+import re
 
 from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, remove_null_pairs, update_chart_specs
 from apps.backend.utils.logging import _log_llm
@@ -186,7 +187,7 @@ class AreaChartOutput(BaseModel):
     chartType: Literal["area", "line"]
     title: str = Field(description="The title of the chart")
     description: str = Field(description="a 5 word description of the chart")
-    data: list[dict] = Field(description="The data to display in the chart")
+    # data: list[dict] = Field(description="The data to display in the chart")
     xAxisConfig: xAxisConfigClass = Field(description="Configuration for the X-axis")
     yAxisConfig: yAxisConfigClass = Field(description="Configuration for the Y-axis")
     lineType: str = Field(default="monotone", description="Type of line interpolation (monotone, step, bump, linear, natural)")
@@ -218,7 +219,7 @@ class LineChartOutput(BaseModel):
     chartType: Literal["line"] = Field(default="line", description="Type of chart")
     title: str = Field(description="The title of the chart")
     description: str = Field(description="a 5 word description of the chart")
-    data: list[dict] = Field(description="The data to display in the chart")
+    # data: list[dict] = Field(description="The data to display in the chart")
     xAxisConfig: xAxisConfigClass = Field(description="Configuration for the X-axis")
     yAxisConfig: yAxisConfigClass = Field(description="Configuration for the Y-axis")
     lineType: str = Field(default="monotone", description="Type of line interpolation (monotone, step, bump, linear, natural)")
@@ -270,16 +271,18 @@ class KPIOutput(BaseModel):
     title: str = Field(description="The title of the chart")
     description: str = Field(default="", description="a 5 word description of the chart")
     chartType: Literal["kpi"] = Field(default="kpi", description="Type of chart")
-    kpiValue: Union[str, int, float] = Field(description="The main value to display in the KPI")
+    # kpiValue: Union[str, int, float] = Field(description="The main value to display in the KPI")
     kpiSuffix: Optional[str] = Field(default=None, description="Text to append after the value (e.g., %, $, etc.)")
     kpiPrefix: Optional[str] = Field(default=None, description="Text to prepend before the value (e.g., $, €, etc.)")
     kpiLabel: Optional[str] = Field(default=None, description="Main label text displayed below the value")
     kpiSubLabel: Optional[str] = Field(default=None, description="Secondary label text displayed below the main label")
-    kpiChange: Optional[float] = Field(default=None, description="Numeric value representing the change (e.g., 5.2 for 5.2% increase)")
-    kpiChangeDirection: Optional[str] = Field(default=None, description="Direction of change ('up', 'down', or 'flat')")
+    # kpiChange: Optional[float] = Field(default=None, description="Numeric value representing the change (e.g., 5.2 for 5.2% increase)")
+    # kpiChangeDirection: Optional[str] = Field(default=None, description="Direction of change ('up', 'down', or 'flat')")
     kpiChangeFormat: Optional[str] = Field(default=None, description="Format string for the change value (e.g., '+0.0%')")
     kpiValueFormat: Optional[str] = Field(default=None, description="Format string for the main value")
     kpiStyles: Optional[kpiStylesClass] = Field(default=None, description="Styling options for the KPI component")
+    dataColumn: str = Field(description="The column to use for the KPI value")
+    changeColumn: Optional[str] = Field(default=None, description="The column to use for the change value")
 
 
 ################################
@@ -574,7 +577,9 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     - If the user asks for insights or analysis based on previous results, use the last_chart_id
     - Always provide a clear, direct answer to the user's question
     - ALWAYS run generate_insights after generate_sql
-    
+    - When the user asks you for a chart, or a chart ask is implied, ALWAYS run the visualize_chart tool, to produce a visualization.
+    - When a user asks for an formatting update in an already generated chart (f.i. the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again. 
+
     Context:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
@@ -1031,6 +1036,7 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
         - visualize_line for line chart
         - visualize_kpi for KPI
     2. Return the EXACT output from the tool call without any modifications
+    3. In case the user requests that you change the color of a column, after the visualization tool execution, use the update_color tool with the appropriate parameters!
     
     The output should be in this format:
     {{
@@ -1050,6 +1056,36 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
 
 
 # =============================================== Tools definitions ===============================================
+@viz_agent.tool
+async def update_color(ctx: RunContext[Deps], chart_specs: dict, update_col: str, update_color: str):
+    """
+    Update the color of a specific field, based on specific user requests.  
+    Args:
+        chart_specs (dict): A dictionary with the current chart specs. The chart specs should be the direct output from one of the visualize tools
+        update_col (str): The column name that should get its color updated.
+        update_color (str): The color to update the update_col, should be in hexcode format, f.i. "#3b82f6", "#ef4444"
+    """
+    logfire.info(f"Prompted to update column {update_col} color to {update_color}!")
+
+
+    # Check if the update column is in the chart spec columns
+    if not update_col in chart_specs["chartConfig"].keys():
+        logfire.warn(f"Error during updating Column {update_col} color. Column not in chart columns")
+        return chart_specs
+    # Check if the color is hex
+    hex_pattern = r'^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$'
+    if not bool(re.match(hex_pattern, update_color)):
+        logfire.warn(f"{update_color} is not a valid HEX color code!")
+        return chart_specs
+
+    # Update the color
+    chart_specs["chartConfig"][update_col]["color"] = update_color
+
+    return chart_specs
+
+
+
+
 @viz_agent.tool
 async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChartOutput:
     """
@@ -1102,12 +1138,11 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
     chartType = "area"
     colors = colorPaletteClass().colors
 
-    data_cur = ctx.deps.data_cur
     data_cols = input.dataColumns
     x_key = input.xColumn
     # Calculate the data field
     # chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
-    chart_config = convert_chart_data_to_chart_config(data_cur, data_cols, colors)
+    chart_config = convert_chart_data_to_chart_config(data_cols, colors)
 
     response = AreaChartOutput(
         chartType=chartType,    
@@ -1141,14 +1176,13 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
     """
     print("Called visualize line tool!")
     chartType = "line"
-    colors = colorPaletteClass().colors 
+    colors = colorPaletteClass().colors
 
-    data_cur = ctx.deps.data_cur
     data_cols = input.dataColumns
     x_key = input.xColumn
     # Calculate the data field
     # chart_data_array = convert_data_to_chart_data(data_cur, data_cols, x_key)
-    chart_config = convert_chart_data_to_chart_config(data_cur, data_cols, colors)  
+    chart_config = convert_chart_data_to_chart_config(data_cols, colors)
 
     response = LineChartOutput(
         chartType=chartType,
@@ -1181,32 +1215,34 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
     print("Called visualize KPI tool!")
     chartType = "kpi"   
 
-    data_cur = ctx.deps.data_cur
-    data_col = input.dataColumn
-    change_col = input.changeColumn
+    # data_cur = ctx.deps.data_cur
+    # data_col = input.dataColumn
+    # change_col = input.changeColumn
 
-    print("change_col: ", change_col)
-    if change_col:
-        change_value = data_cur.iloc[0][change_col]
-        change_direction = "up" if data_cur.iloc[0][change_col] > 0 else "down" if data_cur.iloc[0][change_col] < 0 else "flat"
-    else:
-        change_direction = None
-        change_value = None
+    # print("change_col: ", change_col)
+    # if change_col:
+    #     change_value = data_cur.iloc[0][change_col]
+    #     change_direction = "up" if data_cur.iloc[0][change_col] > 0 else "down" if data_cur.iloc[0][change_col] < 0 else "flat"
+    # else:
+    #     change_direction = None
+    #     change_value = None
 
     response = KPIOutput(
         chartType=chartType,
-        kpiValue=data_cur.iloc[0][data_col],
+        # kpiValue=data_cur.iloc[0][data_col],
         kpiSuffix=input.kpiSuffix,
         kpiPrefix=input.kpiPrefix,
         kpiLabel=input.kpiLabel,
         kpiSubLabel=input.kpiSubLabel,
-        kpiChange=change_value,
-        kpiChangeDirection=change_direction,
+        # kpiChange=change_value,
+        # kpiChangeDirection=change_direction,
         kpiChangeFormat=input.kpiChangeFormat,
         kpiValueFormat=input.kpiValueFormat,
         kpiStyles=input.kpiStyles,
         title=input.title,
-        description=input.description
+        description=input.description,
+        dataColumn=input.dataColumn,
+        changeColumn=input.changeColumn
     )
 
     # Update the chart_specs entry in the given chat_id
