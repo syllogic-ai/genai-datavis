@@ -460,6 +460,11 @@ async def compute_chart_spec_data(
         
 
         if chart_specs["chartType"] != "kpi":
+            logfire.info(
+            f"{chart_specs["chartType"]} chart under preparation",
+            specs=chart_specs,
+            processing_time=time.time() - start_time
+            )
             data_cols = list(chart_specs["chartConfig"].keys())
             x_key = chart_specs["xAxisConfig"]["dataKey"]
 
@@ -472,12 +477,60 @@ async def compute_chart_spec_data(
             
             chart_specs["data"] = chart_data
             
+            row_count = len(chart_specs["data"])
+
             print("chart_specs: ", chart_specs)
+        
+        else:
+            data_cur = data_df
+            data_col = chart_specs["dataColumn"]
+            
+            logfire.info(
+            "KPI card under preparation",
+            data_cur_col=data_cur.columns,
+            data_col=data_col,
+            data_iloc=data_cur.iloc[0][data_col],
+            specs=chart_specs,
+            processing_time=time.time() - start_time
+            )
+
+            if "changeColumn" in chart_specs.keys():
+                change_col = chart_specs["changeColumn"]
+            else: 
+                change_col = None
+
+            print("change_col: ", change_col)
+            if change_col:
+                logfire.info("KPI Change col exists!", 
+                    change_col=change_col)
+                change_value = data_cur.iloc[0][change_col]
+                change_direction = "up" if data_cur.iloc[0][change_col] > 0 else "down" if data_cur.iloc[0][change_col] < 0 else "flat"
+                
+                if change_value:
+                    chart_specs["kpiChange"] = change_value / 100 # Assuming that the change calculated is %
+                    chart_specs["kpiChangeDirection"] = change_direction
+            else:
+                change_direction = None
+                change_value = None
+            chart_specs["kpiValue"] = data_cur.iloc[0][data_col]
+
+            logfire.info(
+            "KPI card final specs",
+            data_cur_col=data_cur.columns,
+            data_cur=data_cur,
+            data_col=data_col,
+            specs=chart_specs,
+            processing_time=time.time() - start_time
+            )
+
+            row_count = 1
+
+
                 
         logfire.info(
             "Chart spec data computed successfully",
             chart_id=chart_id,
-            row_count=len(chart_specs["data"]),
+            row_count=row_count,
             processing_time=time.time() - start_time
         )
         
