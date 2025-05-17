@@ -55,8 +55,6 @@ export function SiteHeader({chatTitle, fileStatus, fileName, filePath}: {chatTit
   const openFileInfo = () => setIsFileInfoOpen(true);
   const closeFileInfo = () => setIsFileInfoOpen(false);
 
-  // For debugging - log the props to see what's available
-  console.log("SiteHeader props:", { chatTitle, fileStatus, fileName, filePath });
 
   return (
     <header className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 flex h-12 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear">

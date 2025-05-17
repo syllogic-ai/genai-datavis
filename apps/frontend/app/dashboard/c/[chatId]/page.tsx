@@ -90,28 +90,8 @@ export default function ChatPage() {
     error: conversationError,
   } = useChatRealtime(chatId, {
     onUpdate: async (updatedConversation) => {
-      setMessages(updatedConversation);
 
-      // Check for chart messages
-      const chartMessages = updatedConversation.filter(
-        (msg) => msg.role === "chart"
-      );
-      if (chartMessages.length > 0) {
-        const latestChartMessage = chartMessages[chartMessages.length - 1];
-        // Extract chartId from message content
-        const chartId = latestChartMessage.content;
-
-        try {
-          // Retrieve the chart specification using Drizzle
-          const chartSpec = await getChartById(chartId);
-          if (chartSpec) {
-            setVisualization(chartSpec as ChartSpec);
-          }
-        } catch (err) {
-          console.error("Error fetching chart specification:", err);
-          setError(err instanceof Error ? err.message : "Error fetching chart");
-        }
-      }
+      
     },
   });
 
@@ -293,21 +273,35 @@ export default function ChatPage() {
     [user, messages, chatId, analyzeData, chatDetails]
   );
 
-  // Set initial messages from the conversation when first loaded
   useEffect(() => {
+
+    console.log("chatDetails");
+
     const fetchData = async () => {
       if (conversation && conversation.length > 0) {
         setMessages(conversation);
 
+        console.log("conversation hello");
         // Find the last message with role "chart"
         const chartMessages = conversation.filter(
           (msg) => msg.role === "chart"
         );
+
+        console.log("chartMessages: ", chartMessages);
+
         if (chartMessages.length > 0) {
           // Extract chartId from message content
           const latestChartMessage = chartMessages[chartMessages.length - 1];
           const chartId = latestChartMessage.content;
           const fileId = chatDetails?.files?.id;
+
+          // Only proceed if we have a valid fileId
+          if (!fileId) {
+            console.log("Skipping chart fetch - fileId not yet available");
+            return; // Exit the function early
+          }
+
+          console.log("Fetching chart with fileId:", fileId);
 
           const chartSpecResponse = await fetch( // Renamed for clarity
             `${API_URL}/compute_chart_spec_data`,
@@ -315,18 +309,25 @@ export default function ChatPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                file_id: fileId,
                 chart_id: chartId,
-              }),
+                file_id: fileId
+              })
             }
           );
-
           
           if (chartSpecResponse.ok) {
             const chartSpecData = await chartSpecResponse.json();
+            
+            
+            const chartSpecDataJson = chartSpecData.chart_specs;
+            
+            console.log("--------------------------------");
+            console.log(chartSpecDataJson);
+            console.log("--------------------------------");
+
             // Assuming chartSpecData is in the correct format for setVisualization
             if (chartSpecData) {
-              setVisualization(chartSpecData as ChartSpec);
+              setVisualization(chartSpecDataJson as ChartSpec);
             }
           } else {
             console.error(

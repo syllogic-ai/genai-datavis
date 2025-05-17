@@ -960,15 +960,38 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
             ctx.deps.user_prompt,
             deps=newDeps,
         )
+             
+        print("--------------------------------")
+        print("result.output: ", result.output)
+        print("--------------------------------")
         
-        response = remove_null_pairs(result.output)
+        # Check if output is a string and convert it to a dict if necessary
+        output = result.output
+        if isinstance(output, str):
+            try:
+                import json
+                output = json.loads(output)
+            except json.JSONDecodeError as e:
+                print(f"Error parsing JSON: {e}")
+                # If it fails to parse, just use the original output
+                pass
+                
+        response = remove_null_pairs(output)
+        
+        print("--------------------------------")
+        print("response: ", response)
+        print("--------------------------------")
         
         chart_id = await get_last_chart_id_from_chat_id(ctx.deps.chat_id)
         
-        await update_chart_specs(chart_id, response)
+        test = await update_chart_specs(chart_id, response)
+
+        print("--------------------------------")
+        print("test: ", test)
+        print("--------------------------------")
         
         message = {
-            "role": "charts",
+            "role": "chart",
             "content": chart_id,
         }
         

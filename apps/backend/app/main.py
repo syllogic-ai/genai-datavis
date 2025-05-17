@@ -400,20 +400,32 @@ async def process_analysis_task(
 
 @app.post("/compute_chart_spec_data", response_model=ChartSpecResponse)
 async def compute_chart_spec_data(
-    chart_id: str,
-    file_id: str,
+    request: Request,
 ) -> ChartSpecResponse:
     """
     Computes chart data based on chart specifications.
     
     Args:
-        chart_id: The ID of the chart
-        file_id: The ID of the file
+        request: The request containing chart_id and file_id in the body
         
     Returns:
         The chart data response with success status and data if successful.
     """
     start_time = time.time()
+    
+    # Parse the request body
+    request_data = await request.json()
+    print("request_data: ", request_data)
+    
+    
+    chart_id = request_data.get("chart_id")
+    file_id = request_data.get("file_id")
+    
+    if not chart_id or not file_id:
+        raise HTTPException(status_code=400, detail="chart_id and file_id are required")
+    
+    print("chart_id: ", chart_id)
+    print("file_id: ", file_id)
     
     # Log the incoming request
     logfire.info(
@@ -430,7 +442,7 @@ async def compute_chart_spec_data(
             supabase=get_supabase_client(),
             duck_connection=get_db_connection()
         )
-        
+                
         if data_df.empty:
             logfire.warn(
                 "No data returned from get_data",
@@ -438,26 +450,30 @@ async def compute_chart_spec_data(
                 chart_id=chart_id
             )
             return ChartSpecResponse(
-                chart_specs=chart_specs
+                chart_specs={}
             )
         
         chart_specs = get_chart_specs(
             chart_id=chart_id,
             supabase=get_supabase_client()
         )
+        
 
         if chart_specs["chartType"] != "kpi":
             data_cols = list(chart_specs["chartConfig"].keys())
             x_key = chart_specs["xAxisConfig"]["dataKey"]
 
             # Update chart specs in the database
-            chart_specs = await convert_data_to_chart_data(
+            chart_data = await convert_data_to_chart_data(
                 data_df,
                 data_cols,
                 x_key
             )
-        
-        
+            
+            chart_specs["data"] = chart_data
+            
+            print("chart_specs: ", chart_specs)
+                
         logfire.info(
             "Chart spec data computed successfully",
             chart_id=chart_id,
@@ -478,8 +494,9 @@ async def compute_chart_spec_data(
             processing_time=time.time() - start_time
         )
         
+        # Return empty chart specs on error
         return ChartSpecResponse(
-            chart_specs=chart_specs
+            chart_specs={}
         )
 
 # Add your existing endpoints here
