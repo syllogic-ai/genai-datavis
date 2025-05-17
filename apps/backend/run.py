@@ -40,8 +40,9 @@ if __name__ == "__main__":
             port=port,
             reload=debug
         )
-    except ImportError as e:
-        print(f"Error importing app: {str(e)}")
+    except: 
+    # ImportError as e:
+    #     print(f"Error importing app: {str(e)}")
         print("Falling back to module:app format...")
         
         # Fall back to module:app format
