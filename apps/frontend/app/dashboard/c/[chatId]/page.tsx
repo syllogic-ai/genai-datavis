@@ -9,6 +9,7 @@ import { ChartBlock } from "@/components/blocks/ChartBlock";
 import { ConversationHistory } from "@/components/ConversationHistory";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 import { ChatInput } from "@/components/ui/chat-input";
+import { ChartMessage as ChartMessageComponent } from "@/components/dashboard/ChartMessage";
 
 import { API_URL } from "@/app/lib/env";
 import {
@@ -22,6 +23,7 @@ import type { ChartSpec } from "@/types/chart-types";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import { v4 as uuidv4 } from "uuid";
+
 // Custom hook for chat title updates
 function useChatTitle(chatId: string, userId: string | undefined) {
   const [title, setTitle] = useState<string>("New Chat");
@@ -434,14 +436,25 @@ export default function ChatPage() {
                             ? "bg-secondary text-primary ml-12 rounded-xl shadow-md border border-gray-300/20"
                             
                             : message.role === "system"
-                            ? ""
-                            
-                            : message.role === "chart"
-                            ? "bg-accent text-accent-foreground py-8 rounded-xl shadow-md border border-gray-300/20"
-                            : ""
                         }`}
                       >
-                        <p className="whitespace-pre-line">{message.role === "chart" ? <ChartMessage spec={message.content} /> : message.content}</p>
+                          {message.role === "chart" ? (
+                            <ChartMessageComponent 
+                              message={chartMessages.find(chart => chart.id === message.content) || {
+                                id: message.content,
+                                title: "Chart",
+                                type: "unknown",
+                                description: "Chart not found",
+                                icon: ""
+                              }} 
+                              fileId={chatDetails?.files?.id}
+                              setVisualization={setVisualization}
+                            />
+                          ) : (
+                            <p className="whitespace-pre-line">
+                              {message.content}
+                            </p>
+                          )}
                       </div>
                     ))}
                   </div>
