@@ -346,7 +346,7 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - For aggregations, include appropriate GROUP BY clauses.
     - For visualizations, ensure you select appropriate columns.
     - AVOID using DELETE, DROP, UPDATE, ALTER, INSERT operations.
-    - Avoid using comments (-- or /* */) in your SQL.
+    - Don't ever use comments (-- or /* */) in your SQL.
     - The table name is ALWAYS "csv_data"
     - Verify all parentheses are properly balanced in complex expressions
     - Enclose column names containing spaces in double quotes (e.g., "Subscription Date")
@@ -578,7 +578,7 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     - Always provide a clear, direct answer to the user's question
     - ALWAYS run generate_insights after generate_sql
     - When the user asks you for a chart, or a chart ask is implied, ALWAYS run the visualize_chart tool, to produce a visualization.
-    - When a user asks for an formatting update in an already generated chart (f.i. the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again. 
+    - When a user asks for an formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again. 
 
     Context:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
@@ -718,8 +718,11 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     
     You have access to an intent analysis agent that can:
     - Determine if a query needs SQL generation
-    - Generate data insights when needed
-    
+    - Generate data insights when needed.
+
+    Always call the intent agent through the analyze_intent tool!
+    If a chart formatting is asked (e.g. change the color of a chart component), the intent agent should regenerate the chart and update it accordingly.
+        
     Context:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
