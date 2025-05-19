@@ -393,9 +393,12 @@ async def process_analysis_task(
         
         # Return a 500 status to trigger QStash retry logic
         return Response(
-            content=json.dumps({"error": error_message}),
+            content=json.dumps({
+                "error": error_message,
+                "detail": "Failed to enqueue analysis task. Please try again."
+            }),
             status_code=500,
-            detail="Failed to enqueue analysis task. Please try again."
+            media_type="application/json"
         )
 
 @app.post("/compute_chart_spec_data", response_model=ChartSpecResponse)

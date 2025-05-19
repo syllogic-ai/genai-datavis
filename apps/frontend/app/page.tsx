@@ -13,14 +13,10 @@ import { Box } from "lucide-react";
 import { ChartBlock } from "@/components/blocks/ChartBlock";
 import { ConversationHistory } from "@/components/ConversationHistory";
 
-// Import FilePond
-import { FilePond, registerPlugin } from 'react-filepond';
-import FilePondPluginFileValidateType from 'filepond-plugin-file-validate-type';
-import 'filepond/dist/filepond.min.css';
-import type { FilePondFile } from 'filepond';
-
-// Register FilePond plugins
-registerPlugin(FilePondPluginFileValidateType);
+// Add Dropzone and useSupabaseUpload imports
+import { Dropzone } from '@/components/dropzone';
+import { useSupabaseUpload } from '@/hooks/use-supabase-upload';
+import { DropzoneEmptyState, DropzoneContent } from '@/components/dropzone';
 
 // Define form schema
 const formSchema = z.object({
@@ -34,6 +30,8 @@ type ChatMessage = {
   role: 'user' | 'system';
   content: string;
 };
+
+const BUCKET_NAME = 'test-bucket'; // TODO: Replace with your actual bucket name
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -58,6 +56,15 @@ export default function Home() {
     },
   });
 
+  // Initialize useSupabaseUpload
+  const upload = useSupabaseUpload({
+    bucketName: BUCKET_NAME,
+    allowedMimeTypes: ['text/csv', '.csv'],
+    maxFiles: 1,
+    maxFileSize: 10 * 1024 * 1024, // 10MB
+    upsert: true,
+  });
+
   // Scroll to bottom when messages change
   useEffect(() => {
     if (scrollAreaRef.current) {
@@ -68,33 +75,19 @@ export default function Home() {
     }
   }, [messages]);
 
-  // Handle file upload
-  const handleFileUpload = async (fileItems: FilePondFile[]) => {
-    if (fileItems.length === 0) {
-      setFile(null);
-      setFileUrl("");
-      setUploadSuccess(false);
-      return;
-    }
-
-    try {
-      const fileItem = fileItems[0];
-      const fileBlob = fileItem.file as File;
-      setFile(fileBlob);
-      
-      // Upload to Supabase
-      const url = await uploadFileToSupabase(fileBlob);
-      setFileUrl(url);
+  // Watch for successful upload
+  useEffect(() => {
+    if (upload.isSuccess && upload.files.length > 0) {
+      const uploadedFile = upload.files[0];
+      setFile(uploadedFile);
       setUploadSuccess(true);
-      console.log("File uploaded to Supabase:", url);
-      
-      // Hide dropzone once file is uploaded successfully
       setShowDropzone(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error uploading file to storage");
-      console.error("Error uploading to Supabase:", err);
+      // Compose the Supabase public URL for the uploaded file
+      // (Assumes public bucket, adjust if needed)
+      const url = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/${uploadedFile.name}`;
+      setFileUrl(url);
     }
-  };
+  }, [upload.isSuccess, upload.files]);
 
   const analyzeData = async (values: {message: string}) => {
     if (!file) return;
@@ -267,6 +260,8 @@ export default function Home() {
     setShowDropzone(true);
     setAnalysisResult(null);
     setMessages([]);
+    upload.setFiles([]);
+    upload.setErrors([]);
   };
 
   return (
@@ -276,16 +271,11 @@ export default function Home() {
           <div className="flex flex-col justify-center items-center h-full">
             <h1 className="text-2xl font-semibold mb-6 text-center">What data would you like to analyze?</h1>
             <div className="w-full max-w-lg">
-              <FilePond
-                allowMultiple={false}
-                maxFiles={1}
-                acceptedFileTypes={['.csv', 'text/csv']}
-                labelIdle='Drag & Drop your CSV file or <span class="filepond--label-action">Browse</span>'
-                onupdatefiles={handleFileUpload}
-                credits={false}
-                className="filepond-container"
-              />
-
+              {/* Dropzone replaces FilePond */}
+              <Dropzone {...upload}>
+                <DropzoneEmptyState />
+                <DropzoneContent />
+              </Dropzone>
               {error && (
                 <div className="mt-4 p-3 bg-red-100 text-red-700 rounded">
                   {error}
