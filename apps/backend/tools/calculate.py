@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 import re
+from datetime import datetime
 
 from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, remove_null_pairs, update_chart_specs
 from apps.backend.utils.logging import _log_llm
@@ -340,6 +341,7 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     {sample_table}
 
     IMPORTANT INSTRUCTIONS:
+    - Adhere strictly to column names: Use the exact column names and casing as provided in the 'Schema' section. If a column name includes spaces, special characters, or requires case-sensitive matching, enclose it in double quotes (e.g., "Column Name with Spaces", "caseSensitiveName").
     - Your response must contain exactly ONE SQL query terminated with a semicolon.
     - Don't explain your reasoning - just return the SQL.
     - Use proper SQL syntax for DuckDB.
@@ -351,7 +353,6 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - Verify all parentheses are properly balanced in complex expressions
     - Enclose column names containing spaces in double quotes (e.g., "Subscription Date")
     - Ensure date functions are compatible with DuckDB (not SQLite-specific)
-    - If you need to use date functions (like strftime) on a column that is a string (VARCHAR), always cast it to DATE or TIMESTAMP first. For example: strftime('%Y', CAST("Subscription Date" AS DATE))
     - Include NULL handling (NULLIF, COALESCE) when performing division
     - For percentage calculations, use proper formula: ((new - old) / old) * 100
     - Check that all referenced columns exist in the schema
@@ -363,6 +364,15 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - Avoid subqueries where window functions would be more efficient
     - Include appropriate filtering criteria in WHERE clauses
     - For temporal analysis, use consistent date/time extraction methods
+    
+    DUCKDB DATE FUNCTION REQUIREMENTS:
+    - NEVER use the DATE() function - it does not exist in DuckDB
+    - To convert a timestamp to a date, use CAST(timestamp_column AS DATE) directly
+    - For current date, use CURRENT_DATE without any function wrapper
+    - For filtering dates, use: CAST(date_column AS DATE) = CURRENT_DATE
+    - For date/time extraction, use extract() function: EXTRACT(YEAR FROM CAST(date_column AS DATE))
+    - For comparing dates, use CAST(date_column AS DATE) = DATE '2023-01-01'
+    - To truncate dates to specific parts, use date_trunc(): date_trunc('month', CAST(date_column AS DATE))
     
     Previous chart ID (if referenced): {ctx.deps.last_chart_id or "None"}
     User prompt: {ctx.deps.user_prompt}
@@ -482,6 +492,12 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
                     chart_id=chart_id, 
                     request_id=ctx.deps.request_id)
         pass
+
+    def json_serial(obj):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, (datetime, pd.Timestamp)): # Check for datetime and pd.Timestamp
+            return obj.isoformat()
+        raise TypeError (f"Type {type(obj)} not serializable for JSON")
     
     prompt = f"""
     You are a business insight agent that analyzes data query results and provides valuable insights.
@@ -492,16 +508,21 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
     Dataset columns:
     {json.dumps(list(profile.columns.keys()), indent=2)}
     
-    {"" if not chart_sql else f"SQL Query Used:\n{chart_sql}\n"}
+    {"" if not chart_sql else f"SQL Query Used:\\n{chart_sql}\\n"}
     
-    {"" if not chart_data else f"Query Results (sample):\n{json.dumps(chart_data, indent=2)}\n"}
+    {"" if not chart_data else f"Query Results (sample):\\n{json.dumps(chart_data, indent=2, default=json_serial)}\\n"}
+
+    IMPORTANT: If 'Query Results (sample)' is empty or not provided, it means the query did not return any data. 
+    In this case, your primary insight must be to clearly state that no data was found matching the criteria of the user's request. 
+    You can then briefly suggest potential reasons (e.g., no activity on that specific day, filter criteria too narrow) or next steps if appropriate.
+    Do not attempt to generate other business insights if no data is available.
+
+    If data IS available, make your analysis practical and business-focused. Avoid technical jargon and focus on 
+    insights that would help business decision-makers.
     
     Your output must include:
-    1. A title: A concise heading that captures the essence of your insights
-    2. An analysis: A detailed examination of the data with clear, actionable insights
-    
-    Make your analysis practical and business-focused. Avoid technical jargon and focus on 
-    insights that would help business decision-makers.
+    1. A title: A concise heading that captures the essence of your insights (or states no data found).
+    2. An analysis: A detailed examination of the data with clear, actionable insights (or the explanation for no data).
     
     The user's original question was: "{ctx.deps.user_prompt}"
     """
@@ -989,6 +1010,18 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
         print("--------------------------------")
         print("response: ", response)
         print("--------------------------------")
+
+        if not isinstance(response, dict) or not response:
+            logfire.error(
+                "Invalid chart specs received from viz_agent after null removal.",
+                chat_id=ctx.deps.chat_id,
+                request_id=ctx.deps.request_id,
+                viz_agent_output=output,
+                processed_response=response
+            )
+            # Optionally, you could return an error structure or default specs
+            # For now, raising an error to prevent saving invalid specs.
+            raise ValueError("Generated chart specifications are invalid or empty.")
         
         chart_id = await get_last_chart_id_from_chat_id(ctx.deps.chat_id)
         

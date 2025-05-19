@@ -159,6 +159,19 @@ class ChartSpecResponse(BaseModel):
     """Response model for computed chart spec data."""
     chart_specs: Dict[str, Any]
 
+# Title generation request and response models
+class TitleGenerationRequest(BaseModel):
+    """Request model for the title generation endpoint."""
+    query: str
+    column_names: List[str]
+    chat_id: str
+    user_id: str
+
+class TitleGenerationResponse(BaseModel):
+    """Response model for the title generation endpoint."""
+    title: str
+    chat_id: str
+
 ANALYSIS_QUEUE_NAME = "analysis_tasks"
 
 @app.post("/analyze", response_model=EnqueueResponse)
@@ -553,6 +566,106 @@ async def compute_chart_spec_data(
         # Return empty chart specs on error
         return ChartSpecResponse(
             chart_specs={}
+        )
+
+@app.post("/generate-title", response_model=TitleGenerationResponse)
+async def generate_title(
+    request: TitleGenerationRequest,
+) -> TitleGenerationResponse:
+    """
+    Generates a title based on the user's query and dataset information.
+    
+    Args:
+        request: The request containing query, column names, chat_id, and user_id
+        
+    Returns:
+        A response containing the generated title.
+    """
+    start_time = time.time()
+    
+    # Log the incoming request
+    logfire.info(
+        "Title generation request received",
+        chat_id=request.chat_id,
+        user_id=request.user_id,
+        query=request.query[:50],  # Log first 50 chars of query
+        column_count=len(request.column_names)
+    )
+    
+    try:
+        # Generate a title based on the query and column information
+        # Use simpler heuristics for title generation to avoid LLM overhead
+        prompt_words = request.query.strip().lower().split()
+        
+        # Extract key phrases and capitalize words for title
+        important_words = [word.capitalize() for word in prompt_words if len(word) > 3 and word not in 
+                         ['what', 'when', 'where', 'which', 'how', 'could', 'would', 'should', 'about', 'using']]
+        
+        # If we have a very short or empty list, add some column information
+        if len(important_words) < 2:
+            # Add relevant column names to make the title more descriptive
+            column_words = [col.replace('_', ' ').title() for col in request.column_names[:3]] if request.column_names else []
+            important_words.extend(column_words)
+        
+        # Generate title based on query keywords and column names
+        title_components = important_words[:5]  # Limit to 5 words for conciseness
+        generated_title = "Analysis of " + " ".join(title_components) if title_components else ""
+        
+        # If title is too long, truncate it
+        if len(generated_title) > 60:
+            generated_title = generated_title[:57] + "..."
+        
+        # Handle empty title case
+        if not generated_title or generated_title == "Analysis of ":
+            generated_title = f"Data Analysis {datetime.now().strftime('%Y-%m-%d')}"
+        
+        # Update chat title in database
+        try:
+            supabase.table("chats").update({"title": generated_title}).eq("id", request.chat_id).execute()
+            logfire.info("Chat title updated in database", chat_id=request.chat_id)
+        except Exception as db_error:
+            logfire.warning(
+                "Failed to update chat title in database, continuing anyway",
+                chat_id=request.chat_id,
+                error=str(db_error)
+            )
+        
+        processing_time = time.time() - start_time
+        logfire.info(
+            "Title generated successfully",
+            chat_id=request.chat_id,
+            title=generated_title,
+            processing_time=processing_time
+        )
+        
+        return TitleGenerationResponse(
+            title=generated_title,
+            chat_id=request.chat_id
+        )
+        
+    except Exception as e:
+        error_message = str(e)
+        
+        logfire.error(
+            "Error generating title",
+            chat_id=request.chat_id,
+            error=error_message,
+            error_type=type(e).__name__,
+            processing_time=time.time() - start_time
+        )
+        
+        # Return a fallback title on error
+        fallback_title = f"Data Analysis {datetime.now().strftime('%Y-%m-%d')}"
+        
+        # Try to update the title in the database with the fallback
+        try:
+            supabase.table("chats").update({"title": fallback_title}).eq("id", request.chat_id).execute()
+        except Exception:
+            pass  # Silently continue if this also fails
+        
+        return TitleGenerationResponse(
+            title=fallback_title,
+            chat_id=request.chat_id
         )
 
 # Add your existing endpoints here
