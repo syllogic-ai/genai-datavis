@@ -4,7 +4,7 @@ from apps.backend.utils.chat import append_chat_message, get_chart_specs, conver
 from apps.backend.utils.files import fetch_dataset
 from apps.backend.utils.utils import get_data
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, Header
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional
@@ -36,6 +36,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the configuration module for Logfire
 from apps.backend.core.config import configure_logfire
+
+# Import Pydantic AI components
+from pydantic_ai import Agent, RunContext
 
 # Import utility functions
 try:
@@ -171,6 +174,28 @@ class TitleGenerationResponse(BaseModel):
     """Response model for the title generation endpoint."""
     title: str
     chat_id: str
+
+# Define Pydantic model for LLM response for title generation
+class GeneratedTitle(BaseModel):
+    """Pydantic model for the generated title."""
+    title: str = Field(description="A concise and relevant title, maximum 5 words.")
+
+# Create an agent for title generation
+title_agent = Agent(
+    "openai:gpt-4o-mini", # Using a cost-effective and fast model
+    output_type=GeneratedTitle,
+)
+
+@title_agent.system_prompt
+async def title_generation_system_prompt(ctx: RunContext) -> str:
+    # The context (ctx) is not strictly needed here as we pass relevant info directly
+    # but it's good practice to include it for agent system prompts.
+    # The actual user query and columns will be part of the main prompt to the agent.
+    return (
+        "You are an expert in creating concise and informative titles for data analyses. "
+        "Generate a title that is a maximum of 5 words. "
+        "The title should be directly relevant to the user's query and the provided column names."
+    )
 
 ANALYSIS_QUEUE_NAME = "analysis_tasks"
 
@@ -573,7 +598,7 @@ async def generate_title(
     request: TitleGenerationRequest,
 ) -> TitleGenerationResponse:
     """
-    Generates a title based on the user's query and dataset information.
+    Generates a title based on the user's query and dataset information using an AI agent.
     
     Args:
         request: The request containing query, column names, chat_id, and user_id
@@ -592,37 +617,70 @@ async def generate_title(
         column_count=len(request.column_names)
     )
     
+    generated_title = ""
     try:
-        # Generate a title based on the query and column information
-        # Use simpler heuristics for title generation to avoid LLM overhead
-        prompt_words = request.query.strip().lower().split()
+        # Prepare the prompt for the LLM agent
+        prompt_for_agent = (
+    f"USER QUERY: '{request.query}'\n"
+    f"DATASET COLUMNS: {', '.join(request.column_names) if request.column_names else 'N/A'}\n\n"
+    "INSTRUCTIONS:\n"
+    "Generate a concise, specific title (maximum 5 words) that captures the essential purpose of this data analysis.\n"
+    "- Focus on the core analytical goal or insight the user is seeking\n"
+    "- Include relevant data dimension or metric when appropriate\n"
+    "- Use concrete, specific terms rather than generic words like 'Analysis' or 'Data'\n"
+    "- Prioritize action-oriented or insight-focused wording\n"
+    "- Make the title informative and engaging\n\n"
+    "TITLE:"
+)
+
+        # Call the title generation agent
+        agent_response = await title_agent.run(prompt_for_agent)
         
-        # Extract key phrases and capitalize words for title
-        important_words = [word.capitalize() for word in prompt_words if len(word) > 3 and word not in 
-                         ['what', 'when', 'where', 'which', 'how', 'could', 'would', 'should', 'about', 'using']]
+        if agent_response and agent_response.output and agent_response.output.title:
+            generated_title = agent_response.output.title.strip()
+            # Ensure the title is not more than 5 words
+            title_words = generated_title.split()
+            if len(title_words) > 5:
+                generated_title = " ".join(title_words[:5])
         
-        # If we have a very short or empty list, add some column information
-        if len(important_words) < 2:
-            # Add relevant column names to make the title more descriptive
-            column_words = [col.replace('_', ' ').title() for col in request.column_names[:3]] if request.column_names else []
-            important_words.extend(column_words)
-        
-        # Generate title based on query keywords and column names
-        title_components = important_words[:5]  # Limit to 5 words for conciseness
-        generated_title = "Analysis of " + " ".join(title_components) if title_components else ""
-        
-        # If title is too long, truncate it
-        if len(generated_title) > 60:
+        # If title is too long (character wise, though word limit should handle this), truncate it
+        if len(generated_title) > 60: # Max length for Supabase column or general display
             generated_title = generated_title[:57] + "..."
         
-        # Handle empty title case
-        if not generated_title or generated_title == "Analysis of ":
-            generated_title = f"Data Analysis {datetime.now().strftime('%Y-%m-%d')}"
-        
+        # Handle empty title case or if agent failed
+        if not generated_title:
+            logfire.warn(
+                "AI agent failed to generate a title or returned empty. Using fallback.",
+                chat_id=request.chat_id
+            )
+            # Fallback to a simpler heuristic or a default title
+            prompt_words = request.query.strip().lower().split()
+            important_words = [word.capitalize() for word in prompt_words if len(word) > 3 and word not in 
+                             ['what', 'when', 'where', 'which', 'how', 'could', 'would', 'should', 'about', 'using']]
+            if len(important_words) < 2 and request.column_names:
+                column_words = [col.replace('_', ' ').title() for col in request.column_names[:2]]
+                important_words.extend(column_words)
+            
+            title_components = important_words[:5]
+            if title_components:
+                generated_title = " ".join(title_components)
+                # Ensure fallback is also max 5 words and meets length constraints
+                title_words = generated_title.split()
+                if len(title_words) > 5:
+                    generated_title = " ".join(title_words[:5])
+                if len(generated_title) > 60:
+                     generated_title = generated_title[:57] + "..."
+            else:
+                generated_title = f"Analysis {datetime.now().strftime('%b %d')}"
+
+        # Final check for empty title
+        if not generated_title:
+            generated_title = f"Data Insight {datetime.now().strftime('%H:%M')}"
+
         # Update chat title in database
         try:
             supabase.table("chats").update({"title": generated_title}).eq("id", request.chat_id).execute()
-            logfire.info("Chat title updated in database", chat_id=request.chat_id)
+            logfire.info("Chat title updated in database", chat_id=request.chat_id, title=generated_title)
         except Exception as db_error:
             logfire.warning(
                 "Failed to update chat title in database, continuing anyway",
@@ -635,7 +693,8 @@ async def generate_title(
             "Title generated successfully",
             chat_id=request.chat_id,
             title=generated_title,
-            processing_time=processing_time
+            processing_time=processing_time,
+            method="AI Agent" if agent_response and agent_response.output and agent_response.output.title else "Fallback Heuristic"
         )
         
         return TitleGenerationResponse(
@@ -647,7 +706,7 @@ async def generate_title(
         error_message = str(e)
         
         logfire.error(
-            "Error generating title",
+            "Error generating title with AI Agent",
             chat_id=request.chat_id,
             error=error_message,
             error_type=type(e).__name__,
@@ -655,13 +714,18 @@ async def generate_title(
         )
         
         # Return a fallback title on error
-        fallback_title = f"Data Analysis {datetime.now().strftime('%Y-%m-%d')}"
+        fallback_title = f"Data Analysis {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         
         # Try to update the title in the database with the fallback
         try:
             supabase.table("chats").update({"title": fallback_title}).eq("id", request.chat_id).execute()
-        except Exception:
-            pass  # Silently continue if this also fails
+        except Exception as db_err_fallback:
+            logfire.error(
+                "Failed to update chat title in database with fallback title after error",
+                chat_id=request.chat_id,
+                error=str(db_err_fallback)
+            )
+            pass 
         
         return TitleGenerationResponse(
             title=fallback_title,
