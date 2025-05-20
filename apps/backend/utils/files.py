@@ -60,3 +60,14 @@ def extract_schema_sample(file_id: str) -> DatasetProfile:
 
    
     return profile 
+
+def get_column_unique_values(file_id: str, column_name: str) -> list[str]:
+    """
+    Get unique values for a given column.
+    """
+    storage_path = fetch_dataset(file_id)
+    df_scan = pl.read_csv(storage_path, low_memory=True)
+    print(df_scan[column_name].unique().to_list())
+    return df_scan[column_name].unique().to_list()
+
+

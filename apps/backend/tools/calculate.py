@@ -11,6 +11,7 @@ from datetime import datetime
 from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, remove_null_pairs, update_chart_specs
 from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.utils import get_data, filter_messages_to_role_content
+from apps.backend.utils.files import extract_schema_sample, get_column_unique_values as get_unique_values
 import duckdb
 import logfire
 from logfire import span
@@ -23,7 +24,6 @@ from pydantic_ai.messages import ModelMessagesTypeAdapter
 from httpx import AsyncClient
 
 from apps.backend.core.config import supabase as sb
-from apps.backend.utils.files import extract_schema_sample
 from apps.backend.core.models import DatasetProfile
 
 # Fix SSL certificate verification issues for macOS
@@ -68,7 +68,7 @@ class SQLOutput(BaseModel):
     sql: str = Field(description="The generated SQL query")
     insights_title: Optional[str] = Field(default=None, description="Title of the insights if generated")
     insights_analysis: Optional[str] = Field(default=None, description="Business insights analysis if generated")
-
+    success: bool = Field(default=True, description="Whether the SQL query was executed successfully")
 
 class BusinessInsightsOutput(BaseModel):
     """Simplified business insights output with just title and analysis text."""
@@ -389,6 +389,7 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     Execute the SQL query and create a chart record in Supabase.
     """
     start_time = time.time()
+    successful_execution = False
 
     
     sql = input.sql
@@ -421,14 +422,23 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
         }).execute()
         
         # Verify the insertion was successful
-        if not result.data or len(result.data) == 0:
+        if not result.data:
             error_msg = "Failed to create chart record"
-            logfire.error("Chart creation failed", 
+            logfire.warn("Chart creation failed", 
                          error=error_msg, 
                          chat_id=ctx.deps.chat_id, 
                          request_id=ctx.deps.request_id)
-            raise ValueError(error_msg)
-            
+            # raise ValueError(error_msg)
+            successful_execution = False
+        elif  len(result.data) == 0:
+            error_msg = "No data was returned from the query"
+            logfire.warn("Chart creation failed", 
+                         error=error_msg, 
+                         chat_id=ctx.deps.chat_id, 
+                         request_id=ctx.deps.request_id)
+            # raise ValueError(error_msg)
+            successful_execution = False
+
     except Exception as e:
         error_msg = f"Error creating chart record: {str(e)}"
         logfire.error("Supabase error", 
@@ -441,7 +451,25 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     
 
     
-    return SQLOutput(chart_id=result.data[0]["id"], sql=sql,)
+    return SQLOutput(chart_id=result.data[0]["id"], sql=sql, success=successful_execution)
+
+@sql_agent.tool
+async def get_column_unique_values(ctx: RunContext[Deps], column_name: str) -> list[str]:
+    """
+    Get unique values for a given column. Use this tool to get the unique values for a column before using the generate_sql tool, as this can help with applying the correct filters.
+    Args:
+        column_name: The name of the column to get unique values for.
+    Returns:
+        A list of unique values for the given column.
+    """
+    unique_values = get_unique_values(ctx.deps.file_id, column_name)
+
+    logfire.info("Unique values for column", 
+                 column_name=column_name, 
+                 unique_values=unique_values, 
+                 chat_id=ctx.deps.chat_id, 
+                 request_id=ctx.deps.request_id)
+    return unique_values
 
 
 ################################
@@ -590,7 +618,7 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     You have three tools available:
     1. `generate_sql`: Generates SQL queries to extract data from the dataset
     2. `generate_insights`: Analyzes data to provide business insights (requires a chart_id)
-    3. `visualize_chart`: Visualizes data using the chart_agent.
+    3. `visualize_chart`: Visualizes data using the viz_agent.
     
     Your workflow should follow these rules:
     - If the user is asking for specific data, visualizations, or statistics, use generate_sql first
@@ -1065,28 +1093,50 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     You are a data visualization expert. You are given a user prompt and a dataset.
     The dataset has the following columns: {data_cols}
 
-    Your task is to:
-    1. Run one of the following tools with appropriate parameters
-        - visualize_bar for bar chart
-        - visualize_area for area chart
-        - visualize_line for line chart
-        - visualize_kpi for KPI
-    2. Return the EXACT output from the tool call without any modifications
-    3. In case the user requests that you change the color of a column, after the visualization tool execution, use the update_color tool with the appropriate parameters!
+    CRITICAL INSTRUCTIONS:
+    1. You MUST ALWAYS execute EXACTLY ONE of these tools:
+       - visualize_bar for bar charts
+       - visualize_area for area charts
+       - visualize_line for line charts
+       - visualize_kpi for KPIs
     
-    The output should be in this format:
+    2. You CANNOT respond with free-form text or explanations
+    3. You CANNOT skip tool execution
+    4. You CANNOT use any other tools for visualization
+    5. If the user's request is unclear, default to a bar chart using visualize_bar
+    6. During the agent execution, make sure that you keep all the previous parameters that the user has set in previous executions.
+    
+    TOOL SELECTION RULES:
+    - For comparing values across categories: Use visualize_bar
+    - For showing trends over time: Use visualize_line
+    - For showing cumulative values: Use visualize_area
+    - For showing a single important metric: Use visualize_kpi
+    
+    COLOR UPDATE RULES:
+    - If the user requests a color change, first execute the visualization tool
+    - Then use update_color tool with the appropriate parameters. 
+    - Only use the update_color tool if the user has explicitly requested a color change.
+    
+    The final output MUST be the direct result of a tool execution in this format:
     {{
-        "chartType": "bar",
+        "chartType": "bar|area|line|kpi",
         "title": "<title>",
         "description": "<description>",
-        "data": [...],
-        "xAxisConfig": {{"dataKey": "<x_column>"}},
-        "chartConfig": {{...}},
-        "barConfig": {{...}},
-        "yAxisConfig": {{...}}
+        "xAxisConfig": <MANDATORY FIELD>,
+        "chartConfig": <MANDATORY FIELD>,
+        "yAxisConfig": <MANDATORY FIELD>
     }}
 
-    DO NOT modify the tool output in any way. Return it exactly as received from the tool.
+    DO NOT:
+    - Write explanations or justifications
+    - Skip tool execution
+    - Return free-form text
+    - Modify the tool output
+    
+    DO:
+    - Execute exactly one visualization tool
+    - Return the exact tool output
+    - Use update_color if color changes are requested
     """
     return prompt
 

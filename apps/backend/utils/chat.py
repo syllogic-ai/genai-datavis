@@ -12,7 +12,7 @@ import numpy as np
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import supabase from the core configuration
-from apps.backend.core.config import supabase
+from apps.backend.core.config import async_supabase
 
 
 # Add a utility function to update the chat conversation in Supabase
@@ -33,7 +33,7 @@ async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:
             message["timestamp"] = datetime.now().isoformat()
             
         # First, get the current conversation
-        chat_data = supabase.table("chats").select("conversation").eq("id", chat_id).execute()
+        chat_data = await async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
         
         if not chat_data.data or len(chat_data.data) == 0:
             print(f"Chat with ID {chat_id} not found")
@@ -47,7 +47,7 @@ async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:
         
         # Update the conversation in Supabase
         # Use updated_at instead of updatedAt to match the database schema
-        update_result = supabase.table("chats").update({
+        update_result = await async_supabase.table("chats").update({
             "conversation": updated_conversation,
             "updated_at": datetime.now().isoformat()
         }).eq("id", chat_id).execute()
@@ -77,7 +77,7 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
     try:
         if last_n is not None:
             # Use the RPC function to get last n messages
-            result = supabase.rpc('get_last_messages', {
+            result = await async_supabase.rpc('get_last_messages', {
                 'chat_id': chat_id,
                 'n': last_n
             }).execute()
@@ -90,7 +90,7 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
             return result.data
         else:
             # Get all messages using the original approach
-            chat_data = supabase.table("chats").select("conversation").eq("id", chat_id).execute()
+            chat_data = await async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
             
             if not chat_data.data or len(chat_data.data) == 0:
                 print(f"Chat with ID {chat_id} not found")
@@ -116,7 +116,7 @@ async def update_chart_specs(chart_id: str, chart_specs: Dict[str, Any]) -> bool
     """
     try:
         # Update the chart_specs for the given chat_id
-        update_result = supabase.table("charts").update({
+        update_result = await async_supabase.table("charts").update({
             "chart_specs": chart_specs,
             "chart_type": chart_specs["chartType"]
         }).eq("id", chart_id).execute()
@@ -153,11 +153,11 @@ async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str
         chart_data_array.append(item)
     return chart_data_array 
 
-def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
+async def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
     """
     Get the chart specs for a given chart ID.
     """
-    chart_specs = supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
+    chart_specs = await async_supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
     return chart_specs.data[0]["chart_specs"]
 
 async def get_last_chart_id(chat_id: str) -> str | None:
@@ -171,7 +171,7 @@ async def get_last_chart_id(chat_id: str) -> str | None:
         str | None: The message content of the last chart message, or None if not found.
     """
     try:
-        result = supabase.rpc('get_last_chart_message', {
+        result = await async_supabase.rpc('get_last_chart_message', {
             'chat_id': chat_id
         }).execute()
 
@@ -190,7 +190,7 @@ async def get_last_chart_id_from_chat_id(chat_id: str) -> str | None:
     """
     Get the last chart message ID for a given chat ID.
     """
-    result = supabase.table("charts").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
+    result = await async_supabase.table("charts").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
     return result.data[0]["id"] if result.data else None
 
 

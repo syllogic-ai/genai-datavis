@@ -3,6 +3,7 @@ from typing import Union
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
+from supabase.client import AsyncClient
 import redis
 import logfire
 from urllib.parse import urlparse
