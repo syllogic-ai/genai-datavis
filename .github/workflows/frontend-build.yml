@@ -26,7 +26,11 @@ jobs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: apps/frontend/package-lock.json
+        cache-dependency-path: package-lock.json
+
+    - name: Copy package-lock.json
+      run: |
+        cp ../package-lock.json .
 
     - name: Install dependencies
       run: npm ci
