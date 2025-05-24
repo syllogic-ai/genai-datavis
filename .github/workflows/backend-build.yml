@@ -35,6 +35,13 @@ jobs:
         pip install -r apps/backend/requirements.txt
       env:
         PIP_DISABLE_PIP_VERSION_CHECK: 1
+        LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+        UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+        UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        QSTASH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
+        QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+        QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
+        QSTASH_URL: ${{ secrets.QSTASH_URL }}
         
     - name: Run setup.py
       run: |
@@ -46,6 +53,12 @@ jobs:
         SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         LOGFIRE_TOKEN: ${{ secrets.LOGFIRE_TOKEN }}
+        UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+        UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        QSTASH_TOKEN: ${{ secrets.QSTASH_TOKEN }}
+        QSTASH_CURRENT_SIGNING_KEY: ${{ secrets.QSTASH_CURRENT_SIGNING_KEY }}
+        QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
+        QSTASH_URL: ${{ secrets.QSTASH_URL }}
       continue-on-error: false
       
     - name: Check for errors
