@@ -61,7 +61,7 @@ export function BarChartRenderer({ spec }: { spec: ChartSpec }) {
         <BarChart 
           data={spec.data} 
           margin={{ left: 12, right: 12, top: 10, bottom: 10 }}
-          accessibilityLayer={spec.barConfig?.accessibilityLayer ?? false}
+          accessibilityLayer={false}
           layout={isHorizontal ? "vertical" : "horizontal"}
           barGap={spec.barConfig?.barGap}
           barSize={spec.barConfig?.barSize}

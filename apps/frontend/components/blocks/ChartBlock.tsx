@@ -14,12 +14,12 @@ interface ChartBlockProps {
  */
 export function ChartBlock({ spec }: ChartBlockProps) {
   return (
-    <Card className="w-full overflow-hidden bg-[#FFF1E5]">
+    <Card className="w-full overflow-hidden bg-sidebar">
       <CardHeader className="pb-8">
-        <CardTitle className="text-2xl font-bold">{spec.title}</CardTitle>
+        <CardTitle className="text-2xl font-semibold">{spec.title}</CardTitle>
         <CardDescription className="text-md text-gray-500">{spec.description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 h-full">
+      <CardContent className="flex-1 h-full max-h-[300px]">
         <ChartRenderer spec={spec} />
       </CardContent>
     </Card>       

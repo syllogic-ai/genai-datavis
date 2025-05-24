@@ -1,6 +1,6 @@
 "use client";
 
-import { AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, YAxis } from "recharts";
+import { AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, YAxis, ResponsiveContainer } from "recharts";
 import {
   ChartTooltip,
   ChartTooltipContent,
@@ -26,7 +26,7 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
     return null;
   }
 
-  const interval = spec.data.length > 10 ? Math.floor(spec.data.length / 10) : 0;
+  const interval = spec.data.length > 10 ? Math.floor(spec.data.length / 3) : 0;
 
   // Sort data by date using the dataKey from xAxisConfig
   const dateKey = spec.xAxisConfig?.dataKey || (spec.chartType === 'line' ? "datetime" : "date");
@@ -58,7 +58,9 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
   const bottomOpacity = spec.areaConfig?.gradientStops?.bottomOpacity ?? 0.1;
   const topOffset = spec.areaConfig?.gradientStops?.topOffset ?? "5%";
   const bottomOffset = spec.areaConfig?.gradientStops?.bottomOffset ?? "95%";
-  const accessibilityLayer = spec.areaConfig?.accessibilityLayer ?? false;
+  
+  // Explicitly disable accessibility layer to prevent errors
+  const accessibilityLayer = false;
 
   // Create config object compatible with ChartContainer
   const chartConfig: ChartConfig = spec.chartConfig || {};
@@ -93,102 +95,104 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
       config={chartConfig} 
       className="w-full h-full"
     >
-      {spec.chartType === 'area' ? (
-        <AreaChart {...commonProps}>
-          <defs>
-            {useGradient && dataKeys.map((key) => {
+      <ResponsiveContainer width="100%" height="100%">
+        {spec.chartType === 'area' ? (
+          <AreaChart {...commonProps}>
+            <defs>
+              {useGradient && dataKeys.map((key) => {
+                const configColor = chartConfig[key]?.color;
+                const color = typeof configColor === 'string' ? configColor : "#1f77b4";
+                return (
+                  <linearGradient key={`fill${key}`} id={`fill${key}`} x1="0" y1="0" x2="0" y2="1">
+                    <stop
+                      offset={topOffset}
+                      stopColor={color}
+                      stopOpacity={topOpacity}
+                    />
+                    <stop
+                      offset={bottomOffset}
+                      stopColor={color}
+                      stopOpacity={bottomOpacity}
+                    />
+                  </linearGradient>
+                );
+              })}
+            </defs>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey={dateKey}
+              tickLine={spec.xAxisConfig?.tickLine ?? false}
+              axisLine={spec.xAxisConfig?.axisLine ?? false}
+              tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
+              interval={interval}
+              hide={spec.xAxisConfig?.hide ?? false}
+              tickFormatter={formatXAxis}
+            />
+            <YAxis
+              tickLine={spec.yAxisConfig?.tickLine ?? false}
+              axisLine={spec.yAxisConfig?.axisLine ?? false}
+              tickMargin={spec.yAxisConfig?.tickMargin ?? 8}
+              tickCount={spec.yAxisConfig?.tickCount ?? 10}
+              hide={spec.yAxisConfig?.hide ?? false}
+            />
+            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+            
+            {dataKeys.map((key) => {
               const configColor = chartConfig[key]?.color;
               const color = typeof configColor === 'string' ? configColor : "#1f77b4";
               return (
-                <linearGradient key={`fill${key}`} id={`fill${key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset={topOffset}
-                    stopColor={color}
-                    stopOpacity={topOpacity}
-                  />
-                  <stop
-                    offset={bottomOffset}
-                    stopColor={color}
-                    stopOpacity={bottomOpacity}
-                  />
-                </linearGradient>
+                <Area
+                  key={key}
+                  dataKey={key}
+                  type={spec.lineType ?? "monotone"}
+                  strokeWidth={spec.strokeWidth ?? 2}
+                  dot={spec.dot ?? false}
+                  stroke={color}
+                  fill={useGradient ? `url(#fill${key})` : color}
+                  fillOpacity={defaultFillOpacity}
+                  stackId={useStacks ? "a" : undefined}
+                />
               );
             })}
-          </defs>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey={dateKey}
-            tickLine={spec.xAxisConfig?.tickLine ?? false}
-            axisLine={spec.xAxisConfig?.axisLine ?? false}
-            tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
-            interval={interval}
-            hide={spec.xAxisConfig?.hide ?? false}
-            tickFormatter={formatXAxis}
-          />
-          <YAxis
-            tickLine={spec.yAxisConfig?.tickLine ?? false}
-            axisLine={spec.yAxisConfig?.axisLine ?? false}
-            tickMargin={spec.yAxisConfig?.tickMargin ?? 8}
-            tickCount={spec.yAxisConfig?.tickCount ?? 10}
-            hide={spec.yAxisConfig?.hide ?? false}
-          />
-          <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-          
-          {dataKeys.map((key) => {
-            const configColor = chartConfig[key]?.color;
-            const color = typeof configColor === 'string' ? configColor : "#1f77b4";
-            return (
-              <Area
-                key={key}
-                dataKey={key}
-                type={spec.lineType ?? "monotone"}
-                strokeWidth={spec.strokeWidth ?? 2}
-                dot={spec.dot ?? false}
-                stroke={color}
-                fill={useGradient ? `url(#fill${key})` : color}
-                fillOpacity={defaultFillOpacity}
-                stackId={useStacks ? "a" : undefined}
-              />
-            );
-          })}
-        </AreaChart>
-      ) : (
-        <LineChart {...commonProps}>
-          <CartesianGrid vertical={false} />
-          <XAxis
-            dataKey={dateKey}
-            tickLine={spec.xAxisConfig?.tickLine ?? false}
-            axisLine={spec.xAxisConfig?.axisLine ?? false}
-            tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
-            interval={interval}
-            hide={spec.xAxisConfig?.hide ?? false}
-            tickFormatter={formatXAxis}
-          />
-          <YAxis
-            tickLine={spec.yAxisConfig?.tickLine ?? false}
-            axisLine={spec.yAxisConfig?.axisLine ?? false}
-            tickMargin={spec.yAxisConfig?.tickMargin ?? 8}
-            tickCount={spec.yAxisConfig?.tickCount ?? 10}
-            hide={spec.yAxisConfig?.hide ?? false}
-          />
-          <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-          
-          {dataKeys.map((key) => {
-            const configColor = chartConfig[key]?.color;
-            const color = typeof configColor === 'string' ? configColor : (spec.chartConfig?.consumption?.color || "#10B981");
-            return (
-              <Line
-                key={key}
-                dataKey={key}
-                type={spec.lineType ?? "monotone"}
-                strokeWidth={spec.strokeWidth ?? 2}
-                dot={spec.dot ?? false}
-                stroke={color}
-              />
-            );
-          })}
-        </LineChart>
-      )}
+          </AreaChart>
+        ) : (
+          <LineChart {...commonProps}>
+            <CartesianGrid vertical={false} />
+            <XAxis
+              dataKey={dateKey}
+              tickLine={spec.xAxisConfig?.tickLine ?? false}
+              axisLine={spec.xAxisConfig?.axisLine ?? false}
+              tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
+              interval={interval}
+              hide={spec.xAxisConfig?.hide ?? false}
+              tickFormatter={formatXAxis}
+            />
+            <YAxis
+              tickLine={spec.yAxisConfig?.tickLine ?? false}
+              axisLine={spec.yAxisConfig?.axisLine ?? false}
+              tickMargin={spec.yAxisConfig?.tickMargin ?? 8}
+              tickCount={spec.yAxisConfig?.tickCount ?? 10}
+              hide={spec.yAxisConfig?.hide ?? false}
+            />
+            <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+            
+            {dataKeys.map((key) => {
+              const configColor = chartConfig[key]?.color;
+              const color = typeof configColor === 'string' ? configColor : (spec.chartConfig?.consumption?.color || "#10B981");
+              return (
+                <Line
+                  key={key}
+                  dataKey={key}
+                  type={spec.lineType ?? "monotone"}
+                  strokeWidth={spec.strokeWidth ?? 2}
+                  dot={spec.dot ?? false}
+                  stroke={color}
+                />
+              );
+            })}
+          </LineChart>
+        )}
+      </ResponsiveContainer>
     </ChartContainer>
   );
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "llm_usage" ADD COLUMN "api_request" text NOT NULL;
