@@ -539,9 +539,15 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
     Dataset columns:
     {json.dumps(list(profile.columns.keys()), indent=2)}
     
-    {"" if not chart_sql else f"SQL Query Used:\n{chart_sql}\n"}
+    {"" if not chart_sql else f"""
+    SQL Query Used:
+    {chart_sql}
+    """}
     
-    {"" if not chart_data else f"Query Results (sample):\n{json.dumps(chart_data, indent=2, default=json_serial)}\n"}
+    {"" if not chart_data else f"""
+    Query Results (sample):
+    {json.dumps(chart_data, indent=2, default=json_serial)}
+    """}
 
     IMPORTANT: If 'Query Results (sample)' is empty or not provided, it means the query did not return any data. 
     In this case, your primary insight must be to clearly state that no data was found matching the criteria of the user's request. 
