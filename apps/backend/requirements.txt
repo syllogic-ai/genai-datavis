@@ -25,6 +25,7 @@ devtools>=0.12.2
 asyncpg>=0.29.0
 annotated_types>=0.6.0
 typing_extensions>=4.10.0
+redis>=5.0.1
 
 # QStash for background task processing
 qstash>=3.0.0

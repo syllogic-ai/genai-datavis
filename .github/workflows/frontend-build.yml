@@ -5,12 +5,12 @@ on:
     branches: [ main ]
     paths:
       - 'apps/frontend/**'
-      - '.github/workflows/**'
+      - '.github/workflows/frontend-build.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'apps/frontend/**'
-      - '.github/workflows/**'
+      - '.github/workflows/frontend-build.yml'
 
 jobs:
   build:

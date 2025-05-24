@@ -502,7 +502,7 @@ async def compute_chart_spec_data(
 
         if chart_specs["chartType"] != "kpi":
             logfire.info(
-            f"{chart_specs["chartType"]} chart under preparation",
+            f"{chart_specs['chartType']} chart under preparation",
             specs=chart_specs,
             processing_time=time.time() - start_time
             )
