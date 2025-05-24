@@ -75,7 +75,7 @@ logfire.instrument_redis = mock_instrument_redis
 logfire.span = mock_span
 
 # Now import the process_user_request function after the patches
-from apps.backend.tools.calculate import process_user_request
+from apps.backend.tools.llm_interaction import process_user_request
 from apps.backend.core.config import SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 

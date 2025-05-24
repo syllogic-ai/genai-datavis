@@ -12,6 +12,17 @@ class DatasetProfile(BaseModel):
     sample_rows: List[Dict[str, Any]]
     model_config = ConfigDict(extra="forbid")
 
+class Deps(BaseModel):
+    """Dependencies required by all agents in the system."""
+    chat_id: str
+    request_id: str
+    file_id: str
+    user_prompt: str
+    last_chart_id: Optional[str] = None
+    is_follow_up: bool = False
+    duck: Any  # duckdb.DuckDBPyConnection
+    supabase: Any  # Client
+    message_history: List[Dict[str, str]]
 
 class GradientStops(BaseModel):
     """

@@ -15,7 +15,7 @@ from apps.backend.utils.chat import append_chat_message
 from apps.backend.core.config import configure_logfire # For Logfire setup
 
 # Main processing function from your tools
-from apps.backend.tools.calculate import process_user_request
+from apps.backend.tools.llm_interaction import process_user_request
 
 ANALYSIS_QUEUE_NAME = "analysis_tasks"  # Should match the queue name in app/main.py
 
