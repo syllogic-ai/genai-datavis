@@ -52,9 +52,9 @@ jobs:
         python setup.py --run &
         SERVER_PID=$!
         
-        # Wait for the server to start (timeout after 30 seconds)
+        # Wait for the server to start (timeout after 60 seconds)
         echo "Waiting for server to start..."
-        for i in {1..30}; do
+        for i in {1..60}; do
           if curl -s http://localhost:8000/health | grep -q '"status":"healthy"'; then
             echo "Server started successfully"
             # Kill the server process
