@@ -555,7 +555,7 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
     1. A title: A concise heading that captures the essence of your insights (or states no data found).
     2. An analysis: A detailed examination of the data with clear, actionable insights (or the explanation for no data).
     
-    The user's original question was: "{ctx.deps.user_prompt}"
+    The user's original question was: {ctx.deps.user_prompt}
     """
 
     return prompt
