@@ -1,3 +1,7 @@
+![Auto Assign](https://github.com/syllogic-ai/genai-datavis/actions/workflows/auto-assign.yml/badge.svg)
+
+![Proof HTML](https://github.com/syllogic-ai/genai-datavis/actions/workflows/proof-html.yml/badge.svg)
+
 # GenAI DataVis Project
 
 Ever wanted to talk with your visualizations just like talking with ChatGPT? With Syllogic, you can do that! Simply ask what you want, and watch our agent transforming your asks to valuable visual reports!
