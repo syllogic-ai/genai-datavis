@@ -1,7 +1,7 @@
 import uuid
 
 from ..core.models import LLMUsageRow
-from ..core.config import supabase
+from ..core.config import async_supabase
 
 # Helper function for UUID generation
 def uuid_str() -> str:
@@ -104,5 +104,5 @@ def _log_llm(usage: any, agent: any, duration: float, chat_id: str, request_id: 
     }
     
     # Insert the record into the llm_usage table
-    supabase.table("llm_usage").insert(usage_data).execute()
+    async_supabase.table("llm_usage").insert(usage_data).execute()
 

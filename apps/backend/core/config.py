@@ -22,7 +22,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Optional for now
 LOGFIRE_TOKEN = os.getenv("LOGFIRE_TOKEN")  # Logfire write token for production
 
 # Create Supabase client
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+# supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+# Create Async Supabase client
+async_supabase: AsyncClient = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # ---------- Redis / Upstash --------------------------------------
 UPSTASH_REDIS_URL: Union[str, None] = os.getenv("UPSTASH_REDIS_URL")  # rediss://:<pwd>@eu1-your-url.upstash.io:12345

@@ -10,7 +10,7 @@ from __future__ import annotations
 import uuid, io, time, typing as t, requests, polars as pl, duckdb
 from datetime import datetime, timezone
 from supabase import Client
-from ..core.config import supabase   # already created in step-1
+from ..core.config import async_supabase   # already created in step-1
 from ..core.models import DatasetProfile
 
 
@@ -24,13 +24,13 @@ DATA_BUCKET = "test-bucket" if os.environ.get("ENVIRONMENT") == "DEV" else "data
 def _stream_to_storage(resp: requests.Response, storage_path: str) -> None:
     bucket, key = storage_path.split("/", 1)
     # Upload in one go (Supabase python client supports bytes)
-    supabase.storage.from_(bucket).upload(key, resp.content, file_options={"content-type": "text/csv"})
+    async_supabase.storage.from_(bucket).upload(key, resp.content, file_options={"content-type": "text/csv"})
 
 def fetch_dataset(file_id: str) -> str:
     """Download CSV & upload to supabase storage. Returns storage path."""
     t0 = time.perf_counter()
     
-    file_record = supabase.table("files").select("storage_path").eq("id", file_id).execute().data
+    file_record = async_supabase.table("files").select("storage_path").eq("id", file_id).execute().data
     
     if not file_record or len(file_record) == 0:
         raise ValueError(f"File with ID {file_id} not found in database")

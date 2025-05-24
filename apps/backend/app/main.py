@@ -494,7 +494,7 @@ async def compute_chart_spec_data(
                 chart_specs={}
             )
         
-        chart_specs = get_chart_specs(
+        chart_specs = await get_chart_specs(
             chart_id=chart_id,
             supabase=get_supabase_client()
         )

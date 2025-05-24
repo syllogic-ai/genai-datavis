@@ -33,7 +33,7 @@ async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:
             message["timestamp"] = datetime.now().isoformat()
             
         # First, get the current conversation
-        chat_data = await async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
+        chat_data = async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
         
         if not chat_data.data or len(chat_data.data) == 0:
             print(f"Chat with ID {chat_id} not found")
@@ -47,7 +47,7 @@ async def append_chat_message(chat_id: str, message: Dict[str, Any]) -> bool:
         
         # Update the conversation in Supabase
         # Use updated_at instead of updatedAt to match the database schema
-        update_result = await async_supabase.table("chats").update({
+        update_result = async_supabase.table("chats").update({
             "conversation": updated_conversation,
             "updated_at": datetime.now().isoformat()
         }).eq("id", chat_id).execute()
@@ -157,7 +157,7 @@ async def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
     """
     Get the chart specs for a given chart ID.
     """
-    chart_specs = await async_supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
+    chart_specs = async_supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
     return chart_specs.data[0]["chart_specs"]
 
 async def get_last_chart_id(chat_id: str) -> str | None:
@@ -190,8 +190,12 @@ async def get_last_chart_id_from_chat_id(chat_id: str) -> str | None:
     """
     Get the last chart message ID for a given chat ID.
     """
-    result = await async_supabase.table("charts").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
-    return result.data[0]["id"] if result.data else None
+    try:
+        result = async_supabase.table("charts").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
+        return result.data[0]["id"] if result.data else None
+    except Exception as e:
+        print(f"Error getting last chart ID from chat ID {chat_id}: {str(e)}")
+        return None
 
 
 # =============================================== Helper functions ===============================================

@@ -23,7 +23,7 @@ from dotenv import dotenv_values
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from httpx import AsyncClient
 
-from apps.backend.core.config import supabase as sb
+from apps.backend.core.config import async_supabase as sb
 from apps.backend.core.models import DatasetProfile
 
 # Fix SSL certificate verification issues for macOS
@@ -364,6 +364,8 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - Avoid subqueries where window functions would be more efficient
     - Include appropriate filtering criteria in WHERE clauses
     - For temporal analysis, use consistent date/time extraction methods
+    - Date columns should always be returned in a YYYY-MM-DD format.
+    
     
     DUCKDB DATE FUNCTION REQUIREMENTS:
     - NEVER use the DATE() function - it does not exist in DuckDB
@@ -372,6 +374,7 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - For filtering dates, use: CAST(date_column AS DATE) = CURRENT_DATE
     - For date/time extraction, use extract() function: EXTRACT(YEAR FROM CAST(date_column AS DATE))
     - For comparing dates, use CAST(date_column AS DATE) = DATE '2023-01-01'
+    - When working with dates, always make sure that you transform them to date format first (e.g. strptime(date_column, '%d/%m/%Y')::DATE)
     - To truncate dates to specific parts, use date_trunc(): date_trunc('month', CAST(date_column AS DATE))
     
     Previous chart ID (if referenced): {ctx.deps.last_chart_id or "None"}
