@@ -48,7 +48,26 @@ jobs:
     - name: Run setup.py
       run: |
         cd apps/backend
-        python setup.py --run
+        # Start the server in the background
+        python setup.py --run &
+        SERVER_PID=$!
+        
+        # Wait for the server to start (timeout after 30 seconds)
+        echo "Waiting for server to start..."
+        for i in {1..30}; do
+          if curl -s http://localhost:8000/health | grep -q '"status":"healthy"'; then
+            echo "Server started successfully"
+            # Kill the server process
+            kill $SERVER_PID
+            exit 0
+          fi
+          sleep 1
+        done
+        
+        echo "Server failed to start within timeout"
+        # Kill the server process if it's still running
+        kill $SERVER_PID 2>/dev/null || true
+        exit 1
       env:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -62,6 +81,9 @@ jobs:
         QSTASH_NEXT_SIGNING_KEY: ${{ secrets.QSTASH_NEXT_SIGNING_KEY }}
         QSTASH_URL: ${{ secrets.QSTASH_URL }}
         API_URL: ${{ secrets.API_URL }}
+        HOST: 0.0.0.0
+        PORT: 8000
+        DEBUG: "False"
       continue-on-error: false
       
     - name: Check for errors

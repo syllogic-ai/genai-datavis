@@ -1,6 +1,6 @@
-![Auto Assign](https://github.com/syllogic-ai/genai-datavis/actions/workflows/auto-assign.yml/badge.svg)
+![Backend Build](https://github.com/syllogic-ai/genai-datavis/actions/workflows/backend-build.yml/badge.svg)
 
-![Proof HTML](https://github.com/syllogic-ai/genai-datavis/actions/workflows/proof-html.yml/badge.svg)
+![Frontend Build](https://github.com/syllogic-ai/genai-datavis/actions/workflows/frontend-build.yml/badge.svg)
 
 # GenAI DataVis Project
 
