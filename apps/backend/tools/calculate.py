@@ -530,6 +530,18 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
             return obj.isoformat()
         raise TypeError (f"Type {type(obj)} not serializable for JSON")
     
+    # Prepare the SQL query section
+    sql_section = f"""
+    SQL Query Used:
+    {chart_sql}
+    """ if chart_sql else ""
+
+    # Prepare the query results section
+    results_section = f"""
+    Query Results (sample):
+    {json.dumps(chart_data, indent=2, default=json_serial)}
+    """ if chart_data else ""
+
     prompt = f"""
     You are a business insight agent that analyzes data query results and provides valuable insights.
     
@@ -539,15 +551,8 @@ async def business_insight_system_prompt(ctx: RunContext[Deps]) -> str:
     Dataset columns:
     {json.dumps(list(profile.columns.keys()), indent=2)}
     
-    {"" if not chart_sql else f"""
-    SQL Query Used:
-    {chart_sql}
-    """}
-    
-    {"" if not chart_data else f"""
-    Query Results (sample):
-    {json.dumps(chart_data, indent=2, default=json_serial)}
-    """}
+    {sql_section}
+    {results_section}
 
     IMPORTANT: If 'Query Results (sample)' is empty or not provided, it means the query did not return any data. 
     In this case, your primary insight must be to clearly state that no data was found matching the criteria of the user's request. 
