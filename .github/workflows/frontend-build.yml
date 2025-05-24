@@ -5,18 +5,16 @@ on:
     branches: [ main ]
     paths:
       - 'apps/frontend/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main ]
     paths:
       - 'apps/frontend/**'
+      - '.github/workflows/**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: apps/frontend
 
     steps:
     - uses: actions/checkout@v4
@@ -28,14 +26,12 @@ jobs:
         cache: 'npm'
         cache-dependency-path: package-lock.json
 
-    - name: Copy package-lock.json
-      run: |
-        cp ../package-lock.json .
-
     - name: Install dependencies
+      working-directory: apps/frontend
       run: npm ci
 
     - name: Build
+      working-directory: apps/frontend
       run: npm run build
       env:
         NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
