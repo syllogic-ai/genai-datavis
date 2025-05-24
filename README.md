@@ -1,6 +1,6 @@
 # GenAI DataVis Project
 
-This is a monorepo containing the frontend and backend applications for the GenAI DataVis project.
+Ever wanted to talk with your visualizations just like talking with ChatGPT? With Syllogic, you can do that! Simply ask what you want, and watch our agent transforming your asks to valuable visual reports!
 
 ## Project Structure
 
