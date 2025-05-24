@@ -25,7 +25,7 @@ sys.path.insert(0, project_root)
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # Import the process_user_request function
-from apps.backend.tools.calculate import process_user_request
+from apps.backend.tools.llm_interaction import process_user_request
 from apps.backend.core.config import SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 
