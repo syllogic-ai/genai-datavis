@@ -7,7 +7,7 @@ export interface DataItem {
   [key: string]: string | number; // { category: "Product A", revenue: 4200, cost: 2100, profit: 2100 } OR { datetime: "2024-01-01", desktop: 1000, mobile: 500, tablet: 200 }
 }
 
-export type ChartType = "line" | "bar" | "area" | "kpi";
+export type ChartType = "line" | "bar" | "area" | "kpi" | "pie" | "table";
 
 /**
  * Represents the direction of change for KPI metrics
@@ -132,6 +132,52 @@ export interface ChartSpec {
       value?: string | number;
       label?: string | number;
       change?: string | number;
+    };
+  };
+
+  /** Pie-specific configuration properties */
+  pieConfig?: {
+    /** Whether to render as donut chart (with inner radius) */
+    isDonut?: boolean;
+    /** Inner radius for donut charts */
+    innerRadius?: number;
+    /** Outer radius of the pie chart */
+    outerRadius?: number;
+    /** Whether to show labels on pie slices */
+    showLabels?: boolean;
+    /** Stroke color around pie slices */
+    stroke?: string;
+    /** Stroke width around pie slices */
+    strokeWidth?: number;
+  };
+
+  /** Table-specific configuration properties */
+  tableConfig?: {
+    /** Custom column labels */
+    columnLabels?: { [key: string]: string };
+    /** Column formatters */
+    columnFormatters?: { 
+      [key: string]: {
+        type: 'currency' | 'number' | 'percentage';
+        currency?: string;
+        decimals?: number;
+      }
+    };
+    /** Cell alignment per column */
+    cellAlignment?: { [key: string]: string };
+    /** Header row alignment */
+    headerAlignment?: string;
+    /** Whether to show striped rows */
+    striped?: boolean;
+    /** Sorting configuration */
+    sortBy?: {
+      column: string;
+      direction?: 'asc' | 'desc';
+    };
+    /** Pagination configuration */
+    pagination?: {
+      page?: number;
+      pageSize?: number;
     };
   };
 }
