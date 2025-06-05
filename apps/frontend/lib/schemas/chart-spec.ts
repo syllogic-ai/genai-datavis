@@ -62,7 +62,7 @@ const kpiStylesSchema = z.object({
 });
 
 export const chartSpecSchema = z.object({
-  chartType: z.enum(["line", "bar", "area", "kpi"] as const),
+  chartType: z.enum(["line", "bar", "area", "kpi", "pie", "table"] as const),
   title: z.string(),
   description: z.string(),
   data: z.array(dataItemSchema).optional(),

@@ -7,7 +7,7 @@ export interface DataItem {
   [key: string]: string | number; // { category: "Product A", revenue: 4200, cost: 2100, profit: 2100 } OR { datetime: "2024-01-01", desktop: 1000, mobile: 500, tablet: 200 }
 }
 
-export type ChartType = "line" | "bar" | "area" | "kpi";
+export type ChartType = "line" | "bar" | "area" | "kpi" | "pie" | "table";
 
 /**
  * Represents the direction of change for KPI metrics
