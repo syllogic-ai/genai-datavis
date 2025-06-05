@@ -61,6 +61,35 @@ const kpiStylesSchema = z.object({
   }).optional(),
 });
 
+const pieConfigSchema = z.object({
+  isDonut: z.boolean().optional(),
+  innerRadius: z.number().optional(),
+  outerRadius: z.number().optional(),
+  showLabels: z.boolean().optional(),
+  stroke: z.string().optional(),
+  strokeWidth: z.number().optional(),
+});
+
+const tableConfigSchema = z.object({
+  columnLabels: z.record(z.string()).optional(),
+  columnFormatters: z.record(z.object({
+    type: z.enum(["currency", "number", "percentage"]),
+    currency: z.string().optional(),
+    decimals: z.number().optional(),
+  })).optional(),
+  cellAlignment: z.record(z.string()).optional(),
+  headerAlignment: z.string().optional(),
+  striped: z.boolean().optional(),
+  sortBy: z.object({
+    column: z.string(),
+    direction: z.enum(["asc", "desc"]).optional(),
+  }).optional(),
+  pagination: z.object({
+    page: z.number().optional(),
+    pageSize: z.number().optional(),
+  }).optional(),
+});
+
 export const chartSpecSchema = z.object({
   chartType: z.enum(["line", "bar", "area", "kpi", "pie", "table"] as const),
   title: z.string(),
@@ -90,4 +119,6 @@ export const chartSpecSchema = z.object({
   kpiChangeFormat: z.string().optional(),
   kpiValueFormat: z.string().optional(),
   kpiStyles: kpiStylesSchema.optional(),
+  pieConfig: pieConfigSchema.optional(),
+  tableConfig: tableConfigSchema.optional(),
 }); 
