@@ -5,7 +5,6 @@ import { useEditor, EditorContent, BubbleMenu } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Underline from "@tiptap/extension-underline";
-import { GripVertical } from "lucide-react";
 import { Widget } from "@/types/enhanced-dashboard-types";
 
 interface TextBlockProps {
@@ -53,7 +52,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
     },
     editorProps: {
       attributes: {
-        class: `prose prose-lg dark:prose-invert max-w-full bg-transparent focus:outline-none`,
+        class: `prose prose-lg dark:prose-invert max-w-full focus:outline-none`,
       },
     },
   });
@@ -70,11 +69,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
   }
 
   return (
-    <div className="w-full h-fit bg-transparent relative group">
-      {/* Drag Handle */}
-      <div className="drag-handle absolute left-[-40px] top-1/2 transform -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-grab active:cursor-grabbing z-[9999] bg-gray-100 dark:bg-gray-800 rounded p-2 border border-gray-200 dark:border-gray-700 shadow-sm">
-        <GripVertical className="w-3 h-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200" />
-      </div>
+    <div className="w-full h-fit bg-white dark:bg-gray-900 relative group border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-4">
         <BubbleMenu
           editor={editor}
           tippyOptions={{ 
@@ -180,10 +175,12 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
         </button>
         </BubbleMenu>
 
-        <EditorContent 
-          editor={editor} 
-          className="w-full h-fit bg-transparent border-none outline-none focus:outline-none"
-        />
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3">
+          <EditorContent 
+            editor={editor} 
+            className="w-full h-fit bg-transparent border-none outline-none focus:outline-none"
+          />
+        </div>
         
         {/* TipTap Editor Styles */}
         <style jsx global>{`
@@ -191,7 +188,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             outline: none !important;
             border: none !important;
             background: transparent !important;
-            min-height: 0 !important;
+            min-height: 24px !important;
           }
           
           .ProseMirror h1 {

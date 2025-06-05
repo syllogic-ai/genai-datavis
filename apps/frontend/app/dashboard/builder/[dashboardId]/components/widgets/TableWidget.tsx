@@ -149,7 +149,7 @@ export function TableWidget({ widget, onUpdate, isEditing, onEditToggle }: Table
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-4">
       {widget.config.title && (
         <div className="mb-3">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">

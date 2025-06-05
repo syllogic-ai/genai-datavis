@@ -183,17 +183,17 @@ export function KPICard({ widget, onUpdate, isEditing, onEditToggle }: KPICardPr
   }
 
   return (
-    <div className="h-full flex flex-col justify-center p-4">
+    <div className="h-full flex flex-col justify-center p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
       <div className="text-center">
-        <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+        <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 line-clamp-1">
           {widget.config.title || "KPI"}
         </h3>
         
-        <div className="mb-3">
-          <div className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+        <div className="mb-2">
+          <div className="text-xl font-bold text-gray-900 dark:text-white">
             {formatValue(widget.config.value || 0)}
             {widget.config.unit && (
-              <span className="text-lg text-gray-500 dark:text-gray-400 ml-1">
+              <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
                 {widget.config.unit}
               </span>
             )}
@@ -201,23 +201,21 @@ export function KPICard({ widget, onUpdate, isEditing, onEditToggle }: KPICardPr
         </div>
 
         {(widget.config.change !== 0 || widget.config.subtitle) && (
-          <div className="flex items-center justify-center">
-            <div className={`
-              flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium
-              ${getChangeColor()}
-            `}>
-              {getChangeIcon()}
-              <span>
-                {widget.config.change > 0 ? "+" : ""}{widget.config.change}%
+          <div className="flex items-center justify-center gap-1">
+            {widget.config.change !== 0 && (
+              <div className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getChangeColor()}`}>
+                {getChangeIcon()}
+                <span>
+                  {widget.config.change > 0 ? "+" : ""}{widget.config.change}%
+                </span>
+              </div>
+            )}
+            {widget.config.subtitle && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {widget.config.subtitle}
               </span>
-            </div>
+            )}
           </div>
-        )}
-
-        {widget.config.subtitle && (
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-            {widget.config.subtitle}
-          </p>
         )}
       </div>
     </div>

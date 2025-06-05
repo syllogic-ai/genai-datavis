@@ -142,28 +142,28 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-2">
       {widget.config.title && (
-        <div className="mb-2">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+        <div className="mb-1 flex-shrink-0">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-1">
             {widget.config.title}
           </h3>
           {widget.config.description && (
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
               {widget.config.description}
             </p>
           )}
         </div>
       )}
       
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {widget.data || sampleData ? (
           <ChartRenderer spec={chartSpec} />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
             <div className="text-center">
-              <div className="text-3xl mb-2">📊</div>
-              <p className="text-sm">No chart data available</p>
+              <div className="text-2xl mb-1">📊</div>
+              <p className="text-xs">No chart data available</p>
               <p className="text-xs mt-1">Click edit to configure</p>
             </div>
           </div>
