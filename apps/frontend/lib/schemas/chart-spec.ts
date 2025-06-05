@@ -106,8 +106,8 @@ export const chartSpecSchema = z.object({
   areaConfig: areaConfigSchema.optional(),
   barConfig: barConfigSchema.optional(),
   chartConfig: z.record(z.object({
-    label: z.string().optional(),
-    color: z.string().optional(),
+    label: z.string(),
+    color: z.string(),
   })).optional(),
   kpiValue: z.union([z.string(), z.number()]).optional(),
   kpiSuffix: z.string().optional(),
