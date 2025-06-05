@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Widget } from "@/types/dashboard-types";
+import { Widget } from "@/types/enhanced-dashboard-types";
 import { TableRenderer } from "@/components/charts/renderers/TableRenderer";
 import { ChartSpec } from "@/types/chart-types";
 

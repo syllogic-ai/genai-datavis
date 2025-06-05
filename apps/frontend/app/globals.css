@@ -215,3 +215,31 @@ body {
 .hide-scrollbar::-webkit-scrollbar {
   display: none; /* Chrome, Safari and Opera */
 }
+
+/* Minimal React Grid Layout base styles */
+.react-grid-layout {
+  position: relative;
+}
+
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform;
+}
+
+/* Override react-grid-layout height for text widgets */
+.react-grid-item[data-widget-type="text"] {
+  height: fit-content !important;
+  min-height: fit-content !important;
+}
+
+/* Ensure the content div inside text widgets also has fit-content height */
+.react-grid-item[data-widget-type="text"] .react-grid-item-content {
+  height: fit-content !important;
+  min-height: fit-content !important;
+}
+
+

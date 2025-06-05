@@ -3,7 +3,8 @@
 import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Dashboard, Widget as WidgetType } from "@/types/dashboard-types";
+import { Widget as WidgetType } from "@/types/enhanced-dashboard-types";
+import { Dashboard } from "@/types/dashboard-types";
 import { Widget } from "./Widget";
 
 interface DashboardGridProps {

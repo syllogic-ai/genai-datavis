@@ -11,7 +11,8 @@ import {
   Save,
   X
 } from "lucide-react";
-import { Widget as WidgetType, WIDGET_SIZES, WidgetSize } from "@/types/dashboard-types";
+import { Widget as WidgetType } from "@/types/enhanced-dashboard-types";
+import { WIDGET_SIZES, WidgetSize } from "@/types/dashboard-types";
 import { TextBlock } from "./widgets/TextBlock";
 import { ChartWidget } from "./widgets/ChartWidget";
 import { KPICard } from "./widgets/KPICard";

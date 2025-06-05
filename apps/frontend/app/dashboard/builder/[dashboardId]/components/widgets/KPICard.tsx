@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-import { Widget } from "@/types/dashboard-types";
+import { Widget } from "@/types/enhanced-dashboard-types";
 
 interface KPICardProps {
   widget: Widget;

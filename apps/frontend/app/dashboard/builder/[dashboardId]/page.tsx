@@ -1,209 +1,84 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { DndContext, DragOverlay, DragStartEvent, DragEndEvent, closestCenter } from "@dnd-kit/core";
-import { SortableContext, rectSortingStrategy } from "@dnd-kit/sortable";
-import { DashboardGrid } from "./components/DashboardGrid";
-import { WidgetLibrary } from "./components/WidgetLibrary";
-import { Widget as WidgetComponent } from "./components/Widget";
-import { 
-  Widget, 
-  Dashboard, 
-  DraggedWidget, 
-  WIDGET_LIBRARY, 
-  WIDGET_SIZES 
-} from "@/types/dashboard-types";
-import { v4 as uuidv4 } from "uuid";
+import { useState, useCallback, useRef } from "react";
+import { motion } from "motion/react";
+import { Widget } from "@/types/enhanced-dashboard-types";
+import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
+import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
+import { useParams } from "next/navigation";
 
-interface DashboardPageProps {
-  params: {
-    dashboardId: string;
-  };
-}
+export default function EnhancedDashboardPage() {
+  const params = useParams();
+  const dashboardId = params.dashboardId as string;
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [dashboardName, setDashboardName] = useState("My Enhanced Dashboard");
 
-export default function DashboardPage({ params }: DashboardPageProps) {
-  const [dashboard, setDashboard] = useState<Dashboard>({
-    id: params.dashboardId,
-    name: "My Dashboard",
-    description: "A custom dashboard",
-    widgets: [],
-    layout: {
-      columns: 12,
-      rows: 8,
-      gap: 16,
-    },
-    settings: {
-      theme: "light",
-      gridSnap: true,
-      autoSave: true,
-    },
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
+  const handleUpdateWidgets = useCallback((newWidgets: Widget[]) => {
+    setWidgets(newWidgets);
+  }, []);
 
-  const [activeWidget, setActiveWidget] = useState<DraggedWidget | null>(null);
-  const [isLibraryOpen, setIsLibraryOpen] = useState(true);
+  // This will be set by the grid component
+  const addWidgetRef = useRef<((type: string) => void) | null>(null);
 
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    
-    if (active.data.current?.type === "widget-library") {
-      setActiveWidget({
-        type: active.data.current.widgetType,
-        isNew: true,
-      });
-    } else {
-      const widget = dashboard.widgets.find(w => w.id === active.id);
-      if (widget) {
-        setActiveWidget({
-          type: widget.type,
-          id: widget.id,
-          isNew: false,
-        });
-      }
+  const handleAddWidget = useCallback((type: string) => {
+    if (addWidgetRef.current) {
+      addWidgetRef.current(type);
     }
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (!over || !activeWidget) {
-      setActiveWidget(null);
-      return;
-    }
-
-    if (over.data.current?.type === "grid-cell") {
-      const position = over.data.current.position;
-      
-      if (activeWidget.isNew) {
-        // Create new widget
-        const libraryItem = WIDGET_LIBRARY.find(item => item.type === activeWidget.type);
-        if (libraryItem) {
-          const newWidget: Widget = {
-            id: uuidv4(),
-            type: activeWidget.type,
-            position,
-            size: WIDGET_SIZES[libraryItem.defaultSize],
-            config: { ...libraryItem.defaultConfig },
-            data: null,
-          };
-
-          setDashboard(prev => ({
-            ...prev,
-            widgets: [...prev.widgets, newWidget],
-            updatedAt: new Date(),
-          }));
-        }
-      } else if (activeWidget.id) {
-        // Move existing widget
-        setDashboard(prev => ({
-          ...prev,
-          widgets: prev.widgets.map(widget =>
-            widget.id === activeWidget.id
-              ? { ...widget, position }
-              : widget
-          ),
-          updatedAt: new Date(),
-        }));
-      }
-    }
-
-    setActiveWidget(null);
-  };
-
-  const handleDeleteWidget = (widgetId: string) => {
-    setDashboard(prev => ({
-      ...prev,
-      widgets: prev.widgets.filter(widget => widget.id !== widgetId),
-      updatedAt: new Date(),
-    }));
-  };
-
-  const handleResizeWidget = (widgetId: string, newSize: { width: number; height: number }) => {
-    setDashboard(prev => ({
-      ...prev,
-      widgets: prev.widgets.map(widget =>
-        widget.id === widgetId
-          ? { ...widget, size: newSize }
-          : widget
-      ),
-      updatedAt: new Date(),
-    }));
-  };
-
-  const handleUpdateWidget = (widgetId: string, updates: Partial<Widget>) => {
-    setDashboard(prev => ({
-      ...prev,
-      widgets: prev.widgets.map(widget =>
-        widget.id === widgetId
-          ? { ...widget, ...updates }
-          : widget
-      ),
-      updatedAt: new Date(),
-    }));
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <DndContext
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
+      {/* Header */}
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="border-b bg-white dark:bg-gray-800 px-6 py-4 shadow-sm"
       >
-        {/* Header */}
-        <div className="border-b bg-white dark:bg-gray-800 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {dashboard.name}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {dashboard.description}
-              </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+              {dashboardName}
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Dashboard ID: {dashboardId}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-sm text-gray-500 dark:text-gray-400">
+              {widgets.length} widget{widgets.length !== 1 ? 's' : ''}
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsLibraryOpen(!isLibraryOpen)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                {isLibraryOpen ? "Hide" : "Show"} Widgets
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                const newName = prompt("Enter dashboard name:", dashboardName);
+                if (newName) setDashboardName(newName);
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              Rename
+            </button>
           </div>
         </div>
+      </motion.div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-6">
-          <SortableContext 
-            items={dashboard.widgets.map(w => w.id)} 
-            strategy={rectSortingStrategy}
-          >
-            <DashboardGrid
-              dashboard={dashboard}
-              onDeleteWidget={handleDeleteWidget}
-              onResizeWidget={handleResizeWidget}
-              onUpdateWidget={handleUpdateWidget}
-            />
-          </SortableContext>
-        </div>
-
-        {/* Floating Widget Library */}
-        <WidgetLibrary 
-          isOpen={isLibraryOpen} 
-          onToggle={() => setIsLibraryOpen(!isLibraryOpen)} 
+      {/* Main Content */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.1 }}
+        className="flex-1"
+      >
+        <EnhancedDashboardGrid
+          widgets={widgets}
+          onUpdateWidgets={handleUpdateWidgets}
+          onAddWidget={(fn) => { addWidgetRef.current = fn; }}
         />
+      </motion.div>
 
-        {/* Drag Overlay */}
-        <DragOverlay>
-          {activeWidget ? (
-            <div className="bg-white dark:bg-gray-800 border-2 border-blue-500 rounded-lg p-4 shadow-lg opacity-75">
-              <div className="text-sm font-medium text-gray-900 dark:text-white">
-                {WIDGET_LIBRARY.find(item => item.type === activeWidget.type)?.name}
-              </div>
-            </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+      {/* Floating Widget Dock */}
+      <FloatingWidgetDock onAddWidget={handleAddWidget} />
+
+      {/* Subtle gradient overlay for depth */}
+      <div className="fixed inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 via-transparent to-purple-50/20 dark:from-blue-950/10 dark:to-purple-950/10" />
     </div>
   );
 }
