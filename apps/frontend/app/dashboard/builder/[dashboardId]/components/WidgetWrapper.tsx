@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import { IconTrash } from "@tabler/icons-react";
 import { getGridSizeFromDimensions } from "../utils/gridUtils";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface WidgetWrapperProps {
   children: React.ReactNode;
@@ -16,6 +18,7 @@ interface WidgetWrapperProps {
   onShowPopup: (widgetId: string, position: { x: number; y: number }, currentSize: string, widgetType: string) => void;
   onHidePopup: () => void;
   isPopupActive: boolean;
+  isDragging: boolean;
 }
 
 export function WidgetWrapper({ 
@@ -27,28 +30,38 @@ export function WidgetWrapper({
   onResize,
   onShowPopup,
   onHidePopup,
-  isPopupActive
+  isPopupActive,
+  isDragging
 }: WidgetWrapperProps) {
   const [isHovered, setIsHovered] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleDelete = () => {
-    if (confirm("Are you sure you want to delete this widget?")) {
-      onDelete(id);
-    }
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    onDelete(id);
+    setShowDeleteDialog(false);
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteDialog(false);
   };
 
   const currentSize = layout ? getGridSizeFromDimensions(layout.w, layout.h, widgetType) : 'chart-s';
 
   const handleMouseEnter = () => {
-    setIsHovered(true);
-    if (containerRef.current && widgetType) {
-      const rect = containerRef.current.getBoundingClientRect();
-      onShowPopup(id, {
-        x: rect.left + rect.width / 2,
-        y: rect.bottom // Use bottom instead of top for below positioning
-      }, currentSize, widgetType);
+    if (!isDragging) {
+      setIsHovered(true);
+      if (containerRef.current && widgetType) {
+        const rect = containerRef.current.getBoundingClientRect();
+        onShowPopup(id, {
+          x: rect.left + rect.width / 2,
+          y: rect.bottom // Use bottom instead of top for below positioning
+        }, currentSize, widgetType);
+      }
     }
   };
 
@@ -57,13 +70,6 @@ export function WidgetWrapper({
     onHidePopup();
   };
 
-  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
-    setIsDragging(true);
-  };
-
-  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-    setIsDragging(false);
-  };
 
   return (
     <div 
@@ -71,8 +77,6 @@ export function WidgetWrapper({
       className="relative h-full w-full group"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      onDrag={handleDrag}
-      onDragEnd={handleDragEnd}
     >
       <AnimatePresence>
         {/* Delete button */}
@@ -98,6 +102,26 @@ export function WidgetWrapper({
       <div className="h-full w-full overflow-hidden">
         {children}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete widget?</DialogTitle>
+            <DialogDescription>
+              This action is irreversible.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDelete}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDelete}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

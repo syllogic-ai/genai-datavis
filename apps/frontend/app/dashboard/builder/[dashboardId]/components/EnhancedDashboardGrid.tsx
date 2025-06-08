@@ -76,6 +76,7 @@ export function EnhancedDashboardGrid({
     widgetType: '',
   });
   const [isPopupHovered, setIsPopupHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const calculateGridHeight = useCallback((layouts: Layout[]) => {
@@ -96,7 +97,19 @@ export function EnhancedDashboardGrid({
   const currentLayouts = useMemo(() => {
     const layouts: Layouts = {};
     Object.keys(GRID_PROPS.cols).forEach(breakpoint => {
-      layouts[breakpoint] = widgets.map(widget => widget.layout);
+      layouts[breakpoint] = widgets.map(widget => {
+        // For responsive behavior, we might need to adjust layouts based on breakpoint
+        const layout = { ...widget.layout };
+        
+        // For smaller screens, ensure text widgets stay full width
+        if (widget.type === 'text') {
+          const colsForBreakpoint = GRID_PROPS.cols[breakpoint as keyof typeof GRID_PROPS.cols];
+          layout.w = colsForBreakpoint; // Full width for text on any screen size
+          layout.x = 0; // Always start at left
+        }
+        
+        return layout;
+      });
     });
     return layouts;
   }, [widgets]);
@@ -158,10 +171,25 @@ export function EnhancedDashboardGrid({
     onUpdateWidgets(widgets.filter(widget => widget.id !== id));
   }, [widgets, onUpdateWidgets]);
 
-  const handleLayoutChange = useCallback((layout: Layout[], layouts: Layouts) => {
-    // For auto-shifting behavior, we'll trust the grid layout's positioning
-    // and only apply basic validation for text widgets
-    const validatedLayout = layout.map(layoutItem => {
+  const handleDragStart = useCallback(() => {
+    setIsDragging(true);
+    // Hide popup immediately when dragging starts
+    setActivePopup({
+      widgetId: null,
+      position: { x: 0, y: 0 },
+      currentSize: 'm',
+      widgetType: '',
+    });
+  }, []);
+
+  const handleDragStop = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const handleLayoutChange = useCallback((currentLayout: Layout[], allLayouts: Layouts) => {
+    // For responsive grids, we get the current layout and all layouts
+    // Use the current layout to update widget positions
+    const validatedLayout = currentLayout.map(layoutItem => {
       const originalWidget = widgets.find(w => w.layout.i === layoutItem.i);
       
       if (!originalWidget) return layoutItem;
@@ -171,7 +199,7 @@ export function EnhancedDashboardGrid({
         return {
           ...layoutItem,
           x: 0, // Always start at x=0 for text widgets
-          w: 12, // Always full width for text widgets
+          w: layoutItem.w, // Keep responsive width
         };
       }
       
@@ -196,26 +224,7 @@ export function EnhancedDashboardGrid({
   const handleResizeWidget = useCallback((widgetId: string, newSize: { w: number; h: number }) => {
     const updatedWidgets = widgets.map(widget => {
       if (widget.id === widgetId) {
-        // Check for collisions with the new size
-        const testLayout = { ...widget.layout, ...newSize };
-        const wouldCollide = widgets.some(otherWidget => {
-          if (otherWidget.id === widgetId) return false;
-          
-          const otherLayout = otherWidget.layout;
-          const otherHeight = otherWidget.type === 'text' && otherLayout.h === 0 ? 1 : otherLayout.h;
-          
-          return !(
-            testLayout.x >= otherLayout.x + otherLayout.w ||
-            testLayout.x + testLayout.w <= otherLayout.x ||
-            testLayout.y >= otherLayout.y + otherHeight ||
-            testLayout.y + testLayout.h <= otherLayout.y
-          );
-        });
-        
-        // Only apply resize if no collision
-        if (!wouldCollide) {
-          return { ...widget, layout: { ...widget.layout, ...newSize } };
-        }
+        return { ...widget, layout: { ...widget.layout, ...newSize } };
       }
       return widget;
     });
@@ -343,7 +352,11 @@ export function EnhancedDashboardGrid({
           <ResponsiveGridLayout
             {...GRID_PROPS}
             layouts={currentLayouts}
+            breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
+            cols={GRID_PROPS.cols}
             onLayoutChange={handleLayoutChange}
+            onDragStart={handleDragStart}
+            onDragStop={handleDragStop}
             preventCollision={false}
             compactType="vertical"
             allowOverlap={false}
@@ -372,6 +385,7 @@ export function EnhancedDashboardGrid({
                     onShowPopup={handleShowPopup}
                     onHidePopup={handleHidePopup}
                     isPopupActive={activePopup.widgetId === widget.id}
+                    isDragging={isDragging}
                   >
                     {renderWidget(widget)}
                   </WidgetWrapper>
