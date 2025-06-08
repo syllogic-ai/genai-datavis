@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Responsive, WidthProvider, Layout, Layouts } from "react-grid-layout";
 import { motion } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
@@ -16,6 +16,7 @@ import { ChartWidget } from "./widgets/ChartWidget";
 import { KPICard } from "./widgets/KPICard";
 import { TableWidget } from "./widgets/TableWidget";
 import { findAvailablePosition, getDimensionsFromSize } from "../utils/gridUtils";
+import { ResizePopup } from "./ResizePopup";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -26,15 +27,15 @@ interface EnhancedDashboardGridProps {
 }
 
 const defaultLayouts = {
-  text: { w: 12, h: 2 }, // Full width, increased height for better visibility
-  chart: { w: 6, h: 4 }, // Larger size by default (was 4x2)
-  kpi: { w: 3, h: 2 },   // Wider for better readability (was 2x2)
-  table: { w: 6, h: 4 }, // Larger for better data display (was 4x3)
+  text: { w: 12, h: 1 },  // Default to text-s size (12×1)
+  chart: { w: 4, h: 2 },  // Default to chart-s size (4×2)
+  kpi: { w: 4, h: 2 },    // Only size available for KPI (4×2)
+  table: { w: 4, h: 2 },  // Default to chart-s size (4×2)
 };
 
 const defaultConfigs = {
   text: {
-    content: "Click to edit this text block...",
+    content: "",
     fontSize: "medium",
     alignment: "left",
   },
@@ -63,6 +64,19 @@ export function EnhancedDashboardGrid({
   onAddWidget
 }: EnhancedDashboardGridProps) {
   const [hoveredItems, setHoveredItems] = useState<Record<string, boolean>>({});
+  const [activePopup, setActivePopup] = useState<{
+    widgetId: string | null;
+    position: { x: number; y: number };
+    currentSize: string;
+    widgetType: string;
+  }>({
+    widgetId: null,
+    position: { x: 0, y: 0 },
+    currentSize: 'm',
+    widgetType: '',
+  });
+  const [isPopupHovered, setIsPopupHovered] = useState(false);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const calculateGridHeight = useCallback((layouts: Layout[]) => {
     if (layouts.length === 0) return 400; // Minimum height when empty
@@ -76,7 +90,7 @@ export function EnhancedDashboardGrid({
     if (nonTextLayouts.length === 0) return 400; // Only text widgets, use minimum height
     
     const maxY = Math.max(...nonTextLayouts.map(item => item.y + item.h));
-    return (maxY * GRID_PROPS.rowHeight) + (maxY * GRID_PROPS.margin[1]) + 64;
+    return (maxY * GRID_PROPS.rowHeight) + (maxY * GRID_PROPS.margin[1]) + 128;
   }, [widgets]);
 
   const currentLayouts = useMemo(() => {
@@ -145,56 +159,26 @@ export function EnhancedDashboardGrid({
   }, [widgets, onUpdateWidgets]);
 
   const handleLayoutChange = useCallback((layout: Layout[], layouts: Layouts) => {
-    // Create a map of widget types for quick lookup
-    const widgetTypeMap = new Map();
-    widgets.forEach(widget => {
-      widgetTypeMap.set(widget.layout.i, widget.type);
-    });
-    
-    // Validate layout changes to prevent overlapping
+    // For auto-shifting behavior, we'll trust the grid layout's positioning
+    // and only apply basic validation for text widgets
     const validatedLayout = layout.map(layoutItem => {
-      const widgetType = widgetTypeMap.get(layoutItem.i);
       const originalWidget = widgets.find(w => w.layout.i === layoutItem.i);
       
       if (!originalWidget) return layoutItem;
       
-      // Check for collisions with other widgets
-      const wouldCollide = layout.some(otherItem => {
-        if (otherItem.i === layoutItem.i) return false;
-        
-        const otherWidgetType = widgetTypeMap.get(otherItem.i);
-        
-        // Prevent any overlap with text widgets
-        if (otherWidgetType === 'text' && widgetType !== 'text') {
-          const otherHeight = otherItem.h === 0 ? 1 : otherItem.h;
-          const itemHeight = layoutItem.h === 0 ? 1 : layoutItem.h;
-          
-          return !(
-            layoutItem.x >= otherItem.x + otherItem.w ||
-            layoutItem.x + layoutItem.w <= otherItem.x ||
-            layoutItem.y >= otherItem.y + otherHeight ||
-            layoutItem.y + itemHeight <= otherItem.y
-          );
-        }
-        
-        // Standard collision detection
-        return !(
-          layoutItem.x >= otherItem.x + otherItem.w ||
-          layoutItem.x + layoutItem.w <= otherItem.x ||
-          layoutItem.y >= otherItem.y + otherItem.h ||
-          layoutItem.y + layoutItem.h <= otherItem.y
-        );
-      });
-      
-      // If collision detected, revert to original position
-      if (wouldCollide) {
-        return originalWidget.layout;
+      // For text widgets, ensure they stay at full width
+      if (originalWidget.type === 'text') {
+        return {
+          ...layoutItem,
+          x: 0, // Always start at x=0 for text widgets
+          w: 12, // Always full width for text widgets
+        };
       }
       
       return layoutItem;
     });
     
-    // Update widgets with validated layouts
+    // Update widgets with new layouts
     const updatedWidgets = widgets.map(widget => {
       const newLayout = validatedLayout.find(l => l.i === widget.layout.i);
       return newLayout ? { ...widget, layout: newLayout } : widget;
@@ -239,6 +223,67 @@ export function EnhancedDashboardGrid({
     onUpdateWidgets(updatedWidgets);
   }, [widgets, onUpdateWidgets]);
 
+  const handleShowPopup = useCallback((widgetId: string, position: { x: number; y: number }, currentSize: string, widgetType: string) => {
+    // Clear any pending hide timeout
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    
+    setActivePopup({
+      widgetId,
+      position,
+      currentSize,
+      widgetType,
+    });
+  }, []);
+
+  const handleHidePopup = useCallback(() => {
+    // Only hide if popup is not being hovered
+    if (!isPopupHovered) {
+      hideTimeoutRef.current = setTimeout(() => {
+        setActivePopup({
+          widgetId: null,
+          position: { x: 0, y: 0 },
+          currentSize: 'm',
+          widgetType: '',
+        });
+      }, 300); // 300ms delay
+    }
+  }, [isPopupHovered]);
+
+  const handlePopupMouseEnter = useCallback(() => {
+    // Clear any pending hide timeout
+    if (hideTimeoutRef.current) {
+      clearTimeout(hideTimeoutRef.current);
+      hideTimeoutRef.current = null;
+    }
+    setIsPopupHovered(true);
+  }, []);
+
+  const handlePopupMouseLeave = useCallback(() => {
+    setIsPopupHovered(false);
+    
+    // Hide popup after a delay
+    hideTimeoutRef.current = setTimeout(() => {
+      setActivePopup({
+        widgetId: null,
+        position: { x: 0, y: 0 },
+        currentSize: 'm',
+        widgetType: '',
+      });
+    }, 300); // 300ms delay
+  }, []);
+
+  // Clear timeout on cleanup
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const renderWidget = useCallback((widget: Widget) => {
     const props = {
       widget,
@@ -271,79 +316,97 @@ export function EnhancedDashboardGrid({
   const gridHeight = calculateGridHeight(widgets.map(w => w.layout));
 
   return (
-    <div className="w-full p-4 pl-12" style={{ minHeight: gridHeight }}>
-      {widgets.length === 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-center h-96"
-        >
-          <div className="w-full max-w-2xl mx-auto">
-            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center bg-gray-50/50 dark:bg-gray-800/50">
-              <div className="text-4xl mb-4 text-gray-400">📊</div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                Start Building Your Dashboard
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                Use the floating dock below to add widgets to your dashboard.
-                Drag, resize, and configure each widget to fit your needs.
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {widgets.length > 0 && (
-        <ResponsiveGridLayout
-          {...GRID_PROPS}
-          layouts={currentLayouts}
-          onLayoutChange={handleLayoutChange}
-          preventCollision={true}
-          compactType={null}
-          allowOverlap={false}
-        >
-          {widgets.map((widget, index) => {
-            const isHovered = hoveredItems[widget.layout.i] || false;
-            const isTextWidget = widget.type === 'text';
-            
-            return (
-              <div 
-                key={widget.layout.i} // Use only layout.i as key to prevent duplicates
-                className="react-grid-item-content bg-transparent overflow-hidden h-full cursor-move"
-                data-widget-type={widget.type}
-                onMouseEnter={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: true }))}
-                onMouseLeave={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: false }))}
-              >
-                <WidgetWrapper 
-                  onDelete={handleDeleteWidget} 
-                  id={widget.id} 
-                  widgetType={widget.type}
-                  layout={widget.layout}
-                  onResize={handleResizeWidget}
-                >
-                  {renderWidget(widget)}
-                </WidgetWrapper>
-                
-                {/* Widget-specific styling */}
-                <style jsx>{`
-                  .react-resizable-handle {
-                    display: none !important;
-                  }
-                  .react-grid-item {
-                    cursor: move !important;
-                  }
-                  .react-grid-item.react-grid-placeholder {
-                    background: rgba(59, 130, 246, 0.3) !important;
-                    border: 2px dashed rgba(59, 130, 246, 0.5) !important;
-                    border-radius: 8px !important;
-                  }
-                `}</style>
+    <>
+      <div className="w-full p-4 pl-12" style={{ minHeight: gridHeight }}>
+        {widgets.length === 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-center h-96"
+          >
+            <div className="w-full max-w-2xl mx-auto">
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center bg-gray-50/50 dark:bg-gray-800/50">
+                <div className="text-4xl mb-4 text-gray-400">📊</div>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                  Start Building Your Dashboard
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  Use the floating dock below to add widgets to your dashboard.
+                  Drag, resize, and configure each widget to fit your needs.
+                </p>
               </div>
-            );
-          })}
-        </ResponsiveGridLayout>
+            </div>
+          </motion.div>
+        )}
+
+        {widgets.length > 0 && (
+          <ResponsiveGridLayout
+            {...GRID_PROPS}
+            layouts={currentLayouts}
+            onLayoutChange={handleLayoutChange}
+            preventCollision={false}
+            compactType="vertical"
+            allowOverlap={false}
+            useCSSTransforms={true}
+            transformScale={1}
+            autoSize={true}
+            measureBeforeMount={false}
+   
+          >
+            {widgets.map((widget, index) => {
+              
+              return (
+                <div 
+                  key={widget.layout.i} // Use only layout.i as key to prevent duplicates
+                  className="react-grid-item-content bg-transparent h-full cursor-move overflow-visible"
+                  data-widget-type={widget.type}
+                  onMouseEnter={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: true }))}
+                  onMouseLeave={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: false }))}
+                >
+                  <WidgetWrapper 
+                    onDelete={handleDeleteWidget} 
+                    id={widget.id} 
+                    widgetType={widget.type}
+                    layout={widget.layout}
+                    onResize={handleResizeWidget}
+                    onShowPopup={handleShowPopup}
+                    onHidePopup={handleHidePopup}
+                    isPopupActive={activePopup.widgetId === widget.id}
+                  >
+                    {renderWidget(widget)}
+                  </WidgetWrapper>
+                </div>
+              );
+            })}
+          </ResponsiveGridLayout>
+        )}
+      </div>
+
+      {/* Global resize popup */}
+      {activePopup.widgetId && (
+        <ResizePopup
+          isVisible={true}
+          position={activePopup.position}
+          currentSize={activePopup.currentSize}
+          onSizeSelect={(size) => {
+            if (activePopup.widgetId) {
+              const newDimensions = getDimensionsFromSize(size);
+              handleResizeWidget(activePopup.widgetId, newDimensions);
+            }
+            setActivePopup({
+              widgetId: null,
+              position: { x: 0, y: 0 },
+              currentSize: 'm',
+              widgetType: '',
+            });
+          }}
+          widgetType={activePopup.widgetType}
+          onMouseEnter={handlePopupMouseEnter}
+          onMouseLeave={handlePopupMouseLeave}
+        />
       )}
 
-    </div>
+
+    </>
   );
 }

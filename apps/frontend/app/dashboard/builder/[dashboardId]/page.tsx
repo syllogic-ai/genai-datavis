@@ -6,12 +6,13 @@ import { Widget } from "@/types/enhanced-dashboard-types";
 import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
 import { useParams } from "next/navigation";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 
 export default function EnhancedDashboardPage() {
   const params = useParams();
   const dashboardId = params.dashboardId as string;
   const [widgets, setWidgets] = useState<Widget[]>([]);
-  const [dashboardName, setDashboardName] = useState("My Enhanced Dashboard");
+  const [dashboardName, setDashboardName] = useState("My Dashboard");
 
   const handleUpdateWidgets = useCallback((newWidgets: Widget[]) => {
     setWidgets(newWidgets);
@@ -27,37 +28,14 @@ export default function EnhancedDashboardPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen">
       {/* Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="border-b bg-white dark:bg-gray-800 px-6 py-4 shadow-sm"
+        className="overflow-hidden rounded-lg"
       >
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {dashboardName}
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Dashboard ID: {dashboardId}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-sm text-gray-500 dark:text-gray-400">
-              {widgets.length} widget{widgets.length !== 1 ? 's' : ''}
-            </div>
-            <button
-              onClick={() => {
-                const newName = prompt("Enter dashboard name:", dashboardName);
-                if (newName) setDashboardName(newName);
-              }}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-            >
-              Rename
-            </button>
-          </div>
-        </div>
+        <DashboardHeader dashboardTitle={dashboardName} />
       </motion.div>
 
       {/* Main Content */}
@@ -76,9 +54,6 @@ export default function EnhancedDashboardPage() {
 
       {/* Floating Widget Dock */}
       <FloatingWidgetDock onAddWidget={handleAddWidget} />
-
-      {/* Subtle gradient overlay for depth */}
-      <div className="fixed inset-0 pointer-events-none bg-gradient-to-br from-blue-50/20 via-transparent to-purple-50/20 dark:from-blue-950/10 dark:to-purple-950/10" />
     </div>
   );
 }

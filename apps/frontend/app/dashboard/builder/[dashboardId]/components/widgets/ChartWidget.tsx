@@ -142,7 +142,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   }
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-2">
+    <div className="h-full flex flex-col  bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-4">
       {widget.config.title && (
         <div className="mb-1 flex-shrink-0">
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-1">

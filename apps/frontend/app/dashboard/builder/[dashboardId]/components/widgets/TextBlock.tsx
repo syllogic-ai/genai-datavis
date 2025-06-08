@@ -41,7 +41,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
       }),
       Underline,
       Placeholder.configure({
-        placeholder: "Start writing or press Cmd+B, Cmd+I for formatting...",
+        placeholder: "Click to start writing...",
         emptyEditorClass: "is-editor-empty",
       }),
     ],
@@ -59,7 +59,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
 
   if (!editor) {
     return (
-      <div className="h-fit w-full bg-transparent flex items-center justify-center">
+      <div className="h-fit w-full bg-transparent flex items-center justify-center p-4">
         <div className="text-gray-500 dark:text-gray-400 text-center">
           <div className="text-2xl mb-2">📝</div>
           <p className="text-sm">Loading editor...</p>
@@ -69,17 +69,17 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
   }
 
   return (
-    <div className="w-full h-fit bg-white dark:bg-gray-900 relative group border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-4">
+    <div className="w-full h-fit bg-transparent relative group border border-transparent hover:border-gray-200 dark:hover:border-gray-700 rounded-lg transition-all duration-200 p-2">
         <BubbleMenu
           editor={editor}
           tippyOptions={{ 
             duration: 100,
-            zIndex: 9999,
+            zIndex: 10000,
             placement: 'top',
             interactive: true,
             appendTo: () => document.body
           }}
-          className="flex w-fit max-w-[90vw] overflow-hidden rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-[9999]"
+          className="flex w-fit max-w-[90vw] overflow-hidden rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl z-[10000]"
         >
         <button
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -175,10 +175,10 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
         </button>
         </BubbleMenu>
 
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-md p-3">
+        <div className="bg-transparent p-1">
           <EditorContent 
             editor={editor} 
-            className="w-full h-fit bg-transparent border-none outline-none focus:outline-none"
+            className="w-full h-fit bg-transparent border-none outline-none focus:outline-none relative z-10"
           />
         </div>
         
@@ -189,6 +189,9 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             border: none !important;
             background: transparent !important;
             min-height: 24px !important;
+            position: relative !important;
+            z-index: 10 !important;
+            cursor: text !important;
           }
           
           .ProseMirror h1 {
@@ -248,7 +251,15 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
           }
           
           .tippy-box {
-            z-index: 9999 !important;
+            z-index: 10000 !important;
+          }
+          
+          /* Ensure text is selectable */
+          .ProseMirror * {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
           }
         `}</style>
     </div>
