@@ -28,9 +28,8 @@ const kpiSizeOptions = [
 
 // Text size options
 const textSizeOptions = [
-  { label: "XS", value: "text-xs", dimensions: "12×0.5", description: "Extra small text block" },
-  { label: "S", value: "text-s", dimensions: "12×1", description: "Small text block" },
-  { label: "M", value: "text-m", dimensions: "12×1.5", description: "Medium text block" },
+  { label: "XS", value: "text-xs", dimensions: "12×1", description: "Extra small text block" },
+  { label: "S", value: "text-s", dimensions: "12×2", description: "Small text block" },
 ];
 
 export function ResizePopup({ isVisible, position, currentSize, onSizeSelect, widgetType, onMouseEnter, onMouseLeave }: ResizePopupProps) {

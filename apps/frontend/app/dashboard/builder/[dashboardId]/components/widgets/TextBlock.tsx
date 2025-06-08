@@ -59,7 +59,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
 
   if (!editor) {
     return (
-      <div className="h-fit w-full bg-transparent flex items-center justify-center p-4">
+      <div className="h-full w-full bg-transparent flex items-center justify-center p-4">
         <div className="text-gray-500 dark:text-gray-400 text-center">
           <div className="text-2xl mb-2">📝</div>
           <p className="text-sm">Loading editor...</p>
@@ -69,7 +69,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
   }
 
   return (
-    <div className="w-full h-fit bg-transparent relative group border border-transparent hover:border-gray-200 dark:hover:border-gray-700 rounded-lg transition-all duration-200 p-2">
+    <div className="w-full h-full bg-transparent relative group border border-transparent hover:border-gray-200 dark:hover:border-gray-700 rounded-lg transition-all duration-200 p-2 flex items-center">
         <BubbleMenu
           editor={editor}
           tippyOptions={{ 
@@ -175,10 +175,10 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
         </button>
         </BubbleMenu>
 
-        <div className="bg-transparent p-1">
+        <div className="bg-transparent p-1 w-full">
           <EditorContent 
             editor={editor} 
-            className="w-full h-fit bg-transparent border-none outline-none focus:outline-none relative z-10"
+            className="w-full bg-transparent border-none outline-none focus:outline-none relative z-10"
           />
         </div>
         

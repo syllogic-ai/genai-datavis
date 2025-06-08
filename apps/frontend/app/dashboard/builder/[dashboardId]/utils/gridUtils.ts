@@ -9,10 +9,9 @@ export const sizeToGridMap = {
   // KPI Cards - Only 4×2
   "kpi": { w: 4, h: 2 },
   
-  // Text blocks - 12×0.5, 12×1, 12×1.5 (using fractional heights)
-  "text-xs": { w: 12, h: 1 },   // 12×0.5 → using 1 as minimum
-  "text-s": { w: 12, h: 1 },    // 12×1
-  "text-m": { w: 12, h: 2 },    // 12×1.5 → using 2 for better visibility
+  // Text blocks - 12×1, 12×2 only
+  "text-xs": { w: 12, h: 1 },   // 12×1 (default)
+  "text-s": { w: 12, h: 2 },    // 12×2
 };
 
 export const gridToSizeMap = {
@@ -23,8 +22,8 @@ export const gridToSizeMap = {
   "8x4": "chart-xl",
   
   // Text widgets
-  "12x1": "text-s",
-  "12x2": "text-m",
+  "12x1": "text-xs",
+  "12x2": "text-s",
 };
 
 export function getGridSizeFromDimensions(w: number, h: number, widgetType?: string): string {
@@ -36,9 +35,9 @@ export function getGridSizeFromDimensions(w: number, h: number, widgetType?: str
   }
   
   if (widgetType === 'text') {
-    if (key === "12x1") return "text-s";
-    if (key === "12x2") return "text-m";
-    return "text-s"; // Default for text
+    if (key === "12x1") return "text-xs";
+    if (key === "12x2") return "text-s";
+    return "text-xs"; // Default for text (12x1)
   }
   
   // For charts and tables, use chart prefixes

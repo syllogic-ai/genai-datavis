@@ -183,7 +183,7 @@ export function KPICard({ widget, onUpdate, isEditing, onEditToggle }: KPICardPr
   }
 
   return (
-    <div className="h-full flex flex-col justify-center p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:shadow-md transition-all duration-200">
+    <div className="h-full flex flex-col justify-center p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg transition-all duration-200">
       <div className="text-center">
         <h3 className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1 line-clamp-1">
           {widget.config.title || "KPI"}

@@ -27,7 +27,7 @@ interface EnhancedDashboardGridProps {
 }
 
 const defaultLayouts = {
-  text: { w: 12, h: 1 },  // Default to text-s size (12×1)
+  text: { w: 12, h: 1 },  // Default to text-xs size (12×1)
   chart: { w: 4, h: 2 },  // Default to chart-s size (4×2)
   kpi: { w: 4, h: 2 },    // Only size available for KPI (4×2)
   table: { w: 4, h: 2 },  // Default to chart-s size (4×2)

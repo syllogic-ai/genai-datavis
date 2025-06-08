@@ -30,6 +30,7 @@ export function WidgetWrapper({
   isPopupActive
 }: WidgetWrapperProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleDelete = () => {
@@ -56,16 +57,26 @@ export function WidgetWrapper({
     onHidePopup();
   };
 
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+  };
+
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    setIsDragging(false);
+  };
+
   return (
     <div 
       ref={containerRef}
       className="relative h-full w-full group"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onDrag={handleDrag}
+      onDragEnd={handleDragEnd}
     >
       <AnimatePresence>
         {/* Delete button */}
-        {(isHovered || isPopupActive) && (
+        {(!isDragging && isHovered) && (
           <motion.button
             key={`delete-${id}`}
             initial={{ opacity: 0, scale: 0.8 }}
