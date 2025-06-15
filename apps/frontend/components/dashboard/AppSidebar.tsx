@@ -29,16 +29,16 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { NavMain } from "@/components/dashboard/NavMain";
-import { Chat } from "@/db/schema";
+import { Chat, Dashboard, dashboards } from "@/db/schema";
 import { SidebarChatList } from "./SidebarChatList";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  chats?: Chat[];
+  dashboards?: Dashboard[];
   currentChatId?: string;
 }
 
 export function AppSidebar({
-  chats,
+  dashboards,
   currentChatId,
   ...props
 }: AppSidebarProps) {
@@ -46,8 +46,8 @@ export function AppSidebar({
   const pathname = usePathname();
   const activeChatId =
     currentChatId ||
-    (pathname?.includes("/dashboard/c/")
-      ? pathname.split("/dashboard/c/")[1]
+    (pathname?.includes("/dashboard/")
+      ? pathname.split("/dashboard/")[1]
       : undefined);
 
   return (
@@ -68,7 +68,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className="bg-sidebar-background hide-scrollbar">
-        <NavMain items={[]} chats={chats} currentChatId={activeChatId} />
+        <NavMain items={[]} dashboards={dashboards} currentDashboardId={activeChatId} />
       </SidebarContent>
       <SidebarFooter className="bg-sidebar-background">
         {/* Add upgrade or usage button here */}

@@ -50,6 +50,20 @@
       "when": 1746280676567,
       "tag": "0006_huge_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1749898297566,
+      "tag": "0007_complex_black_panther",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1749898644229,
+      "tag": "0008_charming_vin_gonzales",
+      "breakpoints": true
     }
   ]
 }

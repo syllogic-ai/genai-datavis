@@ -1,7 +1,7 @@
 "use server";
 
 import db from '@/db';
-import { chats, files, charts } from '../../db/schema';
+import { chats, files } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { supabase } from './supabase';
 import { chatEvents, CHAT_EVENTS } from './events';
@@ -55,11 +55,7 @@ export async function deleteChat(chatId: string, userId: string) {
     const chatData = chatResult[0];
     const fileId = chatData.fileId;
     
-    // 2. First delete any charts that reference this chat
-    await db.delete(charts)
-      .where(eq(charts.chatId, chatId));
-    
-    // 3. Delete the chat itself (this removes the reference to the file)
+    // 2. Delete the chat itself (this removes the reference to the file)
     const result = await db.delete(chats)
       .where(and(
         eq(chats.id, chatId),

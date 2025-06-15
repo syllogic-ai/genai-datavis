@@ -53,7 +53,10 @@ export default function EnhancedDashboardPage() {
       </motion.div>
 
       {/* Floating Widget Dock */}
-      <FloatingWidgetDock onAddWidget={handleAddWidget} />
+      <FloatingWidgetDock 
+        onAddWidget={handleAddWidget} 
+        fileName="sample-data.csv" // This can be replaced with actual file name when available
+      />
     </div>
   );
 }

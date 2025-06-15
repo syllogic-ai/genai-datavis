@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { FloatingDock } from "@/components/ui/floating-dock";
 import {
   IconFileText,
@@ -8,12 +9,17 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { WidgetTypeConfig } from "@/types/enhanced-dashboard-types";
+import { WidgetCreateModal } from "./WidgetCreateModal";
 
 interface FloatingWidgetDockProps {
   onAddWidget: (type: string) => void;
+  fileName?: string;
 }
 
-export function FloatingWidgetDock({ onAddWidget }: FloatingWidgetDockProps) {
+export function FloatingWidgetDock({ onAddWidget, fileName }: FloatingWidgetDockProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedWidgetType, setSelectedWidgetType] = useState<string | null>(null);
+
   const widgetItems: WidgetTypeConfig[] = [
     {
       type: "text",
@@ -61,15 +67,39 @@ export function FloatingWidgetDock({ onAddWidget }: FloatingWidgetDockProps) {
     },
   ];
 
+  const handleWidgetClick = (widgetType: string) => {
+    if (widgetType === "text") {
+      // For text blocks, use the existing onAddWidget function directly
+      onAddWidget(widgetType);
+    } else {
+      // For other widget types, open the modal
+      setSelectedWidgetType(widgetType);
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedWidgetType(null);
+  };
+
   const dockItems = widgetItems.map(widget => ({
     title: widget.title,
     icon: widget.icon,
-    onClick: () => onAddWidget(widget.type),
+    onClick: () => handleWidgetClick(widget.type),
   }));
 
   return (
-    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
-      <FloatingDock items={dockItems} />
-    </div>
+    <>
+      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+        <FloatingDock items={dockItems} />
+      </div>
+
+      <WidgetCreateModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        fileName={fileName}
+      />
+    </>
   );
 }
