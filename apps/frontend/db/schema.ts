@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, integer, real, boolean } from "drizzle-orm/pg-core";
 
 // USERS (unchanged)
 export const users = pgTable("users", {
@@ -22,8 +22,9 @@ export const files = pgTable("files", {
 export const dashboards = pgTable("dashboards", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
-  name: text("name").notNull(),
+  name: text("name").notNull().default("New Dashboard"),
   description: text("description"),
+  icon: text("icon").default("document-text").notNull(),
   
   // Single file per dashboard for MVP simplicity
   fileId: text("file_id").references(() => files.id),
@@ -32,25 +33,46 @@ export const dashboards = pgTable("dashboards", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// WIDGETS (simplified)
+// WIDGETS (updated to match frontend structure)
 export const widgets = pgTable("widgets", {
   id: text("id").primaryKey(),
   dashboardId: text("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }),
   
-  name: text("name").notNull(),
-  chartType: text("chart_type"), // 'bar' | 'line' | 'pie' | 'table'
-  chartSpecs: jsonb("chart_specs"), // Chart configuration
-  sql: text("sql"), // Generated SQL query
+  // Widget title
+  title: text("title").notNull(),
+
+  // Widget type from frontend: 'text' | 'chart' | 'kpi' | 'table'
+  type: text("type").notNull(),
   
-  // Simple grid position
-  position: jsonb("position").$type<{
+  // Widget configuration (all widget-specific settings)
+  config: jsonb("config").notNull().$type<Record<string, any>>(),
+  
+  // Widget data (chart data, table data, etc.)
+  data: jsonb("data").$type<any>(),
+  
+  // SQL query for the dashboard
+  sql: text("sql"),
+
+  // React Grid Layout position
+  layout: jsonb("layout").notNull().$type<{
+    i: string;
     x: number;
     y: number;
-    width: number;
-    height: number;
+    w: number;
+    h: number;
+    minW?: number;
+    maxW?: number;
+    minH?: number;
+    maxH?: number;
+    isResizable?: boolean;
   }>(),
   
+  // Optional fields for enhanced functionality
+  chatId: text("chat_id").references(() => chats.id), // If widget was created from chat
+  isConfigured: boolean("is_configured").default(false),
+  
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // CHATS (simplified - linked to files for context)

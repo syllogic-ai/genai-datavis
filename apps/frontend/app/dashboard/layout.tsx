@@ -15,7 +15,7 @@ import {
 } from "../../components/ui/sidebar";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
-import { getChats } from "@/app/lib/actions";
+import { getDashboards } from "@/app/lib/actions";
 import { User as DbUser, users } from "@/db/schema";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import db from "@/db";
@@ -45,12 +45,12 @@ export default async function DashboardLayout({
     }
   }
   
-  // Fetch chats from the server if user is logged in
-  const chats = userId ? await getChats(userId) : [];
+  // Fetch dashboards from the server if user is logged in
+  const dashboards = userId ? await getDashboards(userId) : [];
   
   return (
     <SidebarProvider className="relative">
-      <AppSidebar variant="inset" chats={chats}/>
+      <AppSidebar variant="inset" dashboards={dashboards}/>
       <SidebarInset>
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">

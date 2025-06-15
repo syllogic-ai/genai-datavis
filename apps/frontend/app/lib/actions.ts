@@ -292,20 +292,21 @@ export async function getDashboards(userId: string) {
  * Create a new dashboard
  */
 export async function createDashboard(
-  name: string,
-  description: string | null,
+  dashboardId: string,
   userId: string,
-  fileId?: string
+  name: string,
+  description?: string | null,
+  metadata?: any,
+  icon?: string
 ) {
   try {
-    const dashboardId = uuidv4();
-    
     const result = await db.insert(dashboards).values({
       id: dashboardId,
       userId: userId,
       name: name,
-      description: description,
-      fileId: fileId || null,
+      description: description || null,
+      icon: icon || "DocumentTextIcon",
+      fileId: null, // For now, dashboards don't have a default file
       updatedAt: new Date(),
     }).returning();
 
@@ -316,6 +317,41 @@ export async function createDashboard(
     return result[0];
   } catch (error) {
     console.error('Error creating dashboard:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update an existing dashboard
+ */
+export async function updateDashboard(
+  dashboardId: string,
+  userId: string,
+  updates: {
+    name?: string;
+    description?: string;
+    icon?: string;
+  }
+) {
+  try {
+    const result = await db.update(dashboards)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(dashboards.id, dashboardId),
+        eq(dashboards.userId, userId)
+      ))
+      .returning();
+
+    if (!result || result.length === 0) {
+      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('Error updating dashboard:', error);
     throw error;
   }
 }
@@ -340,8 +376,8 @@ export async function getDashboardWidgets(dashboardId: string, userId: string) {
     // Get widgets with only the fields needed for navigation
     const result = await db.select({
       id: widgets.id,
-      name: widgets.name,
-      chartType: widgets.chartType,
+      title: widgets.title,
+      type: widgets.type,
     })
       .from(widgets)
       .where(eq(widgets.dashboardId, dashboardId))
@@ -350,8 +386,8 @@ export async function getDashboardWidgets(dashboardId: string, userId: string) {
     // Transform the result to match expected format
     return result.map(widget => ({
       id: widget.id,
-      title: widget.name,
-      type: widget.chartType || 'chart', // Default to 'chart' if no type specified
+      title: widget.title,
+      type: widget.type || 'chart', // Default to 'chart' if no type specified
     }));
   } catch (error) {
     console.error('Error fetching dashboard widgets:', error);
@@ -387,15 +423,17 @@ export async function createWidgetInDashboard(
     const result = await db.insert(widgets).values({
       id: widgetId,
       dashboardId: dashboardId,
-      name: widget.name || widget.title || 'Untitled Widget',
-      chartType: widget.type || widget.chartType || 'chart',
-      chartSpecs: widget.chartSpecs || null,
+      title: widget.name || widget.title || 'Untitled Widget',
+      type: widget.type || widget.chartType || 'chart',
+      config: widget.chartSpecs || {},
+      data: widget.data || null,
       sql: widget.sql || null,
-      position: {
+      layout: {
+        i: widgetId,
         x: layout?.x || 0,
         y: layout?.y || 0,
-        width: layout?.w || 2,
-        height: layout?.h || 2,
+        w: layout?.w || 2,
+        h: layout?.h || 2,
       },
     }).returning();
 
@@ -432,14 +470,15 @@ export async function updateWidgetLayout(
       throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
     }
 
-    // Update the widget position
+    // Update the widget layout
     const result = await db.update(widgets)
       .set({
-        position: {
+        layout: {
+          i: widgetId,
           x: layout.x || 0,
           y: layout.y || 0,
-          width: layout.w || 2,
-          height: layout.h || 2,
+          w: layout.w || 2,
+          h: layout.h || 2,
         },
       })
       .where(and(

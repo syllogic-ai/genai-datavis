@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, metadata } = body;
+    const { name, description, icon } = body;
 
     if (!name) {
       return NextResponse.json(
@@ -23,13 +23,14 @@ export async function POST(request: NextRequest) {
 
     const dashboardId = nanoid();
 
-    // Create dashboard
+    // Create dashboard with correct parameter order
     const result = await createDashboard(
       dashboardId,
       userId,
       name,
       description,
-      metadata
+      null, // metadata - not used for now
+      icon
     );
 
     return NextResponse.json(result);

@@ -1,27 +1,120 @@
 "use client";
 
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Widget } from "@/types/enhanced-dashboard-types";
-import { WidgetWithLayout } from "@/types/dashboard-types";
 import type { ChartSpec } from "@/types/chart-types";
+import toast from 'react-hot-toast';
 
 export function useDashboardState(dashboardId: string) {
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [dashboardName, setDashboardName] = useState("My Dashboard");
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isPublished, setIsPublished] = useState(false);
 
   // Reference to the grid component's add widget function
   const addWidgetRef = useRef<((type: string) => void) | null>(null);
 
+  // Load widgets from database
+  const loadWidgets = useCallback(async () => {
+    if (!dashboardId) return;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to load widgets');
+      }
+      
+      const data = await response.json();
+      setWidgets(data.widgets || []);
+      setIsPublished(data.widgets?.length > 0);
+      
+      // Show success toast only if widgets were loaded
+      if (data.widgets?.length > 0) {
+        toast.success(`Loaded ${data.widgets.length} widget${data.widgets.length === 1 ? '' : 's'}`, {
+          duration: 2000,
+          position: 'top-right',
+        });
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load widgets';
+      setError(errorMessage);
+      toast.error(errorMessage, {
+        duration: 4000,
+        position: 'top-right',
+      });
+      console.error('Error loading widgets:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [dashboardId]);
+
+  // Save widgets to database
+  const saveWidgets = useCallback(async () => {
+    if (!dashboardId) return;
+    
+    setIsSaving(true);
+    setError(null);
+    
+    // Show loading toast
+    const loadingToast = toast.loading('Publishing dashboard...', {
+      position: 'top-right',
+    });
+    
+    try {
+      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ widgets }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to save widgets');
+      }
+      
+      setIsPublished(true);
+      toast.dismiss(loadingToast); // Dismiss loading toast
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to save widgets';
+      setError(errorMessage);
+      toast.dismiss(loadingToast); // Dismiss loading toast
+      console.error('Error saving widgets:', err);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [dashboardId, widgets]);
+
+  // Load widgets on mount
+  useEffect(() => {
+    loadWidgets();
+  }, [loadWidgets]);
+
   const handleUpdateWidgets = useCallback((newWidgets: Widget[]) => {
     setWidgets(newWidgets);
+    setIsPublished(false); // Mark as unpublished when changes are made
   }, []);
 
   const handleAddWidget = useCallback((type: string) => {
     if (addWidgetRef.current) {
       addWidgetRef.current(type);
+      setIsPublished(false); // Mark as unpublished when widget is added
+      
+      // Show a quick toast for widget creation
+      toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} widget added!`, {
+        duration: 2000,
+        position: 'top-right',
+        icon: '✨',
+      });
     }
   }, []);
 
@@ -44,42 +137,16 @@ export function useDashboardState(dashboardId: string) {
     handleUpdateWidgets(updatedWidgets);
   }, [widgets, handleUpdateWidgets]);
 
-  // Convert Widget[] to WidgetWithLayout[] for compatibility (memoized)
-  const widgetsWithLayout: WidgetWithLayout[] = useMemo(() => 
-    widgets.map(widget => ({
-      id: widget.id,
-      userId: '', // This will be populated when needed
-      chatId: widget.chatId || null,
-      type: widget.type,
-      subtype: null,
-      title: widget.config?.title || null,
-      chartSpecs: widget.config?.chartSpecs || null,
-      sql: null,
-      data: widget.data || null,
-      config: widget.config,
-      isConfigured: widget.isConfigured || false,
-      cacheKey: null,
-      lastDataFetch: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      layout: {
-        lg: { x: widget.layout.x, y: widget.layout.y, w: widget.layout.w, h: widget.layout.h },
-        md: { x: widget.layout.x, y: widget.layout.y, w: widget.layout.w, h: widget.layout.h },
-        sm: { x: widget.layout.x, y: widget.layout.y, w: widget.layout.w, h: widget.layout.h },
-        xs: { x: widget.layout.x, y: widget.layout.y, w: widget.layout.w, h: widget.layout.h },
-      },
-      sizeClass: 'chart-s', // Default size class
-    })), [widgets]);
-
   return {
     // State
     widgets,
-    widgetsWithLayout,
     dashboardName,
     isChatOpen,
     isLoading,
+    isSaving,
     error,
     dashboardId,
+    isPublished,
     
     // Handlers
     handleUpdateWidgets,
@@ -89,6 +156,10 @@ export function useDashboardState(dashboardId: string) {
     setDashboardName,
     setIsLoading,
     setError,
+    
+    // Persistence
+    saveWidgets,
+    loadWidgets,
     
     // Refs
     addWidgetRef,

@@ -6,6 +6,8 @@ export interface Widget {
   layout: Layout;
   config: Record<string, any>;
   data?: any;
+  chatId?: string | null;
+  isConfigured?: boolean;
 }
 
 export interface DashboardState {
