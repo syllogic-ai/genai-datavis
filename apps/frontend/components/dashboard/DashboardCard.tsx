@@ -15,16 +15,7 @@ interface DashboardCardProps {
 // Function to generate a color based on the dashboard icon
 const getIconColor = (icon: string): string => {
   const colors = [
-    "bg-green-500",
-    "bg-blue-500", 
-    "bg-purple-500",
-    "bg-teal-500",
-    "bg-indigo-500",
-    "bg-rose-500",
-    "bg-orange-500",
-    "bg-emerald-500",
-    "bg-cyan-500",
-    "bg-pink-500",
+    "bg-accent"
   ];
   
   // Simple hash function to consistently assign colors based on icon name
@@ -68,7 +59,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
       className="cursor-pointer hover:shadow-md transition-shadow duration-200 border border-gray-200"
       onClick={handleClick}
     >
-      <CardContent className="p-6">
+      <CardContent className="px-6">
         <div className="flex items-center gap-4">
           {/* Icon */}
           <div className={`w-16 h-16 rounded-xl ${iconColor} flex items-center justify-center flex-shrink-0`}>

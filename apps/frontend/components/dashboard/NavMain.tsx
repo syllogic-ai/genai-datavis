@@ -5,6 +5,7 @@ import {
   PlusCircleIcon,
   LayoutDashboard,
   type LucideIcon,
+  PlusIcon,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -30,6 +31,7 @@ import {
 import { Dashboard } from "@/db/schema";
 import Link from "next/link";
 import { IconRenderer } from "./DashboardIconRenderer";
+import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
 
 // Widget interface for navigation items
 interface NavWidget {
@@ -48,6 +50,7 @@ export function NavMain({
   items = [],
   dashboards = [],
   currentDashboardId,
+  onDashboardCreated,
 }: {
   items?: {
     title: string;
@@ -55,6 +58,7 @@ export function NavMain({
   }[];
   dashboards?: Dashboard[];
   currentDashboardId?: string;
+  onDashboardCreated?: (dashboard: Dashboard) => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -62,6 +66,7 @@ export function NavMain({
     DashboardWithWidgets[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [hoveredDashboard, setHoveredDashboard] = useState<string | null>(null);
 
   // Memoize the active dashboard ID to prevent unnecessary re-renders
   const activeDashboardId = useMemo(() => {
@@ -127,7 +132,20 @@ export function NavMain({
             const response = await fetch(
               `/api/dashboards/${dashboard.id}/widgets`
             );
-            const widgets = response.ok ? await response.json() : [];
+            const data = response.ok ? await response.json() : null;
+            
+            // Ensure widgets is an array, handle different response formats
+            let widgets = [];
+            if (Array.isArray(data)) {
+              widgets = data;
+            } else if (data && Array.isArray(data.widgets)) {
+              widgets = data.widgets;
+            } else if (data && data.data && Array.isArray(data.data)) {
+              widgets = data.data;
+            } else {
+              // If no valid array found, default to empty array
+              widgets = [];
+            }
 
             // Transform widgets to navigation format
             const navWidgets: NavWidget[] = widgets.map((widget: any) => ({
@@ -196,11 +214,18 @@ export function NavMain({
     <SidebarGroup>
       <SidebarGroupLabel className="flex w-full font-semibold justify-between">
         <p>Dashboards</p>
-        <p>New</p>
+        <DashboardCreateEditPopover
+          onDashboardCreated={onDashboardCreated}
+          trigger={
+            <Button className="gap-2 h-6 w-6 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" variant="ghost" size="icon">
+              <PlusIcon className="h-4 w-4" />
+            </Button>
+          }
+        />
       </SidebarGroupLabel>
 
       <SidebarMenu>
-        {/* Dashboards with widgets */}
+        {/* Dashboards with collapsible widgets */}
         {dashboardsWithWidgets.length > 0 && (
           <SidebarMenu className="text-muted font-semibold">
             {dashboardsWithWidgets.map((dashboard) => (
@@ -208,48 +233,84 @@ export function NavMain({
                 key={dashboard.id}
                 asChild
                 defaultOpen={dashboard.isActive}
+                className="group/collapsible"
               >
-                <SidebarMenuItem>
-                  <SidebarMenuButton asChild tooltip={dashboard.name}>
-                    <Link href={`/dashboard/${dashboard.id}`}>
-                      <IconRenderer
-                        className="size-4 text-zinc-500"
-                        icon={dashboard.icon}
-                      />
-                      <span className="truncate">{dashboard.name}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                  {dashboard.widgets && dashboard.widgets.length > 0 ? (
-                    <>
+                <SidebarMenuItem 
+                  onMouseEnter={() => setHoveredDashboard(dashboard.id)}
+                  onMouseLeave={() => setHoveredDashboard(null)}
+                >
+                  <div className="relative flex items-center w-full">
+                    {/* Main dashboard link */}
+                    <SidebarMenuButton 
+                      asChild 
+                      tooltip={dashboard.name} 
+                      className={`flex-1 ${
+                        dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
+                      }`}
+                    >
+                      <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">
+                        <div className="relative flex items-center">
+                          {/* Dashboard Icon - always visible, but hidden when chevron is shown */}
+                          <IconRenderer
+                            className={`size-4 text-sidebar-foreground transition-opacity duration-200 ${
+                              hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
+                            }`}
+                            icon={dashboard.icon}
+                          />
+                        </div>
+                        <span className="truncate">{dashboard.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                    
+                    {/* Chevron Trigger - positioned absolutely over the icon area with proper margins */}
+                    <div 
+                      className={`absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 transition-all duration-200 rounded-sm hover:bg-sidebar-foreground/20 ${
+                        hoveredDashboard === dashboard.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                      }`}
+                      onMouseEnter={() => {
+                        // Trigger the parent menu item hover effect
+                        setHoveredDashboard(dashboard.id);
+                      }}
+                    >
                       <CollapsibleTrigger asChild>
-                        <SidebarMenuAction className="data-[state=open]:rotate-90">
+                        <button className="h-4 w-4 flex items-center justify-center data-[state=open]:rotate-90 transition-transform duration-200">
                           <ChevronRight className="h-4 w-4" />
-                          <span className="sr-only">Toggle</span>
-                        </SidebarMenuAction>
+                        </button>
                       </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          {dashboard.widgets.map((widget) => {
-                            const WidgetIcon = getWidgetIcon(widget.type);
-                            return (
-                              <SidebarMenuSubItem key={widget.id}>
-                                <SidebarMenuSubButton asChild>
-                                  <Link
-                                    href={`/dashboard/${dashboard.id}#widget-${widget.id}`}
-                                  >
-                                    <WidgetIcon className="h-3 w-3" />
-                                    <span className="truncate">
-                                      {widget.title}
-                                    </span>
-                                  </Link>
-                                </SidebarMenuSubButton>
-                              </SidebarMenuSubItem>
-                            );
-                          })}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    </>
-                  ) : null}
+                    </div>
+                  </div>
+                  
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {dashboard.widgets && dashboard.widgets.length > 0 ? (
+                        dashboard.widgets.map((widget) => {
+                          const WidgetIcon = getWidgetIcon(widget.type);
+                          return (
+                            <SidebarMenuSubItem key={widget.id}>
+                              <SidebarMenuSubButton asChild>
+                                <Link
+                                  href={`/dashboard/${dashboard.id}#widget-${widget.id}`}
+                                >
+                                  <WidgetIcon className="h-3 w-3" />
+                                  <span className="truncate">
+                                    {widget.title}
+                                  </span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          );
+                        })
+                      ) : (
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton>
+                            <span className="text-muted-foreground/40 text-sm">
+                              No widgets inside
+                            </span>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      )}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
                 </SidebarMenuItem>
               </Collapsible>
             ))}

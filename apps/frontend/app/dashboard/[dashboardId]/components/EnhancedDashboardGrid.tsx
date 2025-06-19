@@ -337,7 +337,7 @@ export function EnhancedDashboardGrid({
               <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center bg-gray-50/50 dark:bg-gray-800/50">
                 <div className="text-4xl mb-4 text-gray-400">📊</div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                  Start Building Your Dashboard
+                  No widgets inside
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400 text-sm">
                   Use the floating dock below to add widgets to your dashboard.

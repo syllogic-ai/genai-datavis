@@ -104,9 +104,9 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden text-black">
-      <SiteHeader />
+      <SiteHeader chatTitle='Home'/>
       <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="max-w-7xl mx-auto px-6 py-8">
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div>

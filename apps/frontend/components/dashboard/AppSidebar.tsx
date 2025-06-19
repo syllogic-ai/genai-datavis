@@ -1,26 +1,9 @@
 "use client";
 
 import * as React from "react";
-import {
-  ArrowUpCircleIcon,
-  BarChartIcon,
-  CameraIcon,
-  ClipboardListIcon,
-  Command,
-  DatabaseIcon,
-  FileCodeIcon,
-  FileIcon,
-  FileTextIcon,
-  FolderIcon,
-  HelpCircleIcon,
-  Home,
-  LayoutDashboardIcon,
-  ListIcon,
-  SearchIcon,
-  SettingsIcon,
-  UsersIcon,
-} from "lucide-react";
+import { Command, Home, Plus } from "lucide-react";
 import { usePathname } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import {
   Sidebar,
   SidebarContent,
@@ -34,8 +17,6 @@ import { NavMain } from "@/components/dashboard/NavMain";
 import { Dashboard } from "@/db/schema";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
 import Link from "next/link";
-import { HomeIcon } from "@heroicons/react/20/solid";
-import { HomeModernIcon } from "@heroicons/react/24/outline";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   dashboards?: Dashboard[];
@@ -44,13 +25,15 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function AppSidebar({
-  dashboards,
+  dashboards = [],
   currentChatId,
   onDashboardCreated,
   ...props
 }: AppSidebarProps) {
-  // If currentChatId is not provided, try to extract it from the pathname
   const pathname = usePathname();
+  const { user } = useUser();
+  
+  // Extract active dashboard ID from pathname
   const activeChatId =
     currentChatId ||
     (pathname?.includes("/dashboard/")
@@ -58,45 +41,55 @@ export function AppSidebar({
       : undefined);
 
   return (
-    <Sidebar
-      collapsible="offcanvas"
-      {...props}
-      className="bg-sidebar-background"
-    >
-      <SidebarHeader className="bg-sidebar-background text-muted">
+    <Sidebar variant="inset" {...props}>
+      <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem className="mb-8">
+          <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="#">
+              <Link href="/dashboard">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <Command className="size-4" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Acme Inc</span>
-                  <span className="truncate text-xs">Enterprise</span>
+                  <span className="truncate font-semibold">GenAI DataVis</span>
+                  <span className="truncate text-xs">Dashboard</span>
                 </div>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild className="">
-              <Link href="/dashboard">
-                <Home className="h-4 w-4" />
-                <span className="font-bold">Home</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="bg-sidebar-background hide-scrollbar">
+      
+      <SidebarContent>
         <NavMain
-          items={[]}
           dashboards={dashboards}
           currentDashboardId={activeChatId}
+          onDashboardCreated={onDashboardCreated}
         />
       </SidebarContent>
-      <SidebarFooter className="bg-sidebar-background">
-        {/* Add upgrade or usage button here */}
+      
+      <SidebarFooter>
+        {user && (
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton size="lg">
+                <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
+                  <span className="text-sm font-medium">
+                    {user.firstName?.[0] || user.emailAddresses[0]?.emailAddress[0] || "U"}
+                  </span>
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">
+                    {user.fullName || user.firstName || "User"}
+                  </span>
+                  <span className="truncate text-xs">
+                    {user.emailAddresses[0]?.emailAddress || ""}
+                  </span>
+                </div>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

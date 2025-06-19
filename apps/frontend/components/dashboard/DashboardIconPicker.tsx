@@ -41,7 +41,7 @@ export const IconPickerDialog = ({
     <Button variant="outline" className="min-w-[150px]">
       {currentSelected ? (
         <>
-          <IconRenderer className="size-4 text-zinc-500" icon={currentSelected} />
+          <IconRenderer className="size-4 text-sidebar-foreground" icon={currentSelected} />
           Update
         </>
       ) : (
@@ -90,7 +90,7 @@ export const IconPicker = ({
             type="button"
             role="button"
             onClick={() => onChange(name)}
-            className="h-11"
+            className="h-11 hover:bg-sidebar-foreground/15 hover:text-sidebar-foreground/80 bg-sidebar-foreground/5 border-sidebar-foreground/10 text-sidebar-foreground"
           >
             <Component className="!size-6 shrink-0" />
             <span className="sr-only">{name}</span>
