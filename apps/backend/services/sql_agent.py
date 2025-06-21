@@ -68,7 +68,7 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     
     prompt = f"""
     You are a SQL expert specializing in DuckDB. Given a dataset schema, sample data, 
-    and a user's question, generate ONLY valid DuckDB SQL queries. 
+    and a user's question, generate ONLY valid DuckDB SQL queries. Your response should give EXACTLY what the users asked for, no more, no less.
     
     Here is the schema and sample data:
 
@@ -105,6 +105,9 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - Include appropriate filtering criteria in WHERE clauses
     - For temporal analysis, use consistent date/time extraction methods
     - Date columns should always be returned in a YYYY-MM-DD format.
+    - Only use the available column types: TEXT, INTEGER, FLOAT, BOOLEAN, DATE, TIMESTAMP, and no else.
+    - Don't do any formatting in your numerical columns whatsoever, except the floating point precision.
+    - Never use printf in your SQL.
     
     
     DUCKDB DATE FUNCTION REQUIREMENTS:

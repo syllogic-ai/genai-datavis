@@ -6,6 +6,7 @@ import sys
 from supabase import Client
 import pandas as pd
 import numpy as np
+import logfire
 
 
 # Add parent directory to path for imports
@@ -74,10 +75,11 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
     Returns:
         List[Dict[str, Any]]: A list of messages in the chat
     """
+    logfire.info(f"Getting message history for chat {chat_id}")
     try:
         if last_n is not None:
             # Use the RPC function to get last n messages
-            result = await async_supabase.rpc('get_last_messages', {
+            result = async_supabase.rpc('get_last_messages', {
                 'chat_id': chat_id,
                 'n': last_n
             }).execute()
@@ -85,17 +87,19 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
             if result.data is None:
                 print(f"Chat with ID {chat_id} not found")
                 return []
-                
+
+            logfire.info(f"Message history for chat {chat_id}: {result.data}")
             # The RPC function returns JSONB, which is already parsed
             return result.data
         else:
             # Get all messages using the original approach
-            chat_data = await async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
+            chat_data = async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
             
             if not chat_data.data or len(chat_data.data) == 0:
                 print(f"Chat with ID {chat_id} not found")
                 return []
                 
+            logfire.info(f"Message history for chat {chat_id}: {chat_data.data}")
             # Return the conversation array
             return chat_data.data[0].get("conversation", [])
         
@@ -132,6 +136,27 @@ async def update_chart_specs(chart_id: str, chart_specs: Dict[str, Any]) -> bool
         print(f"Error updating chart_specs: {str(e)}")
         return False
 
+async def convert_data_to_chart_data_1d(data_cur: pd.DataFrame, data_cols: list[str], x_key: str, y_col: str) -> list[dict]:
+    """
+    Convert the data to a chart data array for 1D charts (like a pie chart).
+
+    Args:
+        data_cur: The current data
+        data_cols: The x-key values to use
+        x_key: The x-key column to use
+        y_col: The y-value column to use
+
+    Returns:
+        list[dict]: The chart data array
+    """
+    chart_data_array = []
+    
+    for col in data_cols:
+        item = {}
+        item[col] = convert_value(data_cur[data_cur[x_key] == col].iloc[0][y_col])
+        chart_data_array.append(item)
+    return chart_data_array 
+
 async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str], x_key: str) -> list[dict]:
     """
     Convert the data to a chart data array.
@@ -147,7 +172,8 @@ async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str
     chart_data_array = []
     for i in range(min(len(data_cur), 100)):  # Limit to 100 data points
         item = {}
-        item[x_key] = data_cur.iloc[i][x_key]
+        if len(x_key) > 0:
+            item[x_key] = data_cur.iloc[i][x_key]
         for col in data_cols:
             item[col] = convert_value(data_cur.iloc[i][col])
         chart_data_array.append(item)

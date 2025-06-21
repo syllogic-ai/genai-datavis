@@ -22,7 +22,7 @@ class Deps(BaseModel):
     is_follow_up: bool = False
     duck: Any  # duckdb.DuckDBPyConnection
     supabase: Any  # Client
-    message_history: List[Dict[str, str]]
+    message_history: List[str]
 
 class GradientStops(BaseModel):
     """

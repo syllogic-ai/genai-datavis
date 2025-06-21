@@ -35,11 +35,19 @@ export function PieChartRenderer({ spec }: { spec: ChartSpec }) {
   }
 
   // Transform data for pie chart format
-  const pieData = spec.data.map((item, index) => ({
-    name: item[labelKey],
-    value: Number(item[valueKey]),
-    fill: spec.chartConfig?.[Object.keys(spec.chartConfig)[index % Object.keys(spec.chartConfig).length]]?.color || `hsl(${index * 45}, 70%, 60%)`
-  }));
+  // const pieData = spec.data.map((item, index) => ({
+  //   name: item[labelKey],
+  //   value: Number(item[valueKey]),
+  //   fill: spec.chartConfig?.[Object.keys(spec.chartConfig)[index % Object.keys(spec.chartConfig).length]]?.color || `hsl(${index * 45}, 70%, 60%)`
+  // }));
+  const pieData = spec.data.map((item, index) => {
+    const [key, value] = Object.entries(item)[0];
+    return {
+      name: key,
+      value: Number(value),
+      fill: spec.chartConfig?.[Object.keys(spec.chartConfig)[index % Object.keys(spec.chartConfig).length]]?.color || `hsl(${index * 45}, 70%, 60%)`
+    };
+  });
 
   const isDonut = spec.pieConfig?.isDonut === true;
   const showLabels = spec.pieConfig?.showLabels === true;

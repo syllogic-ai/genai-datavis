@@ -85,6 +85,7 @@ async def process_user_request(
     
     # Get message history
     message_history = await get_message_history(chat_id)
+    logfire.info(f"Message history: {str(message_history)}")
     
     # Create dependencies
     deps = Deps(
@@ -96,7 +97,7 @@ async def process_user_request(
         is_follow_up=is_follow_up,
         duck=duck_connection,
         supabase=supabase_client,
-        message_history=message_history
+        message_history=[str(message_history)]
     )
     
     try:
