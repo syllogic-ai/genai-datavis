@@ -61,7 +61,7 @@ const defaultConfigs = {
 export function EnhancedDashboardGrid({ 
   widgets, 
   onUpdateWidgets,
-  onAddWidget
+  onAddWidget,
 }: EnhancedDashboardGridProps) {
   const [hoveredItems, setHoveredItems] = useState<Record<string, boolean>>({});
   const [activePopup, setActivePopup] = useState<{
@@ -357,7 +357,7 @@ export function EnhancedDashboardGrid({
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
                   No widgets inside
                 </h3>
-                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
                   Use the floating dock below to add widgets to your dashboard.
                   Drag, resize, and configure each widget to fit your needs.
                 </p>

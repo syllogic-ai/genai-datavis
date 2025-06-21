@@ -9,6 +9,10 @@ import {
   Download,
   ExternalLink,
   Info,
+  Send,
+  SquareArrowUpRight,
+  Share2,
+  Forward,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -47,8 +51,9 @@ export function DashboardHeader({
             {dashboardTitle || "New dashboard"}
           </h1>
         </div>
-        <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors text-sm font-medium">
+        <Button className="bg-primary h-fit py-1 px-4 text-primary-foreground hover:bg-primary/90 rounded-lg transition-colors text-sm font-medium gap-2">
           Publish
+          <Forward className="size-4" />
         </Button>
       </div>
     </header>

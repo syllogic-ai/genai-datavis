@@ -20,6 +20,7 @@ import { User as DbUser, users } from "@/db/schema";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import db from "@/db";
 import { eq } from "drizzle-orm";
+import { DashboardProvider } from "@/components/dashboard/DashboardUserContext";
 
 export default async function DashboardLayout({
   children,
@@ -49,15 +50,17 @@ export default async function DashboardLayout({
   const dashboards = userId ? await getDashboards(userId) : [];
   
   return (
-    <SidebarProvider className="relative">
-      <AppSidebar variant="inset" dashboards={dashboards}/>
-      <SidebarInset>
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-           {children}
+    <DashboardProvider initialDashboards={dashboards}>
+      <SidebarProvider className="">
+        <AppSidebar variant="inset" />
+        <SidebarInset>
+          <div className="flex flex-1 flex-col relative">
+            <div className="@container/main flex flex-1 flex-col gap-2">
+             {children}
+            </div>
           </div>
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+        </SidebarInset>
+      </SidebarProvider>
+    </DashboardProvider>
   );
 } 

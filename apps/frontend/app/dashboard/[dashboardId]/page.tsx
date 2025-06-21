@@ -6,13 +6,16 @@ import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
 import { useParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
+import { useDashboardContext } from "@/components/dashboard/DashboardUserContext";
 import { Button } from "@/components/ui/button";
 import { Save, Loader2, Check, AlertCircle } from "lucide-react";
+import { useEffect } from "react";
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function EnhancedDashboardPage() {
   const params = useParams();
   const dashboardId = params.dashboardId as string;
+  const { updateCurrentDashboard } = useDashboardContext();
   
   const {
     widgets,
@@ -27,6 +30,14 @@ export default function EnhancedDashboardPage() {
     saveWidgets,
     addWidgetRef,
   } = useDashboardState(dashboardId);
+
+  // Update the dashboard context whenever widgets change
+  useEffect(() => {
+    if (dashboardId && widgets.length >= 0) {
+      console.log(`[DashboardPage] Updating context with ${widgets.length} widgets for dashboard ${dashboardId}`);
+      updateCurrentDashboard(dashboardId, widgets);
+    }
+  }, [dashboardId, widgets, updateCurrentDashboard]);
 
   const handlePublish = async () => {
     const success = await saveWidgets();
@@ -88,13 +99,13 @@ export default function EnhancedDashboardPage() {
           onUpdateWidgets={handleUpdateWidgets}
           onAddWidget={(fn) => { addWidgetRef.current = fn; }}
         />
+        
+        {/* Floating Widget Dock - positioned relative to this content area */}
+        <FloatingWidgetDock 
+          onAddWidget={handleAddWidget} 
+          fileName="sample-data.csv" // This can be replaced with actual file name when available
+        />
       </motion.div>
-
-      {/* Floating Widget Dock */}
-      <FloatingWidgetDock 
-        onAddWidget={handleAddWidget} 
-        fileName="sample-data.csv" // This can be replaced with actual file name when available
-      />
 
       {/* Save Status Indicator */}
       <AnimatePresence mode="wait">

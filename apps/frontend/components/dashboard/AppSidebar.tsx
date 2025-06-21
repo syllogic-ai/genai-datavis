@@ -16,22 +16,20 @@ import {
 import { NavMain } from "@/components/dashboard/NavMain";
 import { Dashboard } from "@/db/schema";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
+import { useDashboardContext } from "./DashboardUserContext";
 import Link from "next/link";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  dashboards?: Dashboard[];
   currentChatId?: string;
-  onDashboardCreated?: (dashboard: Dashboard) => void;
 }
 
 export function AppSidebar({
-  dashboards = [],
   currentChatId,
-  onDashboardCreated,
   ...props
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { user } = useUser();
+  const { dashboards, currentDashboardWidgets, addDashboard } = useDashboardContext();
   
   // Extract active dashboard ID from pathname
   const activeChatId =
@@ -39,6 +37,10 @@ export function AppSidebar({
     (pathname?.includes("/dashboard/")
       ? pathname.split("/dashboard/")[1]
       : undefined);
+
+  const handleDashboardCreated = (dashboard: Dashboard) => {
+    addDashboard(dashboard);
+  };
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -64,7 +66,8 @@ export function AppSidebar({
         <NavMain
           dashboards={dashboards}
           currentDashboardId={activeChatId}
-          onDashboardCreated={onDashboardCreated}
+          currentDashboardWidgets={currentDashboardWidgets}
+          onDashboardCreated={handleDashboardCreated}
         />
       </SidebarContent>
       

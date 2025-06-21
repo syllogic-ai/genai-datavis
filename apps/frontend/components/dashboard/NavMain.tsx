@@ -29,20 +29,25 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { Dashboard } from "@/db/schema";
+import { Widget } from "@/types/enhanced-dashboard-types";
 import Link from "next/link";
 import { IconRenderer } from "./DashboardIconRenderer";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
 
-// Dashboard with active state for navigation
-interface DashboardWithState extends Dashboard {
+// Dashboard with widget information and active state
+interface DashboardWithWidgets extends Dashboard {
   isActive?: boolean;
+  widgets: Widget[];
+  widgetCount: number;
 }
 
 export function NavMain({
   items = [],
   dashboards = [],
   currentDashboardId,
+  currentDashboardWidgets = [],
   onDashboardCreated,
+  onWidgetUpdate,
 }: {
   items?: {
     title: string;
@@ -50,11 +55,13 @@ export function NavMain({
   }[];
   dashboards?: Dashboard[];
   currentDashboardId?: string;
+  currentDashboardWidgets?: Widget[];
   onDashboardCreated?: (dashboard: Dashboard) => void;
+  onWidgetUpdate?: (dashboardId: string, widgets: Widget[]) => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [dashboardsWithState, setDashboardsWithState] = useState<DashboardWithState[]>([]);
+  const [dashboardsWithWidgets, setDashboardsWithWidgets] = useState<DashboardWithWidgets[]>([]);
   const [hoveredDashboard, setHoveredDashboard] = useState<string | null>(null);
 
   // Memoize the active dashboard ID to prevent unnecessary re-renders
@@ -67,14 +74,88 @@ export function NavMain({
     );
   }, [currentDashboardId, pathname]);
 
-  // Update dashboard state when dashboards or active dashboard changes
+  // Load widget counts for all dashboards (only once on mount)
+  const loadDashboardWidgets = useCallback(async () => {
+    console.log(`[NavMain] Loading widget counts for ${dashboards.length} dashboards`);
+    
+    const dashboardsWithWidgetData = await Promise.all(
+      dashboards.map(async (dashboard) => {
+        try {
+          // If this is the current dashboard, use the provided widgets
+          if (dashboard.id === activeDashboardId && currentDashboardWidgets.length > 0) {
+            console.log(`[NavMain] Using provided widgets for current dashboard ${dashboard.id}: ${currentDashboardWidgets.length} widgets`);
+            return {
+              ...dashboard,
+              isActive: true,
+              widgets: currentDashboardWidgets,
+              widgetCount: currentDashboardWidgets.length,
+            };
+          }
+
+          // For other dashboards, fetch widget count from API
+          const response = await fetch(`/api/dashboards/${dashboard.id}/widgets`);
+          if (!response.ok) {
+            console.warn(`[NavMain] Failed to load widgets for dashboard ${dashboard.id}`);
+            return {
+              ...dashboard,
+              isActive: dashboard.id === activeDashboardId,
+              widgets: [],
+              widgetCount: 0,
+            };
+          }
+
+          const { widgets } = await response.json();
+          console.log(`[NavMain] Loaded ${widgets.length} widgets for dashboard ${dashboard.id}`);
+          
+          return {
+            ...dashboard,
+            isActive: dashboard.id === activeDashboardId,
+            widgets: widgets || [],
+            widgetCount: widgets?.length || 0,
+          };
+        } catch (error) {
+          console.error(`[NavMain] Error loading widgets for dashboard ${dashboard.id}:`, error);
+          return {
+            ...dashboard,
+            isActive: dashboard.id === activeDashboardId,
+            widgets: [],
+            widgetCount: 0,
+          };
+        }
+      })
+    );
+
+    setDashboardsWithWidgets(dashboardsWithWidgetData);
+  }, [dashboards, activeDashboardId, currentDashboardWidgets]);
+
+  // Load dashboard widgets on mount and when dashboards change
   useEffect(() => {
-    const dashboardsWithActiveState = dashboards.map((dashboard) => ({
-      ...dashboard,
-      isActive: dashboard.id === activeDashboardId,
-    }));
-    setDashboardsWithState(dashboardsWithActiveState);
-  }, [dashboards, activeDashboardId]);
+    if (dashboards.length > 0) {
+      loadDashboardWidgets();
+    }
+  }, [dashboards, loadDashboardWidgets]);
+
+  // Update current dashboard widgets when they change
+  useEffect(() => {
+    if (activeDashboardId && currentDashboardWidgets.length >= 0) {
+      console.log(`[NavMain] Updating current dashboard ${activeDashboardId} widgets: ${currentDashboardWidgets.length}`);
+      
+      setDashboardsWithWidgets(prev => 
+        prev.map(dashboard => 
+          dashboard.id === activeDashboardId
+            ? {
+                ...dashboard,
+                widgets: currentDashboardWidgets,
+                widgetCount: currentDashboardWidgets.length,
+              }
+            : dashboard
+        )
+      );
+
+      // Notify parent component about widget update
+      onWidgetUpdate?.(activeDashboardId, currentDashboardWidgets);
+    }
+  }, [activeDashboardId, currentDashboardWidgets, onWidgetUpdate]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -104,37 +185,71 @@ export function NavMain({
       </SidebarGroupLabel>
 
       <SidebarMenu>
-        {/* Dashboard navigation items */}
-        {dashboardsWithState.length > 0 && (
+        {/* Dashboard navigation items with collapsible widgets */}
+        {dashboardsWithWidgets.length > 0 && (
           <SidebarMenu className="text-muted font-semibold">
-            {dashboardsWithState.map((dashboard) => (
-              <SidebarMenuItem 
-                key={dashboard.id}
-                onMouseEnter={() => setHoveredDashboard(dashboard.id)}
-                onMouseLeave={() => setHoveredDashboard(null)}
-              >
-                <SidebarMenuButton 
-                  asChild 
-                  tooltip={dashboard.name} 
-                  className={`${
-                    dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
-                  }`}
-                >
-                  <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">
-                    <IconRenderer
-                      className="size-4 text-sidebar-foreground"
-                      icon={dashboard.icon}
-                    />
-                    <span className="truncate">{dashboard.name}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+            {dashboardsWithWidgets.map((dashboard) => (
+              <Collapsible key={dashboard.id} asChild defaultOpen={dashboard.isActive}>
+                <SidebarMenuItem>
+                  <SidebarMenuButton 
+                    asChild 
+                    tooltip={dashboard.name} 
+                    className={`${
+                      dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
+                    }`}
+                    onMouseEnter={() => setHoveredDashboard(dashboard.id)}
+                    onMouseLeave={() => setHoveredDashboard(null)}
+                  >
+                    <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">
+                      <IconRenderer
+                        className="size-4 text-sidebar-foreground"
+                        icon={dashboard.icon}
+                      />
+                      <span className="truncate">{dashboard.name}</span>
+                      {dashboard.widgetCount > 0 && (
+                        <span className="ml-auto text-xs bg-sidebar-accent text-sidebar-accent-foreground px-2 py-0.5 rounded-full">
+                          {dashboard.widgetCount}
+                        </span>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                  
+                  {dashboard.widgets.length > 0 && (
+                    <>
+                      <CollapsibleTrigger asChild>
+                        <SidebarMenuAction className="data-[state=open]:rotate-90">
+                          <ChevronRight />
+                          <span className="sr-only">Toggle widgets</span>
+                        </SidebarMenuAction>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <SidebarMenuSub>
+                          {dashboard.widgets.map((widget) => (
+                            <SidebarMenuSubItem key={widget.id}>
+                              <SidebarMenuSubButton asChild>
+                                <Link href={`/dashboard/${dashboard.id}#widget-${widget.id}`}>
+                                  <span className="text-xs text-muted-foreground capitalize">
+                                    {widget.type}
+                                  </span>
+                                  <span className="truncate text-sm">
+                                    {widget.config?.title || `${widget.type} widget`}
+                                  </span>
+                                </Link>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      </CollapsibleContent>
+                    </>
+                  )}
+                </SidebarMenuItem>
+              </Collapsible>
             ))}
           </SidebarMenu>
         )}
 
         {/* Show message when no dashboards */}
-        {dashboardsWithState.length === 0 && (
+        {dashboardsWithWidgets.length === 0 && (
           <SidebarMenuItem>
             <SidebarMenuButton disabled>
               <span className="text-muted-foreground/40 text-sm">
