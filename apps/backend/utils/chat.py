@@ -132,6 +132,27 @@ async def update_chart_specs(chart_id: str, chart_specs: Dict[str, Any]) -> bool
         print(f"Error updating chart_specs: {str(e)}")
         return False
 
+async def convert_data_to_chart_data_1d(data_cur: pd.DataFrame, data_cols: list[str], x_key: str, y_col: str) -> list[dict]:
+    """
+    Convert the data to a chart data array for 1D charts (like a pie chart).
+
+    Args:
+        data_cur: The current data
+        data_cols: The x-key values to use
+        x_key: The x-key column to use
+        y_col: The y-value column to use
+
+    Returns:
+        list[dict]: The chart data array
+    """
+    chart_data_array = []
+    
+    for col in data_cols:
+        item = {}
+        item[col] = convert_value(data_cur[data_cur[x_key] == col].iloc[0][y_col])
+        chart_data_array.append(item)
+    return chart_data_array 
+
 async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str], x_key: str) -> list[dict]:
     """
     Convert the data to a chart data array.
@@ -147,7 +168,8 @@ async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str
     chart_data_array = []
     for i in range(min(len(data_cur), 100)):  # Limit to 100 data points
         item = {}
-        item[x_key] = data_cur.iloc[i][x_key]
+        if len(x_key) > 0:
+            item[x_key] = data_cur.iloc[i][x_key]
         for col in data_cols:
             item[col] = convert_value(data_cur.iloc[i][col])
         chart_data_array.append(item)
