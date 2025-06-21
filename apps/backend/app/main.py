@@ -1,6 +1,6 @@
 from httpx import request
 from apps.backend.tools.llm_interaction import process_user_request
-from apps.backend.utils.chat import append_chat_message, get_chart_specs, convert_data_to_chart_data
+from apps.backend.utils.chat import append_chat_message, get_chart_specs, convert_data_to_chart_data, convert_data_to_chart_data_1d
 from apps.backend.utils.files import fetch_dataset
 from apps.backend.utils.utils import get_data
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, Header
@@ -500,7 +500,47 @@ async def compute_chart_spec_data(
         )
         
 
-        if chart_specs["chartType"] != "kpi":
+        if chart_specs["chartType"] == "pie":
+            # x_key = list(chart_specs["chartConfig"].keys())[0]
+            x_key = chart_specs["xAxisConfig"]["dataKey"]
+            data_cols = data_df[x_key].unique()
+            y_col = chart_specs["dataColumn"]
+
+            chart_config = {}
+            for i, col in enumerate(data_cols):
+                chart_config[col] = {
+                    "color": chart_specs["colors"][i % len(chart_specs["colors"])]
+                }
+            chart_specs["chartConfig"] = chart_config
+
+            # Update chart specs in the database
+            chart_data = await convert_data_to_chart_data_1d(
+                data_df,
+                data_cols,
+                x_key,
+                y_col
+            )
+
+            chart_specs["data"] = chart_data
+
+            row_count = len(chart_specs["data"])
+
+        elif chart_specs["chartType"] == "table":
+            data_cols = list(chart_specs["columns"])
+            x_key = ""
+
+            # Update chart specs in the database
+            chart_data = await convert_data_to_chart_data(
+                data_df,
+                data_cols,
+                x_key
+            )
+
+            chart_specs["data"] = chart_data
+
+            row_count = len(chart_specs["data"])
+
+        elif chart_specs["chartType"] != "kpi":
             logfire.info(
             f"{chart_specs['chartType']} chart under preparation",
             specs=chart_specs,
@@ -572,7 +612,8 @@ async def compute_chart_spec_data(
             "Chart spec data computed successfully",
             chart_id=chart_id,
             row_count=row_count,
-            processing_time=time.time() - start_time
+            processing_time=time.time() - start_time,
+            chart_specs=chart_specs
         )
         
         return ChartSpecResponse(

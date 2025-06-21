@@ -13,7 +13,8 @@ class OrchestratorOutput(BaseModel):
     """Output from the orchestrator agent."""
     answer: str = Field(description="Final answer to the user's question")
     chart_id: Optional[str] = Field(default=None, description="ID of the chart if one was created")
-    insights: Optional[Dict[str, str]] = Field(default=None, description="Business insights if generated")
+    insights: Dict[str, str] = {"test": "test"}
+    # insights: Optional[Dict[str, str]] = Field(default=None, description="Business insights if generated")
 
 # Declare the orchestrator agent
 orchestrator_agent = Agent(
@@ -52,9 +53,9 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
-    - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
+    - Message history: {ctx.deps.message_history[0]} 
     Your job is to coordinate the workflow and ensure the user gets a complete answer.
-    """
+    """ # #{json.dumps(ctx.deps.message_history, indent=2)}
   
     return prompt
 

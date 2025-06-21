@@ -202,6 +202,98 @@ class KPIOutput(BaseModel):
     dataColumn: str = Field(description="The column to use for the KPI value")
     changeColumn: Optional[str] = Field(default=None, description="The column to use for the change value")
 
+# =============================================== Pie chart definitions ===========================================
+class pieConfigClass(BaseModel):
+    isDonut: Optional[bool] = Field(default=False, description="Whether to display the pie chart as a donut chart")
+    showLabels: Optional[bool] = Field(default=False, description="Whether to show labels on pie slices")
+    outerRadius: Optional[int] = Field(default=80, description="The outer radius of the pie chart")
+    innerRadius: Optional[int] = Field(default=40, description="The inner radius of the pie chart")
+    stroke: Optional[str] = Field(default="transparent", description="The stroke color of the pie chart")
+    strokeWidth: Optional[int] = Field(default=0, description="The stroke width of the pie chart")
+
+class PieChartInput(BaseModel):
+    """
+    Input specification for pie charts
+    """
+    title: str = Field(description="The title of the chart")
+    description: str = Field(description="a 5 word description of the chart")
+    dataColumn: str = Field(description="The value column to use for the pie chart. Should be one")
+    xAxisConfig: xAxisConfigClass = Field(description="The configuration for the x-axis")
+    pieConfig: pieConfigClass = Field(description="The configuration for the pie chart")
+    hideLegend: Optional[bool] = Field(default=False, description="Whether to hide the legend")
+
+class PieChartOutput(BaseModel):
+    """
+    Output specification for pie charts
+    """
+    chartType: Literal["pie"] = Field(default="pie", description="Type of chart")
+    title: str = Field(description="The title of the chart")
+    description: str = Field(description="a 5 word description of the chart")
+    pieConfig: pieConfigClass = Field(description="The configuration for the pie chart")
+    # chartConfig: dict = Field(description="The configuration for the chart, including the colors and labels for each column")
+    hideLegend: Optional[bool] = Field(default=False, description="Whether to hide the legend")
+    xAxisConfig: xAxisConfigClass = Field(description="The configuration for the x-axis")
+    dataColumn: str = Field(description="The value column to use for the pie chart. Should be one")
+    colors: list[str] = Field(description="The colors to use for the pie chart")
+
+# =============================================== Table definitions ===============================================
+# class columnFormatterClass(BaseModel):
+#     """
+#     Configuration for column formatting. This is used to format the values of the columns in the table. One object per column, in the form of:
+#     {
+#         "type": "currency"
+#     }
+#     """
+#     type: Literal["currency", "number", "percentage", "text"] = Field(description="The type of formatter to use")
+#     # currency: Optional[str] = Field(default="USD", description="The currency to use for currency formatting")
+#     # decimals: Optional[int] = Field(default=2, description="The number of decimal places to show")
+class ColumnFormatter(BaseModel):
+    """
+    Configuration for column formatting. This is used to format the values of the columns in the table.
+    """
+    type: Literal["currency", "number", "percentage", "text"] = Field(description="The type of formatter to use")
+
+class sortConfigClass(BaseModel):
+    column: str = Field(description="The column to sort by")
+    direction: Literal["asc", "desc"] = Field(default="asc", description="The sort direction")
+
+class paginationClass(BaseModel):
+    page: Optional[int] = Field(default=1, description="The current page number")
+    pageSize: Optional[int] = Field(default=10, description="The number of rows per page")
+
+class tableConfigClass(BaseModel):
+    columnLabels: Optional[dict[str, str]] = Field(default=None, description="Dictionary defining custom labels for columns. Keys are the column names.")
+    columnFormatters: Optional[dict[str, ColumnFormatter]] = Field(default=None, description="Dictionary defining the type of each column. Keys are the column names. \
+         Types can be 'currency', 'number', 'percentage', 'text'. Example usage: {'column_name1': {'type': 'currency'}, 'column_name2': {'type': 'number'}}")
+    cellAlignment: Optional[dict[str, str]] = Field(default=None, description="Alignment for each column's cells")
+    headerAlignment: Optional[str] = Field(default="text-left", description="Alignment for header cells")
+    striped: Optional[bool] = Field(default=False, description="Whether to show striped rows")
+    sortBy: Optional[sortConfigClass] = Field(default=None, description="Sorting configuration")
+    pagination: Optional[paginationClass] = Field(default=None, description="Pagination configuration")
+
+class TableInput(BaseModel):
+    """
+    Input specification for table components
+    """
+    title: str = Field(description="The title of the chart")
+    description: str = Field(default="", description="a 5 word description of the chart")
+    columns: list[str] = Field(description="The columns to use for the table")
+    tableConfig: tableConfigClass = Field(description="The configuration for the table")
+    # columnFormatters: Optional[dict[str, str]] = Field(default=None, description="Dictionary defining the type of each column, e.g. {'column_name1': <column1_type>, 'column_name2': <column2_type>} \
+    #      etc., types can be 'currency', 'number', 'percentage', 'text'. Column_names should be the same as the column names in the columns field.")
+
+class TableOutput(BaseModel):
+    """
+    Output specification for table components
+    """
+    chartType: Literal["table"] = Field(default="table", description="Type of chart")
+    title: str = Field(description="The title of the chart")
+    description: str = Field(default="", description="a 5 word description of the chart")
+    columns: list[str] = Field(description="The columns to use for the table")
+    tableConfig: tableConfigClass = Field(description="The configuration for the table")
+
+
+
 # Declare the agent
 viz_agent = Agent(
     "openai:gpt-4o-mini",
@@ -228,6 +320,8 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
        - visualize_area for area charts
        - visualize_line for line charts
        - visualize_kpi for KPIs
+       - visualize_pie for pie charts
+       - visualize_table for tables
     
     2. You CANNOT respond with free-form text or explanations
     3. You CANNOT skip tool execution
@@ -248,7 +342,7 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     
     The final output MUST be the direct result of a tool execution in this format:
     {{
-        "chartType": "bar|area|line|kpi",
+        "chartType": "bar|area|line|kpi|pie|table",
         "title": "<title>",
         "description": "<description>",
         "xAxisConfig": <MANDATORY FIELD>,
@@ -280,6 +374,9 @@ async def update_color(ctx: RunContext[Deps], chart_specs: dict, update_col: str
     """
     logfire.info(f"Prompted to update column {update_col} color to {update_color}!")
 
+    if not chart_specs["chartConfig"]:
+        logfire.warn("No chart config found in chart specs!")
+        return chart_specs
 
     # Check if the update column is in the chart spec columns
     if not update_col in chart_specs["chartConfig"].keys():
@@ -433,3 +530,84 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
         print(f"No chat ID in context! Supabase entry not updated.")
 
     return response 
+
+@viz_agent.tool
+async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChartOutput:
+    """
+    Enhance the pie chart specs with additional information in order to later give it to the frontend to visualize.
+    """
+    print("Called visualize pie tool!")
+    chartType = "pie"
+    colors = colorPaletteClass().colors
+    data_cols = input.dataColumn
+    # chart_config = convert_chart_data_to_chart_config(data_cols, colors)
+
+    response = PieChartOutput(
+        chartType=chartType,
+        title=input.title,
+        description=input.description,
+        pieConfig=input.pieConfig,
+        # chartConfig=chart_config,
+        hideLegend=input.hideLegend,
+        xAxisConfig=input.xAxisConfig,
+        dataColumn=input.dataColumn,
+        colors=colors
+    )
+
+    try:
+        chart_id = ctx.deps.last_chart_id
+        await update_chart_specs(chart_id, response.model_dump())
+        await append_chat_message(ctx.deps.chat_id, response.model_dump())
+    except:
+        print(f"No chat ID in context! Supabase entry not updated.")
+        
+    return response
+
+@viz_agent.tool
+async def visualize_table(ctx: RunContext[Deps], input: TableInput) -> TableOutput:
+    """
+    Enhance the table specs with additional information in order to later give it to the frontend to visualize.
+    """
+    print("Called visualize table tool!")
+    chartType = "table"
+
+    logfire.info(f"Table columns: {input.columns}")
+
+    # Validate column formatters if provided
+    # if input.columnFormatters:
+    table_config = input.tableConfig.model_dump()
+    
+    # if input.tableConfig.columnFormatters:
+    #     formatters = {}
+    #     for col, formatter in input.tableConfig.columnFormatters.items():
+    #         formatters[col] = {"type": formatter}
+
+    #     for col, formatter in formatters.items():
+    #         if formatter == "currency" and not formatter.currency:
+    #             formatter.currency = "USD"
+    #         if formatter in ["number", "percentage"] and formatter.decimals is None:
+    #                 formatter.decimals = 2
+
+    #     table_config["columnFormatters"] = formatters
+
+    # logfire.info(f"Column formatters: {formatters}")
+    if input.tableConfig.columnFormatters:
+        logfire.info(f"Column formatters type: {input.tableConfig.columnFormatters}")
+
+    response = TableOutput(
+        chartType=chartType,
+        title=input.title,
+        description=input.description,
+        columns=input.columns,
+        tableConfig=table_config
+    )
+
+    try:
+        chart_id = ctx.deps.last_chart_id
+        await update_chart_specs(chart_id, response.model_dump())
+        await append_chat_message(ctx.deps.chat_id, response.model_dump())
+    except:
+        print(f"No chat ID in context! Supabase entry not updated.")
+
+    return response
+
