@@ -1,21 +1,27 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { createPortal } from "react-dom";
 import { IconTrash } from "@tabler/icons-react";
-import { getGridSizeFromDimensions } from "../utils/gridUtils";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { getGridSizeFromDimensions } from "../utils/gridUtils";
 
 interface WidgetWrapperProps {
   children: React.ReactNode;
   onDelete: (id: string) => void;
   id: string;
-  widgetType?: string;
-  layout?: { w: number; h: number; x: number; y: number };
-  onResize?: (id: string, newSize: { w: number; h: number }) => void;
-  onShowPopup: (widgetId: string, position: { x: number; y: number }, currentSize: string, widgetType: string) => void;
+  widgetType: string;
+  layout: any;
+  onResize: (id: string, size: string) => void;
+  onShowPopup: (id: string, position: { x: number; y: number }, currentSize: string, widgetType: string) => void;
   onHidePopup: () => void;
   isPopupActive: boolean;
   isDragging: boolean;
@@ -50,10 +56,19 @@ export function WidgetWrapper({
     setShowDeleteDialog(false);
   };
 
+  // Force close dialog on unmount or when dragging starts
+  const handleDialogOpenChange = (open: boolean) => {
+    if (!open || isDragging) {
+      setShowDeleteDialog(false);
+    } else {
+      setShowDeleteDialog(open);
+    }
+  };
+
   const currentSize = layout ? getGridSizeFromDimensions(layout.w, layout.h, widgetType) : 'chart-s';
 
   const handleMouseEnter = () => {
-    if (!isDragging) {
+    if (!isDragging && !showDeleteDialog) {
       setIsHovered(true);
       if (containerRef.current && widgetType) {
         const rect = containerRef.current.getBoundingClientRect();
@@ -66,10 +81,11 @@ export function WidgetWrapper({
   };
 
   const handleMouseLeave = () => {
-    setIsHovered(false);
-    onHidePopup();
+    if (!showDeleteDialog) {
+      setIsHovered(false);
+      onHidePopup();
+    }
   };
-
 
   return (
     <div 
@@ -80,7 +96,7 @@ export function WidgetWrapper({
     >
       <AnimatePresence>
         {/* Delete button */}
-        {(!isDragging && isHovered) && (
+        {(!isDragging && isHovered && !showDeleteDialog) && (
           <motion.button
             key={`delete-${id}`}
             initial={{ opacity: 0, scale: 0.8 }}
@@ -91,11 +107,8 @@ export function WidgetWrapper({
             style={{ zIndex: 30 }}
           >
             <IconTrash className="w-4 h-4 text-primary" />
-            
           </motion.button>
         )}
-
-      
       </AnimatePresence>
       
       {/* Content wrapper - full size with no padding conflicts */}
@@ -103,9 +116,9 @@ export function WidgetWrapper({
         {children}
       </div>
 
-      {/* Delete confirmation dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
+      {/* Delete confirmation dialog with proper state management */}
+      <Dialog open={showDeleteDialog} onOpenChange={handleDialogOpenChange}>
+        <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={cancelDelete}>
           <DialogHeader>
             <DialogTitle>Delete widget?</DialogTitle>
             <DialogDescription>

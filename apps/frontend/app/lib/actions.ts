@@ -497,3 +497,89 @@ export async function updateWidgetLayout(
     throw error;
   }
 }
+
+/**
+ * Update dashboard file association
+ */
+export async function updateDashboardFile(dashboardId: string, fileId: string, userId: string) {
+  try {
+    // First verify the dashboard belongs to the user
+    const dashboardResult = await db.select({ id: dashboards.id })
+      .from(dashboards)
+      .where(and(
+        eq(dashboards.id, dashboardId),
+        eq(dashboards.userId, userId)
+      ));
+
+    if (!dashboardResult || dashboardResult.length === 0) {
+      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+    }
+
+    const result = await db.update(dashboards)
+      .set({
+        fileId: fileId,
+        updatedAt: new Date(),
+      })
+      .where(eq(dashboards.id, dashboardId))
+      .returning();
+
+    if (!result || result.length === 0) {
+      throw new Error("Failed to update dashboard file association.");
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('Error updating dashboard file association:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get files for a dashboard
+ */
+export async function getDashboardFiles(dashboardId: string, userId: string) {
+  try {
+    // First verify the dashboard belongs to the user
+    const dashboardResult = await db.select({ fileId: dashboards.fileId })
+      .from(dashboards)
+      .where(and(
+        eq(dashboards.id, dashboardId),
+        eq(dashboards.userId, userId)
+      ));
+
+    if (!dashboardResult || dashboardResult.length === 0) {
+      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+    }
+
+    // If dashboard has a linked file, get it
+    if (dashboardResult[0].fileId) {
+      const fileResult = await db.select()
+        .from(files)
+        .where(eq(files.id, dashboardResult[0].fileId));
+      
+      return fileResult;
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Error getting dashboard files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all files for a user
+ */
+export async function getUserFiles(userId: string) {
+  try {
+    const result = await db.select()
+      .from(files)
+      .where(eq(files.userId, userId))
+      .orderBy(desc(files.createdAt));
+    
+    return result;
+  } catch (error) {
+    console.error('Error fetching user files:', error);
+    throw error;
+  }
+}

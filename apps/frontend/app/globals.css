@@ -251,4 +251,31 @@ body {
 
 }
 
+/* Debug and fix modal overlay issues */
+[data-radix-dialog-overlay] {
+  pointer-events: auto !important;
+}
+
+[data-radix-dialog-overlay][data-state="closed"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  display: none !important;
+}
+
+/* Ensure proper z-index stacking */
+[data-radix-dialog-overlay] {
+  z-index: 50 !important;
+}
+
+[data-radix-dialog-content] {
+  z-index: 51 !important;
+}
+
+/* Force cleanup of invisible overlays */
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+  z-index: auto !important;
+}
+
 

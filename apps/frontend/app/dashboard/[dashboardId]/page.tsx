@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
 import { useDashboardContext } from "@/components/dashboard/DashboardUserContext";
+import { useModalCleanup } from "@/hooks/useModalCleanup";
 import { Button } from "@/components/ui/button";
 import { Save, Loader2, Check, AlertCircle } from "lucide-react";
 import { useEffect } from "react";
@@ -16,6 +17,9 @@ export default function EnhancedDashboardPage() {
   const params = useParams();
   const dashboardId = params.dashboardId as string;
   const { updateCurrentDashboard } = useDashboardContext();
+  
+  // Initialize modal cleanup to prevent overlay issues
+  const { manualCleanup } = useModalCleanup();
   
   const {
     widgets,
@@ -38,6 +42,15 @@ export default function EnhancedDashboardPage() {
       updateCurrentDashboard(dashboardId, widgets);
     }
   }, [dashboardId, widgets, updateCurrentDashboard]);
+
+  // Cleanup any stuck overlays when dashboard loads
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      manualCleanup();
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [manualCleanup]);
 
   const handlePublish = async () => {
     const success = await saveWidgets();
@@ -84,7 +97,10 @@ export default function EnhancedDashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         className="overflow-hidden rounded-lg"
       >
-        <DashboardHeader dashboardTitle={dashboardName} />
+        <DashboardHeader 
+          dashboardTitle={dashboardName} 
+          dashboardId={dashboardId}
+        />
       </motion.div>
 
       {/* Main Content */}

@@ -178,6 +178,12 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     files,
     setFiles,
     successes,
+    setSuccesses,
+    reset: () => {
+      setFiles([])
+      setErrors([])
+      setSuccesses([])
+    },
     isSuccess,
     loading,
     errors,
