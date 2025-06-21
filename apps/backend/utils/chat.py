@@ -6,6 +6,7 @@ import sys
 from supabase import Client
 import pandas as pd
 import numpy as np
+import logfire
 
 
 # Add parent directory to path for imports
@@ -74,10 +75,11 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
     Returns:
         List[Dict[str, Any]]: A list of messages in the chat
     """
+    logfire.info(f"Getting message history for chat {chat_id}")
     try:
         if last_n is not None:
             # Use the RPC function to get last n messages
-            result = await async_supabase.rpc('get_last_messages', {
+            result = async_supabase.rpc('get_last_messages', {
                 'chat_id': chat_id,
                 'n': last_n
             }).execute()
@@ -85,17 +87,19 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
             if result.data is None:
                 print(f"Chat with ID {chat_id} not found")
                 return []
-                
+
+            logfire.info(f"Message history for chat {chat_id}: {result.data}")
             # The RPC function returns JSONB, which is already parsed
             return result.data
         else:
             # Get all messages using the original approach
-            chat_data = await async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
+            chat_data = async_supabase.table("chats").select("conversation").eq("id", chat_id).execute()
             
             if not chat_data.data or len(chat_data.data) == 0:
                 print(f"Chat with ID {chat_id} not found")
                 return []
                 
+            logfire.info(f"Message history for chat {chat_id}: {chat_data.data}")
             # Return the conversation array
             return chat_data.data[0].get("conversation", [])
         
