@@ -71,6 +71,10 @@ export const widgets = pgTable("widgets", {
   chatId: text("chat_id").references(() => chats.id), // If widget was created from chat
   isConfigured: boolean("is_configured").default(false),
   
+  // Cache-related fields
+  cacheKey: text("cache_key"),
+  lastDataFetch: timestamp("last_data_fetch"),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

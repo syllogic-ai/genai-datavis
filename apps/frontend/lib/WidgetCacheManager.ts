@@ -2,7 +2,7 @@
 
 import { Redis } from "@upstash/redis";
 import db from '@/db';
-import { widgets, dashboardWidgets } from '@/db/schema';
+import { widgets } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 
 export class WidgetCacheManager {
@@ -61,9 +61,12 @@ export class WidgetCacheManager {
   async getCachedWidgetData(widgetId: string): Promise<any | null> {
     try {
       // Get widget to find cache key
-      const widget = await db.query.widgets.findFirst({
-        where: eq(widgets.id, widgetId),
-      });
+      const widgetResult = await db.select()
+        .from(widgets)
+        .where(eq(widgets.id, widgetId))
+        .limit(1);
+      
+      const widget = widgetResult[0];
       
       if (!widget?.cacheKey) {
         return null;
@@ -101,9 +104,12 @@ export class WidgetCacheManager {
   async invalidateWidgetCache(widgetId: string): Promise<void> {
     try {
       // Get widget to find cache key
-      const widget = await db.query.widgets.findFirst({
-        where: eq(widgets.id, widgetId),
-      });
+      const widgetResult = await db.select()
+        .from(widgets)
+        .where(eq(widgets.id, widgetId))
+        .limit(1);
+      
+      const widget = widgetResult[0];
       
       if (widget?.cacheKey) {
         // Delete from Redis
@@ -128,18 +134,14 @@ export class WidgetCacheManager {
   async invalidateDashboardCache(dashboardId: string): Promise<void> {
     try {
       // Get all widgets for this dashboard
-      const dashboardWidgetsData = await db.select({
-        widget: widgets,
-        dashboardWidget: dashboardWidgets,
-      })
-      .from(dashboardWidgets)
-      .innerJoin(widgets, eq(dashboardWidgets.widgetId, widgets.id))
-      .where(eq(dashboardWidgets.dashboardId, dashboardId));
+      const dashboardWidgetsData = await db.select()
+        .from(widgets)
+        .where(eq(widgets.dashboardId, dashboardId));
 
       // Invalidate cache for each widget
       const invalidationPromises = dashboardWidgetsData
-        .filter(dw => dw.widget?.cacheKey)
-        .map(dw => this.invalidateWidgetCache(dw.widget.id));
+        .filter(widget => widget?.cacheKey)
+        .map(widget => this.invalidateWidgetCache(widget.id));
 
       await Promise.all(invalidationPromises);
       console.log(`Invalidated cache for ${invalidationPromises.length} widgets in dashboard ${dashboardId}`);

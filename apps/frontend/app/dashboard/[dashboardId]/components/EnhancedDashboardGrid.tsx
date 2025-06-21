@@ -126,10 +126,16 @@ export function EnhancedDashboardGrid({
   }, [widgets]);
 
   const handleAddWidget = useCallback((type: string) => {
+    console.log(`[EnhancedDashboardGrid] handleAddWidget called:`, {
+      type,
+      currentWidgetCount: widgets.length,
+      timestamp: new Date().toISOString()
+    });
+    
     // Validate the widget type
     const validTypes = ['text', 'chart', 'kpi', 'table'] as const;
     if (!validTypes.includes(type as any)) {
-      console.error(`Invalid widget type: ${type}`);
+      console.error(`[EnhancedDashboardGrid] Invalid widget type: ${type}`);
       return;
     }
 
@@ -137,13 +143,22 @@ export function EnhancedDashboardGrid({
     const config = defaultConfigs[type as keyof typeof defaultConfigs];
     
     if (!layoutConfig || !config) {
-      console.error(`Missing configuration for widget type: ${type}`);
+      console.error(`[EnhancedDashboardGrid] Missing configuration for widget type: ${type}`);
       return;
     }
     
     const position = findNextAvailablePosition(layoutConfig, type);
     const widgetId = uuidv4();
     const layoutId = uuidv4();
+
+    console.log(`[EnhancedDashboardGrid] Creating widget:`, {
+      type,
+      widgetId,
+      layoutId,
+      position,
+      layoutConfig,
+      config
+    });
 
     const newWidget: Widget = {
       id: widgetId,
@@ -163,6 +178,9 @@ export function EnhancedDashboardGrid({
       config,
       data: null,
     };
+
+    console.log(`[EnhancedDashboardGrid] New widget created:`, newWidget);
+    console.log(`[EnhancedDashboardGrid] Updated widget array will have ${widgets.length + 1} widgets`);
 
     onUpdateWidgets([...widgets, newWidget]);
   }, [widgets, onUpdateWidgets, findNextAvailablePosition]);

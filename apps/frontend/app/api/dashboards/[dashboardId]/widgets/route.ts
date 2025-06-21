@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import db from '@/db';
 import { widgets, dashboards } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { Widget } from '@/types/enhanced-dashboard-types';
 
 // GET: Load widgets for a dashboard
@@ -34,8 +34,7 @@ export async function GET(
     const dashboardWidgets = await db
       .select()
       .from(widgets)
-      .where(eq(widgets.dashboardId, dashboardId))
-      .orderBy(widgets.createdAt);
+      .where(eq(widgets.dashboardId, dashboardId));
 
     // Transform database widgets to frontend Widget format
     const frontendWidgets: Widget[] = dashboardWidgets.map((dbWidget: any) => ({
@@ -44,10 +43,14 @@ export async function GET(
       layout: dbWidget.layout,
       config: dbWidget.config,
       data: dbWidget.data,
+      sql: dbWidget.sql,
       chatId: dbWidget.chatId,
       isConfigured: dbWidget.isConfigured,
+      cacheKey: dbWidget.cacheKey,
+      lastDataFetch: dbWidget.lastDataFetch,
     }));
 
+    console.log(`[API] Loaded ${frontendWidgets.length} widgets for dashboard ${dashboardId}`);
     return NextResponse.json({ widgets: frontendWidgets });
   } catch (error) {
     console.error('Error loading widgets:', error);
@@ -71,7 +74,13 @@ export async function POST(
     }
 
     const { dashboardId } = await context.params;
-    const { widgets: widgetsToSave }: { widgets: Widget[] } = await request.json();
+    const body = await request.json();
+
+    console.log(`[API] Saving widgets for dashboard ${dashboardId}:`, {
+      creates: body.creates?.length || 0,
+      updates: body.updates?.length || 0,
+      deletes: body.deletes?.length || 0
+    });
 
     // Verify dashboard belongs to user
     const dashboard = await db
@@ -84,27 +93,81 @@ export async function POST(
       return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
     }
 
-    // Delete existing widgets
-    await db.delete(widgets).where(eq(widgets.dashboardId, dashboardId));
+    // Handle batch operations
+    const { creates = [], updates = [], deletes = [] } = body;
+    const promises: Promise<any>[] = [];
 
-    // Insert new widgets
-    if (widgetsToSave.length > 0) {
-      const dbWidgets = widgetsToSave.map(widget => ({
+    // Batch create
+    if (creates.length > 0) {
+      const widgetsToCreate = creates.map((widget: Widget) => ({
         id: widget.id,
         dashboardId,
-        title: widget.type, // Use type as title for now
+        title: widget.config.title || widget.type,
         type: widget.type,
         config: widget.config,
         data: widget.data,
+        sql: widget.sql,
         layout: widget.layout,
         chatId: widget.chatId || null,
         isConfigured: widget.isConfigured || false,
+        cacheKey: widget.cacheKey || null,
+        lastDataFetch: widget.lastDataFetch || null,
         updatedAt: new Date(),
       }));
 
-      await db.insert(widgets).values(dbWidgets);
+      console.log(`[API] Creating ${creates.length} widgets:`, creates.map((w: Widget) => ({ id: w.id, type: w.type })));
+      promises.push(db.insert(widgets).values(widgetsToCreate));
     }
 
+    // Batch update
+    if (updates.length > 0) {
+      console.log(`[API] Updating ${updates.length} widgets:`, updates.map((w: Widget) => ({ id: w.id, type: w.type })));
+      updates.forEach((widget: Widget) => {
+        promises.push(
+          db
+            .update(widgets)
+            .set({
+              title: widget.config.title || widget.type,
+              type: widget.type,
+              config: widget.config,
+              data: widget.data,
+              sql: widget.sql,
+              layout: widget.layout,
+              chatId: widget.chatId || null,
+              isConfigured: widget.isConfigured || false,
+              cacheKey: widget.cacheKey || null,
+              lastDataFetch: widget.lastDataFetch || null,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(widgets.id, widget.id),
+                eq(widgets.dashboardId, dashboardId)
+              )
+            )
+        );
+      });
+    }
+
+    // Batch delete
+    if (deletes.length > 0) {
+      console.log(`[API] Deleting ${deletes.length} widgets:`, deletes);
+      promises.push(
+        db
+          .delete(widgets)
+          .where(
+            and(
+              inArray(widgets.id, deletes),
+              eq(widgets.dashboardId, dashboardId)
+            )
+          )
+      );
+    }
+
+    // Execute all operations
+    await Promise.all(promises);
+
+    console.log(`[API] Successfully saved widgets for dashboard ${dashboardId}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error saving widgets:', error);

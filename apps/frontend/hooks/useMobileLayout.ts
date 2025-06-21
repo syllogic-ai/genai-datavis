@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { BreakpointKey, RESPONSIVE_BREAKPOINTS } from '@/types/dashboard-types';
+
+// Define types locally since they're not in dashboard-types
+type BreakpointKey = 'xs' | 'sm' | 'md' | 'lg';
+
+const RESPONSIVE_BREAKPOINTS = {
+  xs: { breakpoint: 480, cols: 2 },
+  sm: { breakpoint: 768, cols: 4 },
+  md: { breakpoint: 1024, cols: 8 },
+  lg: { breakpoint: 1200, cols: 12 },
+};
 
 interface MobileLayoutConfig {
   isMobile: boolean;

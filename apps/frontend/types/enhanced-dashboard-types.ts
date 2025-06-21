@@ -6,8 +6,11 @@ export interface Widget {
   layout: Layout;
   config: Record<string, any>;
   data?: any;
+  sql?: string | null;
   chatId?: string | null;
   isConfigured?: boolean;
+  cacheKey?: string | null;
+  lastDataFetch?: Date | null;
 }
 
 export interface DashboardState {

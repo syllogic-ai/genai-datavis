@@ -7,7 +7,6 @@
 
 // Import for internal usage
 import type { Widget } from '@/db/schema';
-import type { ResponsiveLayouts, WidgetWithLayout, CreateWidgetParams } from '@/types/dashboard-types';
 import type { ChartSpec } from '@/types/chart-types';
 
 // Re-export database schema types
@@ -15,11 +14,9 @@ export type {
   User,
   Chat,
   File,
-  Chart,
   LLMUsage,
   Dashboard,
   Widget,
-  DashboardWidget
 } from '@/db/schema';
 
 // Re-export chart and visualization types
@@ -30,20 +27,12 @@ export type {
   ChangeDirection
 } from './chart-types';
 
-// Re-export dashboard and layout types
+// Re-export dashboard types
 export type {
-  WidgetWithLayout,
-  ResponsiveLayouts,
+  Widget as DashboardWidget,
   GridLayout,
-  BreakpointKey,
-  WidgetType,
-  ChartSubtype,
-  SizeClass,
-  DashboardState,
-  SyncOperation,
-  CreateWidgetParams,
-  RESPONSIVE_BREAKPOINTS,
-  WIDGET_SIZE_CONFIGS
+  DashboardSettings,
+  Dashboard as DashboardType
 } from './dashboard-types';
 
 // Legacy types from enhanced-dashboard-types (for backward compatibility)
@@ -94,14 +83,6 @@ export interface ChatState extends LoadingState {
   isTyping: boolean;
 }
 
-// Widget management types
-export interface WidgetManagerState {
-  widgets: Widget[];
-  isOnline: boolean;
-  syncQueueLength: number;
-  lastSyncError?: string;
-}
-
 // Form types
 export interface FormField<T = any> {
   value: T;
@@ -137,27 +118,27 @@ export interface DashboardConfig {
   name: string;
   description?: string;
   isPublic: boolean;
-  layout: ResponsiveLayouts;
+  layout: any;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface DashboardContextType {
   dashboard: DashboardConfig | null;
-  widgets: WidgetWithLayout[];
+  widgets: Widget[];
   isLoading: boolean;
   error: string | null;
   updateDashboard: (config: Partial<DashboardConfig>) => void;
-  addWidget: (widget: CreateWidgetParams) => Promise<void>;
-  updateWidget: (widgetId: string, updates: Partial<WidgetWithLayout>) => Promise<void>;
+  addWidget: (widget: any) => Promise<void>;
+  updateWidget: (widgetId: string, updates: Partial<Widget>) => Promise<void>;
   deleteWidget: (widgetId: string) => Promise<void>;
 }
 
 // Component prop types
 export interface WidgetComponentProps {
-  widget: WidgetWithLayout;
+  widget: Widget;
   isEditing?: boolean;
-  onUpdate?: (updates: Partial<WidgetWithLayout>) => void;
+  onUpdate?: (updates: Partial<Widget>) => void;
   onDelete?: () => void;
   onConfigure?: () => void;
 }

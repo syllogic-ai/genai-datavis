@@ -33,16 +33,8 @@ import Link from "next/link";
 import { IconRenderer } from "./DashboardIconRenderer";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
 
-// Widget interface for navigation items
-interface NavWidget {
-  id: string;
-  title: string;
-  type: "text" | "chart" | "kpi" | "table";
-}
-
-// Dashboard with widgets for navigation
-interface DashboardWithWidgets extends Dashboard {
-  widgets?: NavWidget[];
+// Dashboard with active state for navigation
+interface DashboardWithState extends Dashboard {
   isActive?: boolean;
 }
 
@@ -62,10 +54,7 @@ export function NavMain({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [dashboardsWithWidgets, setDashboardsWithWidgets] = useState<
-    DashboardWithWidgets[]
-  >([]);
-  const [loading, setLoading] = useState(false);
+  const [dashboardsWithState, setDashboardsWithState] = useState<DashboardWithState[]>([]);
   const [hoveredDashboard, setHoveredDashboard] = useState<string | null>(null);
 
   // Memoize the active dashboard ID to prevent unnecessary re-renders
@@ -78,137 +67,27 @@ export function NavMain({
     );
   }, [currentDashboardId, pathname]);
 
-  // Memoize dashboard IDs to detect actual changes
-  const dashboardIds = useMemo(
-    () =>
-      dashboards
-        .map((d) => d.id)
-        .sort()
-        .join(","),
-    [dashboards]
-  );
+  // Update dashboard state when dashboards or active dashboard changes
+  useEffect(() => {
+    const dashboardsWithActiveState = dashboards.map((dashboard) => ({
+      ...dashboard,
+      isActive: dashboard.id === activeDashboardId,
+    }));
+    setDashboardsWithState(dashboardsWithActiveState);
+  }, [dashboards, activeDashboardId]);
 
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check if the pressed key is 'c' or 'C' and no modifier keys are pressed
-      if (
-        (e.key === "c" || e.key === "C") &&
-        !e.ctrlKey &&
-        !e.altKey &&
-        !e.metaKey &&
-        !e.shiftKey
-      ) {
-        // Check if the active element is an input, textarea, or has contentEditable
-        const activeElement = document.activeElement as HTMLElement;
-        const isEditableElement =
-          activeElement.tagName === "INPUT" ||
-          activeElement.tagName === "TEXTAREA" ||
-          activeElement.getAttribute("contenteditable") === "true";
-
-        // Only trigger navigation if user is not typing in an input field
-        if (!isEditableElement) {
-          router.push("/dashboard");
-        }
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        // Add any global search functionality here if needed
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [router]);
-
-  // Memoized fetch function to prevent recreation on every render
-  const fetchDashboardWidgets = useCallback(async () => {
-    if (dashboards.length === 0) {
-      setDashboardsWithWidgets([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const dashboardsWithWidgetsData = await Promise.all(
-        dashboards.map(async (dashboard) => {
-          try {
-            // Fetch widgets for this dashboard
-            const response = await fetch(
-              `/api/dashboards/${dashboard.id}/widgets`
-            );
-            const data = response.ok ? await response.json() : null;
-            
-            // Ensure widgets is an array, handle different response formats
-            let widgets = [];
-            if (Array.isArray(data)) {
-              widgets = data;
-            } else if (data && Array.isArray(data.widgets)) {
-              widgets = data.widgets;
-            } else if (data && data.data && Array.isArray(data.data)) {
-              widgets = data.data;
-            } else {
-              // If no valid array found, default to empty array
-              widgets = [];
-            }
-
-            // Transform widgets to navigation format
-            const navWidgets: NavWidget[] = widgets.map((widget: any) => ({
-              id: widget.id,
-              title:
-                widget.title || widget.config?.title || `${widget.type} Widget`,
-              type: widget.type,
-            }));
-
-            return {
-              ...dashboard,
-              widgets: navWidgets,
-              isActive: dashboard.id === activeDashboardId,
-            };
-          } catch (error) {
-            console.error(
-              `Error fetching widgets for dashboard ${dashboard.id}:`,
-              error
-            );
-            return {
-              ...dashboard,
-              widgets: [],
-              isActive: dashboard.id === activeDashboardId,
-            };
-          }
-        })
-      );
-
-      setDashboardsWithWidgets(dashboardsWithWidgetsData);
-    } catch (error) {
-      console.error("Error fetching dashboard widgets:", error);
-      setDashboardsWithWidgets(
-        dashboards.map((d) => ({
-          ...d,
-          widgets: [],
-          isActive: d.id === activeDashboardId,
-        }))
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [dashboards, activeDashboardId]);
-
-  // Fetch widgets for each dashboard with stable dependencies
-  useEffect(() => {
-    fetchDashboardWidgets();
-  }, [dashboardIds, activeDashboardId]); // Use dashboardIds instead of dashboards array
-
-  // Get icon for widget type
-  const getWidgetIcon = (type: string): LucideIcon => {
-    switch (type) {
-      case "chart":
-        return LayoutDashboard;
-      case "table":
-        return LayoutDashboard;
-      case "kpi":
-        return LayoutDashboard;
-      case "text":
-        return LayoutDashboard;
-      default:
-        return LayoutDashboard;
-    }
-  };
 
   return (
     <SidebarGroup>
@@ -225,96 +104,44 @@ export function NavMain({
       </SidebarGroupLabel>
 
       <SidebarMenu>
-        {/* Dashboards with collapsible widgets */}
-        {dashboardsWithWidgets.length > 0 && (
+        {/* Dashboard navigation items */}
+        {dashboardsWithState.length > 0 && (
           <SidebarMenu className="text-muted font-semibold">
-            {dashboardsWithWidgets.map((dashboard) => (
-              <Collapsible
+            {dashboardsWithState.map((dashboard) => (
+              <SidebarMenuItem 
                 key={dashboard.id}
-                asChild
-                defaultOpen={dashboard.isActive}
-                className="group/collapsible"
+                onMouseEnter={() => setHoveredDashboard(dashboard.id)}
+                onMouseLeave={() => setHoveredDashboard(null)}
               >
-                <SidebarMenuItem 
-                  onMouseEnter={() => setHoveredDashboard(dashboard.id)}
-                  onMouseLeave={() => setHoveredDashboard(null)}
+                <SidebarMenuButton 
+                  asChild 
+                  tooltip={dashboard.name} 
+                  className={`${
+                    dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
+                  }`}
                 >
-                  <div className="relative flex items-center w-full">
-                    {/* Main dashboard link */}
-                    <SidebarMenuButton 
-                      asChild 
-                      tooltip={dashboard.name} 
-                      className={`flex-1 ${
-                        dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
-                      }`}
-                    >
-                      <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">
-                        <div className="relative flex items-center">
-                          {/* Dashboard Icon - always visible, but hidden when chevron is shown */}
-                          <IconRenderer
-                            className={`size-4 text-sidebar-foreground transition-opacity duration-200 ${
-                              hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
-                            }`}
-                            icon={dashboard.icon}
-                          />
-                        </div>
-                        <span className="truncate">{dashboard.name}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                    
-                    {/* Chevron Trigger - positioned absolutely over the icon area with proper margins */}
-                    <div 
-                      className={`absolute left-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 transition-all duration-200 rounded-sm hover:bg-sidebar-foreground/20 ${
-                        hoveredDashboard === dashboard.id ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-                      }`}
-                      onMouseEnter={() => {
-                        // Trigger the parent menu item hover effect
-                        setHoveredDashboard(dashboard.id);
-                      }}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <button className="h-4 w-4 flex items-center justify-center data-[state=open]:rotate-90 transition-transform duration-200">
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      </CollapsibleTrigger>
-                    </div>
-                  </div>
-                  
-                  <CollapsibleContent>
-                    <SidebarMenuSub>
-                      {dashboard.widgets && dashboard.widgets.length > 0 ? (
-                        dashboard.widgets.map((widget) => {
-                          const WidgetIcon = getWidgetIcon(widget.type);
-                          return (
-                            <SidebarMenuSubItem key={widget.id}>
-                              <SidebarMenuSubButton asChild>
-                                <Link
-                                  href={`/dashboard/${dashboard.id}#widget-${widget.id}`}
-                                >
-                                  <WidgetIcon className="h-3 w-3" />
-                                  <span className="truncate">
-                                    {widget.title}
-                                  </span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          );
-                        })
-                      ) : (
-                        <SidebarMenuSubItem>
-                          <SidebarMenuSubButton>
-                            <span className="text-muted-foreground/40 text-sm">
-                              No widgets inside
-                            </span>
-                          </SidebarMenuSubButton>
-                        </SidebarMenuSubItem>
-                      )}
-                    </SidebarMenuSub>
-                  </CollapsibleContent>
-                </SidebarMenuItem>
-              </Collapsible>
+                  <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">
+                    <IconRenderer
+                      className="size-4 text-sidebar-foreground"
+                      icon={dashboard.icon}
+                    />
+                    <span className="truncate">{dashboard.name}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             ))}
           </SidebarMenu>
+        )}
+
+        {/* Show message when no dashboards */}
+        {dashboardsWithState.length === 0 && (
+          <SidebarMenuItem>
+            <SidebarMenuButton disabled>
+              <span className="text-muted-foreground/40 text-sm">
+                No dashboards yet
+              </span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         )}
       </SidebarMenu>
     </SidebarGroup>

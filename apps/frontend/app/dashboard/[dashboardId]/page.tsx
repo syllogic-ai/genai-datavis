@@ -1,13 +1,13 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
 import { useParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
 import { Button } from "@/components/ui/button";
-import { Save, Loader2 } from "lucide-react";
+import { Save, Loader2, Check, AlertCircle } from "lucide-react";
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function EnhancedDashboardPage() {
@@ -19,6 +19,7 @@ export default function EnhancedDashboardPage() {
     dashboardName,
     isLoading,
     isSaving,
+    saveStatus,
     error,
     isPublished,
     handleUpdateWidgets,
@@ -94,6 +95,50 @@ export default function EnhancedDashboardPage() {
         onAddWidget={handleAddWidget} 
         fileName="sample-data.csv" // This can be replaced with actual file name when available
       />
+
+      {/* Save Status Indicator */}
+      <AnimatePresence mode="wait">
+        <div className="fixed bottom-4 right-4 z-50">
+          {saveStatus === 'saving' && (
+            <motion.div
+              key="saving"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Saving...</span>
+            </motion.div>
+          )}
+          
+          {saveStatus === 'saved' && (
+            <motion.div
+              key="saved"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <Check className="w-4 h-4" />
+              <span className="text-sm">Saved</span>
+            </motion.div>
+          )}
+          
+          {saveStatus === 'error' && (
+            <motion.div
+              key="error"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">Failed to save</span>
+            </motion.div>
+          )}
+        </div>
+      </AnimatePresence>
 
       {/* React Hot Toast Container */}
       <Toaster

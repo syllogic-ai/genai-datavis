@@ -4,40 +4,73 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Widget } from "@/types/enhanced-dashboard-types";
 import type { ChartSpec } from "@/types/chart-types";
 import toast from 'react-hot-toast';
+import { useAuth } from "@clerk/nextjs";
+import { WidgetPersistence, SaveStatus } from "@/lib/WidgetPersistence";
 
 export function useDashboardState(dashboardId: string) {
+  const { userId } = useAuth();
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [dashboardName, setDashboardName] = useState("My Dashboard");
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [isPublished, setIsPublished] = useState(false);
 
   // Reference to the grid component's add widget function
   const addWidgetRef = useRef<((type: string) => void) | null>(null);
+  
+  // Widget persistence manager
+  const widgetPersistenceRef = useRef<WidgetPersistence | null>(null);
+
+  // Initialize widget persistence
+  useEffect(() => {
+    if (!userId) return;
+    
+    console.log(`[useDashboardState] Initializing widget persistence for dashboard ${dashboardId}`);
+    
+    const persistenceManager = new WidgetPersistence({
+      dashboardId: dashboardId,
+      userId: userId,
+      onStatusChange: setSaveStatus,
+      onError: (error) => {
+        console.error('[useDashboardState] Widget persistence error:', error);
+        toast.error('Failed to save widget changes');
+      },
+    });
+
+    widgetPersistenceRef.current = persistenceManager;
+    
+    // Load initial widgets
+    persistenceManager.loadWidgets().then((loadedWidgets) => {
+      console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
+      setWidgets(loadedWidgets);
+      setIsLoading(false);
+    });
+
+    return () => {
+      console.log(`[useDashboardState] Cleaning up widget persistence`);
+      persistenceManager.cleanup();
+      widgetPersistenceRef.current = null;
+    };
+  }, [dashboardId, userId]);
 
   // Load widgets from database
   const loadWidgets = useCallback(async () => {
-    if (!dashboardId) return;
+    if (!widgetPersistenceRef.current) return;
     
     setIsLoading(true);
     setError(null);
     
     try {
-      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to load widgets');
-      }
-      
-      const data = await response.json();
-      setWidgets(data.widgets || []);
-      setIsPublished(data.widgets?.length > 0);
+      const loadedWidgets = await widgetPersistenceRef.current.loadWidgets();
+      setWidgets(loadedWidgets);
+      setIsPublished(loadedWidgets.length > 0);
       
       // Show success toast only if widgets were loaded
-      if (data.widgets?.length > 0) {
-        toast.success(`Loaded ${data.widgets.length} widget${data.widgets.length === 1 ? '' : 's'}`, {
+      if (loadedWidgets.length > 0) {
+        toast.success(`Loaded ${loadedWidgets.length} widget${loadedWidgets.length === 1 ? '' : 's'}`, {
           duration: 2000,
           position: 'top-right',
         });
@@ -53,56 +86,71 @@ export function useDashboardState(dashboardId: string) {
     } finally {
       setIsLoading(false);
     }
-  }, [dashboardId]);
+  }, []);
 
-  // Save widgets to database
+  // Save widgets to database (for manual save/publish)
   const saveWidgets = useCallback(async () => {
-    if (!dashboardId) return;
-    
-    setIsSaving(true);
-    setError(null);
-    
-    // Show loading toast
-    const loadingToast = toast.loading('Publishing dashboard...', {
-      position: 'top-right',
-    });
-    
-    try {
-      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ widgets }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to save widgets');
-      }
-      
-      setIsPublished(true);
-      toast.dismiss(loadingToast); // Dismiss loading toast
-      return true;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to save widgets';
-      setError(errorMessage);
-      toast.dismiss(loadingToast); // Dismiss loading toast
-      console.error('Error saving widgets:', err);
-      return false;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [dashboardId, widgets]);
-
-  // Load widgets on mount
-  useEffect(() => {
-    loadWidgets();
-  }, [loadWidgets]);
+    // With auto-save, manual save is no longer needed
+    // Just mark as published
+    setIsPublished(true);
+    return true;
+  }, []);
 
   const handleUpdateWidgets = useCallback((newWidgets: Widget[]) => {
+    const oldWidgets = widgets;
+    
+    console.log(`[useDashboardState] handleUpdateWidgets called:`, {
+      oldCount: oldWidgets.length,
+      newCount: newWidgets.length,
+      oldIds: oldWidgets.map(w => ({ id: w.id, type: w.type })),
+      newIds: newWidgets.map(w => ({ id: w.id, type: w.type })),
+      timestamp: new Date().toISOString()
+    });
+    
     setWidgets(newWidgets);
-    setIsPublished(false); // Mark as unpublished when changes are made
-  }, []);
+    setIsPublished(false);
+
+    if (!widgetPersistenceRef.current) {
+      console.log(`[useDashboardState] No widget persistence manager available`);
+      return;
+    }
+
+    // Determine what changed
+    const deletedWidgets = oldWidgets.filter(
+      oldWidget => !newWidgets.find(newWidget => newWidget.id === oldWidget.id)
+    );
+    const addedWidgets = newWidgets.filter(
+      newWidget => !oldWidgets.find(oldWidget => oldWidget.id === newWidget.id)
+    );
+    const updatedWidgets = newWidgets.filter(
+      newWidget => {
+        const oldWidget = oldWidgets.find(w => w.id === newWidget.id);
+        return oldWidget && JSON.stringify(oldWidget) !== JSON.stringify(newWidget);
+      }
+    );
+
+    console.log(`[useDashboardState] Widget changes breakdown:`, {
+      deleted: deletedWidgets.map(w => ({ id: w.id, type: w.type })),
+      added: addedWidgets.map(w => ({ id: w.id, type: w.type })),
+      updated: updatedWidgets.map(w => ({ id: w.id, type: w.type }))
+    });
+
+    // Persist changes
+    deletedWidgets.forEach(widget => {
+      console.log(`[useDashboardState] Deleting widget via persistence:`, { id: widget.id, type: widget.type });
+      widgetPersistenceRef.current?.deleteWidget(widget.id);
+    });
+    
+    addedWidgets.forEach(widget => {
+      console.log(`[useDashboardState] Creating widget via persistence:`, { id: widget.id, type: widget.type });
+      widgetPersistenceRef.current?.createWidget(widget);
+    });
+    
+    updatedWidgets.forEach(widget => {
+      console.log(`[useDashboardState] Updating widget via persistence:`, { id: widget.id, type: widget.type });
+      widgetPersistenceRef.current?.updateWidget(widget);
+    });
+  }, [widgets]);
 
   const handleAddWidget = useCallback((type: string) => {
     if (addWidgetRef.current) {
@@ -143,7 +191,8 @@ export function useDashboardState(dashboardId: string) {
     dashboardName,
     isChatOpen,
     isLoading,
-    isSaving,
+    isSaving: saveStatus === 'saving',
+    saveStatus,
     error,
     dashboardId,
     isPublished,
