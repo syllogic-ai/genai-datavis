@@ -13,10 +13,10 @@ import { WidgetCreateModal } from "./WidgetCreateModal";
 
 interface FloatingWidgetDockProps {
   onAddWidget: (type: string) => void;
-  fileName?: string;
+  fileId: string | null;
 }
 
-export function FloatingWidgetDock({ onAddWidget, fileName }: FloatingWidgetDockProps) {
+export function FloatingWidgetDock({ onAddWidget, fileId }: FloatingWidgetDockProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedWidgetType, setSelectedWidgetType] = useState<string | null>(null);
 
@@ -98,7 +98,8 @@ export function FloatingWidgetDock({ onAddWidget, fileName }: FloatingWidgetDock
       <WidgetCreateModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        fileName={fileName}
+        fileId={fileId}
+        widgetType={selectedWidgetType}
       />
     </>
   );

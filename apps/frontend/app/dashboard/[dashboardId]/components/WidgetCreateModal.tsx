@@ -14,14 +14,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { v4 as uuidv4 } from "uuid";
+import { useParams } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { createChat } from "@/app/lib/actions";
+import { NEXT_PUBLIC_API_URL } from "@/lib/env";
 
 import { ChatMessage, ChartMessage } from "@/app/lib/types";
 import type { ChartSpec } from "@/types/chart-types";
+import { Widget } from "@/types/enhanced-dashboard-types";
 
 interface WidgetCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  fileName?: string;
+  fileId: string | null;
+  widgetType: string | null;
 }
 
 const visual: ChartSpec = {
@@ -44,38 +51,110 @@ const visual: ChartSpec = {
 export function WidgetCreateModal({
   isOpen,
   onClose,
-  fileName,
+  fileId,
+  widgetType,
 }: WidgetCreateModalProps) {
   // States - similar to the chat page
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [visualization, setVisualization] = useState<ChartSpec | null>(visual);
+  const [visualization, setVisualization] = useState<ChartSpec | null>(null);
   const [chartMessages, setChartMessages] = useState<ChartMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const params = useParams();
+  const { user } = useUser();
 
-  // Handle sending a message (placeholder - no API calls as requested)
-  const handleSendMessage = (message: string) => {
-    if (!message.trim()) return;
+  // Handle sending a message
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim() || !widgetType || !user || !params.dashboardId || !fileId) return;
 
     setIsChatLoading(true);
     setError(null);
 
-    // Add user message to local state
     const userMessage: ChatMessage = { role: "user", content: message };
     setMessages((prev) => [...prev, userMessage]);
 
-    // Simulate processing
-    setTimeout(() => {
-      const systemMessage: ChatMessage = {
-        role: "system",
-        content:
-          "This is a placeholder response. API integration will be added later.",
-      };
-      setMessages((prev) => [...prev, systemMessage]);
-      setIsChatLoading(false);
-    }, 1000);
+    // If this is the first message, create chat and widget
+    if (messages.length === 0) {
+      try {
+        setAnalyzing(true);
+        // 1. Create chat
+        const chatId = uuidv4();
+        await createChat(chatId, user.id, fileId, message);
+
+        // 2. Create widget
+        const newWidget: Widget = {
+            id: uuidv4(),
+            type: widgetType as Widget['type'],
+            layout: { i: uuidv4(), x: 0, y: 0, w: 4, h: 3 },
+            config: { title: "New " + widgetType },
+            chatId: chatId,
+        };
+        
+        await fetch(`/api/dashboards/${params.dashboardId}/widgets`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creates: [newWidget] }),
+        });
+
+        // 3. Call analyze endpoint
+        const response = await fetch(`${NEXT_PUBLIC_API_URL}/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                prompt: message,
+                chat_id: chatId,
+                file_id: fileId,
+                widget_type: widgetType,
+                request_id: uuidv4(),
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Analysis request failed');
+        }
+
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+
+        while (reader) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const chunkMessages = chunk.split('\n\n').filter(Boolean);
+
+            for (const chunkMessage of chunkMessages) {
+                const content = chunkMessage.replace('data: ', '');
+                if (content === '[DONE]') {
+                    break;
+                }
+                try {
+                    const parsed = JSON.parse(content);
+                    if (parsed.role) {
+                        setMessages((prev) => [...prev, parsed]);
+                    }
+                    if (parsed.role === 'chart') {
+                        setVisualization(parsed.spec);
+                    }
+                } catch (e) {
+                    console.error("Failed to parse message chunk", e);
+                }
+            }
+        }
+        
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setIsChatLoading(false);
+        setAnalyzing(false);
+      }
+    } else {
+        // Handle follow-up messages here if needed
+        setIsChatLoading(false);
+    }
   };
 
   // Scroll to bottom on new messages

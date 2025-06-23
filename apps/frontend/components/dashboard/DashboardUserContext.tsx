@@ -40,10 +40,10 @@ export function DashboardUserProvider({
 
 interface DashboardContextType {
   dashboards: Dashboard[];
-  currentDashboardId: string | null;
+  currentDashboard: Dashboard | null;
   currentDashboardWidgets: Widget[];
   updateDashboards: (dashboards: Dashboard[]) => void;
-  updateCurrentDashboard: (dashboardId: string, widgets: Widget[]) => void;
+  updateCurrentDashboard: (dashboard: Dashboard, widgets: Widget[]) => void;
   addDashboard: (dashboard: Dashboard) => void;
 }
 
@@ -57,7 +57,7 @@ export function DashboardProvider({
   initialDashboards?: Dashboard[];
 }) {
   const [dashboards, setDashboards] = useState<Dashboard[]>(initialDashboards);
-  const [currentDashboardId, setCurrentDashboardId] = useState<string | null>(null);
+  const [currentDashboard, setCurrentDashboard] = useState<Dashboard | null>(null);
   const [currentDashboardWidgets, setCurrentDashboardWidgets] = useState<Widget[]>([]);
 
   // Update dashboards
@@ -67,9 +67,9 @@ export function DashboardProvider({
   };
 
   // Update current dashboard and its widgets
-  const updateCurrentDashboard = (dashboardId: string, widgets: Widget[]) => {
-    console.log(`[DashboardContext] Updating current dashboard ${dashboardId} with ${widgets.length} widgets`);
-    setCurrentDashboardId(dashboardId);
+  const updateCurrentDashboard = (dashboard: Dashboard, widgets: Widget[]) => {
+    console.log(`[DashboardContext] Updating current dashboard ${dashboard.id} with ${widgets.length} widgets`);
+    setCurrentDashboard(dashboard);
     setCurrentDashboardWidgets(widgets);
   };
 
@@ -88,7 +88,7 @@ export function DashboardProvider({
 
   const value: DashboardContextType = {
     dashboards,
-    currentDashboardId,
+    currentDashboard,
     currentDashboardWidgets,
     updateDashboards,
     updateCurrentDashboard,
