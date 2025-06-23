@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { CheckIcon } from "@radix-ui/react-icons";
+import { XIcon } from "lucide-react";
 
 export interface TagItem {
   id: string;
@@ -165,7 +166,7 @@ export function TagSelector(props: TagSelectorProps) {
             viewBox="0 0 24 24"
             strokeWidth={1.5}
             stroke="currentColor"
-            className="size-4"
+            className="size-4 text-primary/60"
           >
             <path
               strokeLinecap="round"
@@ -173,13 +174,15 @@ export function TagSelector(props: TagSelectorProps) {
               d="M16.5 12a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Zm0 0c0 1.657 1.007 3 2.25 3S21 13.657 21 12a9 9 0 1 0-2.636 6.364M16.5 12V8.25"
             />
           </svg>
-          {String(triggerLabel || "Add Context")}
+          {selectedItems.length == 0
+            ? String(triggerLabel || "Add Context")
+            : ""}
         </button>
 
         {open && (
           <div
             data-popover
-            className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 min-w-80"
+            className="absolute top-full left-0 mt-1 bg-secondary border border-gray-300 rounded-md shadow-lg z-50 min-w-80"
           >
             <div className="p-2 border-b border-gray-200">
               <input
@@ -208,8 +211,8 @@ export function TagSelector(props: TagSelectorProps) {
                       onClick={() => handleToggleItem(item)}
                       className={cn(
                         "py-1 px-3 cursor-pointer flex items-center justify-between text-sm transition-colors",
-                        "border-l-3 hover:bg-gray-50",
-                        isSelected ? "bg-gray-50" : ""
+                        "hover:bg-primary/10",
+                        isSelected ? "bg-primary/10" : ""
                       )}
                     >
                       <div className="flex items-center gap-3">
@@ -241,17 +244,30 @@ export function TagSelector(props: TagSelectorProps) {
         return (
           <div
             key={item.id}
-            className="inline-flex items-center py-1 px-2 bg-gray-100 border border-gray-300 rounded-md text-xs gap-1"
+            className="group inline-flex items-center py-1 px-2 bg-transparent border rounded-md text-xs gap-1 relative"
           >
-            {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}
+            {Icon && (
+              <div className="relative w-3 h-3 flex-shrink-0">
+                <Icon className="w-3 h-3 group-hover:opacity-0 transition-opacity duration-200" />
+                <button
+                  onClick={() => handleRemoveItem(item.id)}
+                  className="absolute inset-0 opacity-0 group-hover:opacity-100 bg-transparent border-none cursor-pointer rounded-md flex items-center justify-center text-primary/60 hover:text-primary transition-all duration-200"
+                  aria-label={`Remove ${item.label}`}
+                >
+                  <XIcon className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+            {!Icon && (
+              <button
+                onClick={() => handleRemoveItem(item.id)}
+                className="w-3.5 h-3.5 flex-shrink-0 opacity-0 group-hover:opacity-100 bg-transparent border-none cursor-pointer rounded-md flex items-center justify-center text-red-500 hover:text-red-700 transition-opacity duration-200"
+                aria-label={`Remove ${item.label}`}
+              >
+                ×
+              </button>
+            )}
             <span className="truncate">{String(item.label || "")}</span>
-            <button
-              onClick={() => handleRemoveItem(item.id)}
-              className="bg-transparent border-none cursor-pointer rounded-md flex items-center justify-center"
-              aria-label={`Remove ${item.label}`}
-            >
-              ×
-            </button>
           </div>
         );
       })}
