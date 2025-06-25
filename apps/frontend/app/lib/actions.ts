@@ -54,13 +54,22 @@ export async function updateFileStatus(fileId: string, status: string) {
 }
 
 // Create a new chat in the database using Drizzle
-export async function createChat(chatId: string, userId: string, fileId: string) {
+export async function createChat(chatId: string, userId: string, dashboardId: string, initialMessageContent?: string) {
   try {
+    const initialConversation = [];
+    if (initialMessageContent) {
+      initialConversation.push({
+        role: 'user',
+        message: initialMessageContent,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const result = await db.insert(chats).values({
       id: chatId,
       userId: userId,
-      fileId: fileId,
-      conversation: [], // Initialize with an empty conversation array
+      dashboardId: dashboardId,
+      conversation: initialConversation, // Initialize with an empty or initial message
       updatedAt: new Date(), // Set updatedAt to current time
       // usage field is omitted, assuming it's nullable or has a default in the DB/schema
     }).returning(); // Optional: return the inserted record
@@ -83,6 +92,26 @@ export async function getChats(userId: string) {
     .where(eq(chats.userId, userId))
     .orderBy(desc(chats.updatedAt));
   return result;
+}
+
+/**
+ * Get a single dashboard by ID
+ */
+export async function getDashboard(dashboardId: string, userId: string) {
+  try {
+    const result = await db.select()
+      .from(dashboards)
+      .where(and(
+        eq(dashboards.id, dashboardId),
+        eq(dashboards.userId, userId)
+      ))
+      .limit(1);
+    
+    return result[0] || null;
+  } catch (error) {
+    console.error('Error fetching dashboard:', error);
+    throw error;
+  }
 }
 
 /**
@@ -159,44 +188,23 @@ export async function getChat(chatId: string, userId: string) {
 
     const chatData = chatResult[0];
 
-    // If there's a fileId, get the file details using Drizzle
-    if (chatData.fileId) {
-      const fileResult = await db.select().from(files)
-        .where(eq(files.id, chatData.fileId));
+    // Get the dashboard details using Drizzle
+    if (chatData.dashboardId) {
+      const dashboardResult = await db.select().from(dashboards)
+        .where(eq(dashboards.id, chatData.dashboardId));
       
-      if (fileResult && fileResult.length > 0) {
-        const fileData = fileResult[0];
+      if (dashboardResult && dashboardResult.length > 0) {
+        const dashboardData = dashboardResult[0];
         
-        // Look for the original file to get the original filename
-        let originalFilename = fileData.originalFilename;
-        if (fileData.fileType !== "original") {
-          // If this isn't the original file, look for an original file with the same ID prefix
-          const originalFileResult = await db.select().from(files)
-            .where(and(
-              eq(files.userId, userId),
-              eq(files.fileType, "original")
-            ));
-            
-          // If original file found, use its filename
-          if (originalFileResult && originalFileResult.length > 0) {
-            originalFilename = originalFileResult[0].originalFilename;
-          }
-        }
-        
-        // Return a combined object with chat data and file details
+        // Return a combined object with chat data and dashboard details
         return { 
           ...chatData, 
-          files: {
-            ...fileData,
-            // Ensure the storage_path is available for the frontend
-            storage_path: fileData.storagePath,
-            originalFilename
-          }
+          dashboard: dashboardData
         };
       }
     }
 
-    // Return just the chat data if no file is found
+    // Return just the chat data if no dashboard is found
     return chatData;
   } catch (error) {
     console.error('Error fetching chat:', error);

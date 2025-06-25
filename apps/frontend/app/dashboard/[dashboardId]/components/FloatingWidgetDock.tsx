@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { FloatingDock } from "@/components/ui/floating-dock";
 import {
   IconFileText,
@@ -9,16 +8,14 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { WidgetTypeConfig } from "@/types/enhanced-dashboard-types";
-import { WidgetCreateModal } from "./WidgetCreateModal";
 
 interface FloatingWidgetDockProps {
   onAddWidget: (type: string) => void;
-  fileId: string | null;
+  onOpenChatSidebar: () => void;
+  fileName: string;
 }
 
-export function FloatingWidgetDock({ onAddWidget, fileId }: FloatingWidgetDockProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedWidgetType, setSelectedWidgetType] = useState<string | null>(null);
+export function FloatingWidgetDock({ onAddWidget, onOpenChatSidebar, fileName }: FloatingWidgetDockProps) {
 
   const widgetItems: WidgetTypeConfig[] = [
     {
@@ -72,15 +69,9 @@ export function FloatingWidgetDock({ onAddWidget, fileId }: FloatingWidgetDockPr
       // For text blocks, use the existing onAddWidget function directly
       onAddWidget(widgetType);
     } else {
-      // For other widget types, open the modal
-      setSelectedWidgetType(widgetType);
-      setIsModalOpen(true);
+      // For chart, table, and KPI widgets, open the chat sidebar
+      onOpenChatSidebar();
     }
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedWidgetType(null);
   };
 
   const dockItems = widgetItems.map(widget => ({
@@ -90,17 +81,8 @@ export function FloatingWidgetDock({ onAddWidget, fileId }: FloatingWidgetDockPr
   }));
 
   return (
-    <>
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50">
-        <FloatingDock items={dockItems} />
-      </div>
-
-      <WidgetCreateModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        fileId={fileId}
-        widgetType={selectedWidgetType}
-      />
-    </>
+    <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+      <FloatingDock items={dockItems} />
+    </div>
   );
 }

@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run storybook:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(grep:*)",
+      "Bash(timeout 15 npm run storybook 2 >& 1)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run lint)",
+      "Bash(node:*)",
+      "Bash(timeout 10s npm run dev:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cp:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(rg:*)"
+    ],
+    "deny": []
+  }
+}

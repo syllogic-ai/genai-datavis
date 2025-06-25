@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { User as ClerkUser } from '@clerk/nextjs/server';
 import { User as DbUser } from '@/db/schema';
 import { Dashboard } from '@/db/schema';
@@ -67,17 +67,17 @@ export function DashboardProvider({
   };
 
   // Update current dashboard and its widgets
-  const updateCurrentDashboard = (dashboard: Dashboard, widgets: Widget[]) => {
+  const updateCurrentDashboard = useCallback((dashboard: Dashboard, widgets: Widget[]) => {
     console.log(`[DashboardContext] Updating current dashboard ${dashboard.id} with ${widgets.length} widgets`);
     setCurrentDashboard(dashboard);
     setCurrentDashboardWidgets(widgets);
-  };
+  }, []);
 
   // Add a new dashboard
-  const addDashboard = (dashboard: Dashboard) => {
+  const addDashboard = useCallback((dashboard: Dashboard) => {
     console.log(`[DashboardContext] Adding new dashboard: ${dashboard.name}`);
     setDashboards(prev => [...prev, dashboard]);
-  };
+  }, []);
 
   // Update initial dashboards when prop changes
   useEffect(() => {

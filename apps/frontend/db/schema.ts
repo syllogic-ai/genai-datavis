@@ -79,16 +79,19 @@ export const widgets = pgTable("widgets", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// CHATS (simplified - linked to files for context)
+// CHATS (linked to dashboards for unified context)
 export const chats = pgTable("chats", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
-  fileId: text("file_id").references(() => files.id), // Chat context
-  title: text("title").notNull().default("New Chat"),
+  dashboardId: text("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }), // Chat context per dashboard
+  title: text("title").notNull().default("Dashboard Chat"),
   conversation: jsonb("conversation").notNull().$type<{
     role: string;
     message: string;
     timestamp: string;
+    contextWidgetIds?: string[]; // Widgets included as context for this message
+    targetWidgetType?: 'chart' | 'table' | 'kpi'; // Target widget type for creation
+    targetChartSubType?: 'line' | 'area' | 'bar' | 'horizontal-bar' | 'pie'; // Chart sub-type if applicable
   }[]>(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

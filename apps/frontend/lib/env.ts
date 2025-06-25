@@ -9,11 +9,11 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   // Database
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.string().url().optional(),
   
   // Clerk Authentication
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
-  CLERK_SECRET_KEY: z.string().min(1),
+  CLERK_SECRET_KEY: z.string().min(1).optional(),
   
   // Supabase (if used)
   NEXT_PUBLIC_SUPABASE_URL: z.string().url().optional(),
@@ -22,6 +22,7 @@ const envSchema = z.object({
   
   // App Configuration
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NEXT_PUBLIC_API_URL: z.string().url().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -43,6 +44,7 @@ function getEnv(): Env {
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
       NODE_ENV: process.env.NODE_ENV,
+      NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -76,6 +78,7 @@ export const {
   NEXT_PUBLIC_SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY,
   NODE_ENV,
+  NEXT_PUBLIC_API_URL,
 } = env;
 
 // Environment helpers

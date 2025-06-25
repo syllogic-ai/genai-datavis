@@ -3,20 +3,27 @@
 import { motion, AnimatePresence } from "motion/react";
 import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
+import { ChatSidebar } from "@/components/dashboard/chat-sidebar";
 import { useParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
 import { useDashboardContext } from "@/components/dashboard/DashboardUserContext";
 import { useModalCleanup } from "@/hooks/useModalCleanup";
+import { useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Save, Loader2, Check, AlertCircle } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import * as React from "react";
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function EnhancedDashboardPage() {
   const params = useParams();
   const dashboardId = params.dashboardId as string;
   const { updateCurrentDashboard } = useDashboardContext();
+  const { setOpen: setNavigationSidebarOpen } = useSidebar();
+  
+  // Chat sidebar state
+  const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false);
   
   // Initialize modal cleanup to prevent overlay issues
   const { manualCleanup } = useModalCleanup();
@@ -35,13 +42,25 @@ export default function EnhancedDashboardPage() {
     addWidgetRef,
   } = useDashboardState(dashboardId);
 
+  // Memoize dashboard object to prevent recreation on every render
+  const dashboardObj = React.useMemo(() => ({
+    id: dashboardId,
+    name: dashboardName,
+    userId: '', // Will be filled by context
+    description: null,
+    icon: 'document-text',
+    fileId: null,
+    createdAt: new Date('2024-01-01'), // Use fixed date to prevent infinite re-renders
+    updatedAt: null,
+  }), [dashboardId, dashboardName]);
+
   // Update the dashboard context whenever widgets change
   useEffect(() => {
     if (dashboardId && widgets.length >= 0) {
       console.log(`[DashboardPage] Updating context with ${widgets.length} widgets for dashboard ${dashboardId}`);
-      updateCurrentDashboard(dashboardId, widgets);
+      updateCurrentDashboard(dashboardObj, widgets);
     }
-  }, [dashboardId, widgets, updateCurrentDashboard]);
+  }, [dashboardId, widgets, dashboardObj, updateCurrentDashboard]);
 
   // Cleanup any stuck overlays when dashboard loads
   useEffect(() => {
@@ -51,6 +70,18 @@ export default function EnhancedDashboardPage() {
     
     return () => clearTimeout(timer);
   }, [manualCleanup]);
+
+  // Sidebar coordination handlers
+  const handleChatSidebarToggle = () => {
+    const newState = !isChatSidebarOpen;
+    setIsChatSidebarOpen(newState);
+    
+    // Close navigation sidebar when chat opens
+    if (newState) {
+      setNavigationSidebarOpen(false);
+    }
+  };
+
 
   const handlePublish = async () => {
     const success = await saveWidgets();
@@ -90,12 +121,12 @@ export default function EnhancedDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="h-screen w-full flex flex-col">
       {/* Header with Publish Button */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="overflow-hidden rounded-lg"
+        className="overflow-hidden rounded-t-lg shrink-0"
       >
         <DashboardHeader 
           dashboardTitle={dashboardName} 
@@ -108,18 +139,31 @@ export default function EnhancedDashboardPage() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
-        className="flex-1"
+        className="flex-1 flex overflow-hidden"
       >
-        <EnhancedDashboardGrid
-          widgets={widgets}
-          onUpdateWidgets={handleUpdateWidgets}
-          onAddWidget={(fn) => { addWidgetRef.current = fn; }}
-        />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-auto ">
+            <EnhancedDashboardGrid
+              widgets={widgets}
+              onUpdateWidgets={handleUpdateWidgets}
+              onAddWidget={(fn) => { addWidgetRef.current = fn; }}
+            />
+          </div>
+
         
-        {/* Floating Widget Dock - positioned relative to this content area */}
-        <FloatingWidgetDock 
-          onAddWidget={handleAddWidget} 
-          fileName="sample-data.csv" // This can be replaced with actual file name when available
+          {/* Floating Widget Dock - positioned relative to this content area */}
+          <FloatingWidgetDock 
+            onAddWidget={handleAddWidget} 
+            onOpenChatSidebar={handleChatSidebarToggle}
+            fileName="sample-data.csv" // This can be replaced with actual file name when available
+          />
+        </div>
+
+        {/* Chat Sidebar - Integrated inline */}
+        <ChatSidebar
+          dashboardId={dashboardId}
+          isOpen={isChatSidebarOpen}
+          onToggle={handleChatSidebarToggle}
         />
       </motion.div>
 

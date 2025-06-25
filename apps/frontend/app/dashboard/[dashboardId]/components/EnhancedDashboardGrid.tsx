@@ -385,6 +385,12 @@ export function EnhancedDashboardGrid({
    
           >
             {widgets.map((widget, index) => {
+              // Create a wrapper function to match the expected signature
+              const handleWidgetResize = (id: string, size: string) => {
+                // Convert string size to dimensions object if needed
+                // For now, since onResize isn't used in WidgetWrapper, we'll pass a placeholder
+                handleResizeWidget(id, { w: 1, h: 1 });
+              };
               
               return (
                 <div 
@@ -399,7 +405,7 @@ export function EnhancedDashboardGrid({
                     id={widget.id} 
                     widgetType={widget.type}
                     layout={widget.layout}
-                    onResize={handleResizeWidget}
+                    onResize={handleWidgetResize}
                     onShowPopup={handleShowPopup}
                     onHidePopup={handleHidePopup}
                     isPopupActive={activePopup.widgetId === widget.id}

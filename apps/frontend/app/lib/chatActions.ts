@@ -5,6 +5,45 @@ import { chats, files } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { supabase } from './supabase';
 import { chatEvents, CHAT_EVENTS } from './events';
+import { v4 as uuidv4 } from 'uuid';
+import { widgets } from '@/db/schema';
+
+/**
+ * Create a new chat session
+ */
+export async function createChat(
+  userId: string,
+  dashboardId: string,
+  initialMessageContent: string
+) {
+  const chatId = uuidv4();
+  const newChat = {
+    id: chatId,
+    userId,
+    dashboardId,
+    title: "New Widget Chat",
+    conversation: [
+      {
+        role: 'user',
+        message: initialMessageContent,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  try {
+    const insertedChats = await db.insert(chats).values(newChat).returning();
+    if (insertedChats.length === 0) {
+      throw new Error('Failed to create new chat.');
+    }
+    return insertedChats[0];
+  } catch (error) {
+    console.error('Error creating chat:', error);
+    throw error;
+  }
+}
 
 /**
  * Rename a chat
@@ -37,25 +76,11 @@ export async function renameChat(chatId: string, userId: string, newTitle: strin
 }
 
 /**
- * Delete a chat and associated charts and files
+ * Delete a chat from a dashboard
  */
 export async function deleteChat(chatId: string, userId: string) {
   try {
-    // 1. Get the chat to see if there are associated files
-    const chatResult = await db.select().from(chats)
-      .where(and(
-        eq(chats.id, chatId),
-        eq(chats.userId, userId)
-      ));
-    
-    if (!chatResult || chatResult.length === 0) {
-      throw new Error(`Chat with ID ${chatId} not found`);
-    }
-
-    const chatData = chatResult[0];
-    const fileId = chatData.fileId;
-    
-    // 2. Delete the chat itself (this removes the reference to the file)
+    // Delete the chat directly (dashboard-based chats don't need complex file cleanup)
     const result = await db.delete(chats)
       .where(and(
         eq(chats.id, chatId),
@@ -65,38 +90,6 @@ export async function deleteChat(chatId: string, userId: string) {
       
     if (!result || result.length === 0) {
       throw new Error(`Failed to delete chat ${chatId}`);
-    }
-    
-    // 4. If there's a fileId, delete the file after the chat is deleted
-    if (fileId) {
-      const fileResult = await db.select().from(files)
-        .where(eq(files.id, fileId));
-      
-      if (fileResult && fileResult.length > 0) {
-        const fileData = fileResult[0];
-        
-        // Delete file from Supabase storage
-        if (fileData.storagePath) {
-          // Extract bucket and file path from the storage path
-          // Assuming format is bucket/path/to/file
-          const [bucket, ...pathParts] = fileData.storagePath.split('/');
-          const path = pathParts.join('/');
-          
-          if (bucket && path) {
-            const { error } = await supabase.storage
-              .from(bucket)
-              .remove([path]);
-              
-            if (error) {
-              console.error('Error deleting file from storage:', error);
-            }
-          }
-        }
-        
-        // Delete file from database
-        await db.delete(files)
-          .where(eq(files.id, fileId));
-      }
     }
     
     return result[0];

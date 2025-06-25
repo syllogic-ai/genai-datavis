@@ -182,7 +182,7 @@ export function TagSelector(props: TagSelectorProps) {
         {open && (
           <div
             data-popover
-            className="absolute top-full left-0 mt-1 bg-secondary border border-gray-300 rounded-md shadow-lg z-50 min-w-80"
+            className="absolute bottom-full left-0 mb-1 bg-secondary border border-gray-300 rounded-md shadow-lg z-50 min-w-80"
           >
             <div className="p-2 border-b border-gray-200">
               <input
@@ -261,7 +261,7 @@ export function TagSelector(props: TagSelectorProps) {
             {!Icon && (
               <button
                 onClick={() => handleRemoveItem(item.id)}
-                className="w-3.5 h-3.5 flex-shrink-0 opacity-0 group-hover:opacity-100 bg-transparent border-none cursor-pointer rounded-md flex items-center justify-center text-red-500 hover:text-red-700 transition-opacity duration-200"
+                className="w-3.5 h-3.5 flex-shrink-0 opacity-0 group-hover:opacity-100 bg-transparent border-none cursor-pointer rounded-md flex items-center justify-center text-primary/50 hover:text-primary transition-opacity duration-200"
                 aria-label={`Remove ${item.label}`}
               >
                 ×
