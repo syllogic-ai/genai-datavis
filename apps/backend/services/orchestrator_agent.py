@@ -53,7 +53,7 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
-    - Message history: {ctx.deps.message_history[0]} 
+    - Message history: {ctx.deps.message_history} 
     Your job is to coordinate the workflow and ensure the user gets a complete answer.
     """ # #{json.dumps(ctx.deps.message_history, indent=2)}
   

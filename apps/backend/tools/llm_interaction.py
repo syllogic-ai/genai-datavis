@@ -8,7 +8,7 @@ import time
 import re
 from datetime import datetime
 
-from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, get_last_chart_id, remove_null_pairs, update_chart_specs
+from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, get_message_history, remove_null_pairs, update_chart_specs
 from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.utils import get_data, filter_messages_to_role_content
 from apps.backend.utils.files import extract_schema_sample, get_column_unique_values as get_unique_values
@@ -47,6 +47,7 @@ async def process_user_request(
     user_prompt: str,
     is_follow_up: bool = False,
     last_chart_id: Optional[str] = None,
+    widget_type: Optional[str] = None,
     duck_connection: Optional[duckdb.DuckDBPyConnection] = None,
     supabase_client: Optional[Client] = None
 ) -> Dict[str, Any]:
@@ -60,6 +61,7 @@ async def process_user_request(
         user_prompt: The user's question or request
         is_follow_up: Whether this is a follow-up question
         last_chart_id: ID of the last chart (if any)
+        widget_type: Type of widget (if any)
         duck_connection: DuckDB connection (created if not provided)
         supabase_client: Supabase client (created if not provided)
         
@@ -87,6 +89,15 @@ async def process_user_request(
     message_history = await get_message_history(chat_id)
     logfire.info(f"Message history: {str(message_history)}")
     
+    # If last_chart_id is not provided, try to find it from the chat
+    if not last_chart_id:
+        logfire.info("last_chart_id not provided, attempting to fetch from chat.")
+        last_chart_id = await get_last_chart_id_from_chat_id(chat_id)
+        if last_chart_id:
+            logfire.info(f"Found associated widget_id: {last_chart_id}")
+        else:
+            logfire.warn(f"Could not find a widget associated with chat_id: {chat_id}")
+    
     # Create dependencies
     deps = Deps(
         chat_id=chat_id,
@@ -97,7 +108,8 @@ async def process_user_request(
         is_follow_up=is_follow_up,
         duck=duck_connection,
         supabase=supabase_client,
-        message_history=[str(message_history)]
+        message_history=json.dumps(message_history),
+        widget_type=widget_type
     )
     
     try:
@@ -132,7 +144,7 @@ async def process_user_request(
         end_time = time.time()
         duration = end_time - start_time
         
-        _log_llm(result.usage(), orchestrator_agent, duration, deps.chat_id, deps.request_id)  
+        await _log_llm(result.usage(), orchestrator_agent, duration, deps.chat_id, deps.request_id)  
         
         logfire.info("Request processed successfully", 
                    execution_time=end_time - start_time,

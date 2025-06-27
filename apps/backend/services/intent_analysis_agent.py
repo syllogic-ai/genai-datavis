@@ -62,24 +62,22 @@ async def intent_system_prompt(ctx: RunContext[Deps]) -> str:
     {json.dumps(column_types, indent=2)}
     
     You have three tools available:
-    1. `generate_sql`: Generates SQL queries to extract data from the dataset
-    2. `generate_insights`: Analyzes data to provide business insights (requires a chart_id)
-    3. `visualize_chart`: Visualizes data using the viz_agent.
+    1. `generate_sql`: Generates a SQL query to fetch data and updates the widget with this query.
+    2. `generate_insights`: Analyzes the data from a widget to provide business insights.
+    3. `visualize_chart`: Generates the visualization configuration for a widget.
     
     Your workflow should follow these rules:
-    - If the user is asking for specific data, visualizations, or statistics, use generate_sql first
-    - Only use generate_insights when you have a chart_id (either from generate_sql or from last_chart_id)
-    - If the user asks for insights or analysis based on previous results, use the last_chart_id
-    - Always provide a clear, direct answer to the user's question
-    - ALWAYS run generate_insights after generate_sql
-    - When the user asks you for a chart, or a chart ask is implied, ALWAYS run the visualize_chart tool, to produce a visualization.
-    - When a user asks for an formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again. 
+    - All tools require a `last_chart_id` to be available in the context. This ID corresponds to the widget being worked on.
+    - If the user asks for data or a new visualization, first use `generate_sql` to get the data query.
+    - After `generate_sql` is successful, you MUST ALWAYS run `generate_insights` to analyze the results.
+    - After `generate_sql` is successful, if the user asked for a chart, you MUST ALSO run `visualize_chart` to create the visualization.
+    - If the user asks for a formatting update on an existing chart, use `visualize_chart` directly without running `generate_sql` again.
 
     Context:
-    - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
+    - Widget ID being worked on (last_chart_id): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
-    - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
+    - Message history: {ctx.deps.message_history}
     """
 
     return prompt
@@ -100,7 +98,7 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         # Store the new chart_id in the context for other tools to use
         ctx.deps.last_chart_id = result.output.chart_id
  
-        _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
         
         return result.output
     
@@ -134,7 +132,7 @@ async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessIns
         
         end_time = time.time()
 
-        _log_llm(result.usage(), business_insights_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), business_insights_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
         
         return result.output
     
@@ -167,7 +165,8 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
         is_follow_up=ctx.deps.is_follow_up,
         duck=ctx.deps.duck,
         supabase=ctx.deps.supabase,
-        message_history=ctx.deps.message_history
+        message_history=ctx.deps.message_history,
+        widget_type=ctx.deps.widget_type
     )
 
     try:
@@ -185,7 +184,7 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
         await append_chat_message(ctx.deps.chat_id, message=message)
         
         end_time = time.time()
-        _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
         
         return result.output
     

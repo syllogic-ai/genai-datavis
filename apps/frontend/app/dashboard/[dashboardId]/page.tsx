@@ -121,7 +121,7 @@ export default function EnhancedDashboardPage() {
   }
 
   return (
-    <div className="h-screen w-full flex flex-col">
+    <div className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col">
       {/* Header with Publish Button */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -142,7 +142,7 @@ export default function EnhancedDashboardPage() {
         className="flex-1 flex overflow-hidden"
       >
         <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-auto ">
+          <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'none' }}>
             <EnhancedDashboardGrid
               widgets={widgets}
               onUpdateWidgets={handleUpdateWidgets}
@@ -211,41 +211,6 @@ export default function EnhancedDashboardPage() {
         </div>
       </AnimatePresence>
 
-      {/* React Hot Toast Container */}
-      <Toaster
-        position="top-right"
-        reverseOrder={false}
-        gutter={8}
-        containerClassName=""
-        containerStyle={{}}
-        toastOptions={{
-          // Define default options
-          className: '',
-          duration: 3000,
-          style: {
-            background: '#fff',
-            color: '#363636',
-            boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-            border: '1px solid rgba(0, 0, 0, 0.1)',
-          },
-
-          // Default options for specific types
-          success: {
-            duration: 3000,
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#ffffff',
-            },
-          },
-          error: {
-            duration: 4000,
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#ffffff',
-            },
-          },
-        }}
-      />
     </div>
   );
 }

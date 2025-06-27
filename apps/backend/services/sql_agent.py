@@ -23,7 +23,7 @@ class CalcInput(BaseModel):
 
 class SQLOutput(BaseModel):
     """Output from SQL generation, includes chart ID."""
-    chart_id: str = Field(description="The ID of the chart that has been created")
+    chart_id: str = Field(description="The ID of the widget that was updated with the SQL query. This should be the same as the 'last_chart_id' from the context.")
     sql: str = Field(description="The generated SQL query")
     insights_title: Optional[str] = Field(default=None, description="Title of the insights if generated")
     insights_analysis: Optional[str] = Field(default=None, description="Business insights analysis if generated")
@@ -134,6 +134,10 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     successful_execution = False
     
     sql = input.sql
+    chart_id = ctx.deps.last_chart_id
+
+    if not chart_id:
+        raise ValueError("No chart_id provided to update with SQL query.")
     
     # Convert to uppercase for case-insensitive comparison
     sql_upper = sql.upper()
@@ -150,36 +154,33 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                          request_id=ctx.deps.request_id)
             raise ValueError(error_msg)
     
-    # Create a new chart record in Supabase
-    chart_id = str(uuid.uuid4())
-    
-    # Insert the SQL query into the charts table using Supabase client
+    # Update the widget record in Supabase with the generated SQL
     try:
-        # Use the Supabase client to insert the record
-        result = ctx.deps.supabase.table("charts").insert({
-            "id": chart_id,
-            "chat_id": ctx.deps.chat_id,
+        # Use the Supabase client to update the record
+        result = ctx.deps.supabase.table("widgets").update({
             "sql": sql
-        }).execute()
+        }).eq("id", chart_id).execute()
         
-        # Verify the insertion was successful
+        # Verify the update was successful
         if not result.data:
-            error_msg = "Failed to create chart record"
-            logfire.warn("Chart creation failed", 
+            error_msg = "Failed to update widget record"
+            logfire.warn("Widget update failed", 
                          error=error_msg, 
                          chat_id=ctx.deps.chat_id, 
                          request_id=ctx.deps.request_id)
             successful_execution = False
         elif len(result.data) == 0:
             error_msg = "No data was returned from the query"
-            logfire.warn("Chart creation failed", 
+            logfire.warn("Widget update failed", 
                          error=error_msg, 
                          chat_id=ctx.deps.chat_id, 
                          request_id=ctx.deps.request_id)
             successful_execution = False
+        else:
+            successful_execution = True
 
     except Exception as e:
-        error_msg = f"Error creating chart record: {str(e)}"
+        error_msg = f"Error updating widget record: {str(e)}"
         logfire.error("Supabase error", 
                      error=str(e), 
                      chat_id=ctx.deps.chat_id, 
@@ -188,7 +189,7 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     
     end_time = time.time()
     
-    return SQLOutput(chart_id=result.data[0]["id"], sql=sql, success=successful_execution)
+    return SQLOutput(chart_id=chart_id, sql=sql, success=successful_execution)
 
 @sql_agent.tool
 async def get_column_unique_values(ctx: RunContext[Deps], column_name: str) -> list[str]:

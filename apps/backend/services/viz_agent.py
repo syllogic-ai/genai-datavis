@@ -310,18 +310,35 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     
     logfire.info("Data columns", data_cols=data_cols)
     
-    prompt = f"""
-    You are a data visualization expert. You are given a user prompt and a dataset.
-    The dataset has the following columns: {data_cols}
-
-    CRITICAL INSTRUCTIONS:
-    1. You MUST ALWAYS execute EXACTLY ONE of these tools:
+    widget_type = ctx.deps.widget_type
+    
+    tool_map = {
+        "bar": "visualize_bar",
+        "area": "visualize_area",
+        "line": "visualize_line",
+        "kpi": "visualize_kpi",
+        "pie": "visualize_pie",
+        "table": "visualize_table"
+    }
+    
+    instruction = ""
+    if widget_type and widget_type in tool_map:
+        instruction = f"1. The user has pre-selected the chart type. You MUST use the `{tool_map[widget_type]}` tool."
+    else:
+        instruction = """1. You MUST ALWAYS execute EXACTLY ONE of these tools:
        - visualize_bar for bar charts
        - visualize_area for area charts
        - visualize_line for line charts
        - visualize_kpi for KPIs
        - visualize_pie for pie charts
-       - visualize_table for tables
+       - visualize_table for tables"""
+
+    prompt = f"""
+    You are a data visualization expert. You are given a user prompt and a dataset.
+    The dataset has the following columns: {data_cols}
+
+    CRITICAL INSTRUCTIONS:
+    {instruction}
     
     2. You CANNOT respond with free-form text or explanations
     3. You CANNOT skip tool execution

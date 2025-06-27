@@ -49,7 +49,7 @@ async def business_insights_system_prompt(ctx: RunContext[Deps]) -> str:
             chart_data = data_df.head(10).to_dict(orient="records")
             
             # Get the SQL that was used
-            chart_result = ctx.deps.supabase.table("charts").select("sql").eq("id", chart_id).execute()
+            chart_result = await ctx.deps.supabase.table("widgets").select("sql").eq("id", chart_id).execute()
             if chart_result.data and len(chart_result.data) > 0:
                 chart_sql = chart_result.data[0].get("sql")
             

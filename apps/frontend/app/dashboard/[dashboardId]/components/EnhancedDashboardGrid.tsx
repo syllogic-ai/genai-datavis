@@ -349,9 +349,9 @@ export function EnhancedDashboardGrid({
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-center h-96"
+            className="flex items-center justify-center h-96 "
           >
-            <div className="w-full max-w-2xl mx-auto">
+            <div className="w-full max-w-2xl mx-auto ">
               <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center bg-gray-50/50 dark:bg-gray-800/50">
                 <div className="text-4xl mb-4 text-gray-400">📊</div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -395,7 +395,7 @@ export function EnhancedDashboardGrid({
               return (
                 <div 
                   key={widget.layout.i} // Use only layout.i as key to prevent duplicates
-                  className="react-grid-item-content bg-transparent h-full cursor-move overflow-visible"
+                  className="react-grid-item-content bg-transparent h-full cursor-move overflow-visible "
                   data-widget-type={widget.type}
                   onMouseEnter={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: true }))}
                   onMouseLeave={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: false }))}

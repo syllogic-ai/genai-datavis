@@ -130,6 +130,7 @@ class AnalysisRequest(BaseModel):
     request_id: str
     is_follow_up: bool = False
     last_chart_id: Optional[str] = None
+    widget_type: Optional[str] = None
 
 # Request model for the chart spec data endpoint
 class ChartSpecRequest(BaseModel):
@@ -233,7 +234,8 @@ async def analyze_data(
         "user_prompt": request.prompt,
         "is_follow_up": request.is_follow_up,
         "last_chart_id": request.last_chart_id,
-        "received_at": datetime.now().isoformat()
+        "received_at": datetime.now().isoformat(),
+        "widget_type": request.widget_type
     }
 
     try:
@@ -338,6 +340,7 @@ async def process_analysis_task(
         user_prompt = task_data.get("user_prompt")
         is_follow_up = task_data.get("is_follow_up", False)
         last_chart_id = task_data.get("last_chart_id")
+        widget_type = task_data.get("widget_type")
         
         if not all([chat_id, request_id, file_id, user_prompt]):
             missing = [field for field, value in {
@@ -370,6 +373,7 @@ async def process_analysis_task(
             user_prompt=user_prompt,
             is_follow_up=is_follow_up,
             last_chart_id=last_chart_id,
+            widget_type=widget_type,
             duck_connection=duck_connection,
             supabase_client=supabase
         )
@@ -797,7 +801,7 @@ async def health_check():
     
     try:
         # Try a simple query on Supabase
-        supabase.table("charts").select("id").limit(1).execute()
+        supabase.table("widgets").select("id").limit(1).execute()
     except Exception as e:
         supabase_healthy = False
         logfire.error("Supabase health check failed", error=str(e))

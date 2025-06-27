@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from ..core.models import LLMUsageRow
 from ..core.config import async_supabase
@@ -54,7 +55,7 @@ def get_cost(model: str, provider: str, input_tokens: int, output_tokens: int) -
         return 0
         
         
-def _log_llm(usage: any, agent: any, duration: float, chat_id: str, request_id: str) -> str:
+async def _log_llm(usage: any, agent: any, duration: float, chat_id: str, request_id: str) -> str:
     """
     Logs LLM usage metrics to the llm_usage table in Supabase.
     
@@ -67,7 +68,15 @@ def _log_llm(usage: any, agent: any, duration: float, chat_id: str, request_id: 
     
     cost = get_cost(agent.model.model_name, agent.model.system, usage.request_tokens, usage.response_tokens)
     
-    
+    # Fetch user_id from chats table
+    user_id = None
+    try:
+        chat_record = await async_supabase.table("chats").select("user_id").eq("id", chat_id).single().execute()
+        if chat_record.data:
+            user_id = chat_record.data.get("user_id")
+    except Exception as e:
+        logfire.warn(f"Could not fetch user_id for chat {chat_id}: {e}")
+
     
     request_tokens = usage.request_tokens
     response_tokens = usage.response_tokens
@@ -92,17 +101,15 @@ def _log_llm(usage: any, agent: any, duration: float, chat_id: str, request_id: 
     # Prepare the data for insertion
     usage_data = {
         "id": uuid_str(),
-        "request_id": request_id,
+        "user_id": user_id,
         "chat_id": chat_id,
         "model": model,
-        "provider": provider,
-        "api_request": api_request,
         "input_tokens": request_tokens,
         "output_tokens": response_tokens,
-        "compute_time": duration,
         "total_cost": cost,
+        "created_at": datetime.now().isoformat(),
     }
     
     # Insert the record into the llm_usage table
-    async_supabase.table("llm_usage").insert(usage_data).execute()
+    await async_supabase.table("llm_usage").insert(usage_data).execute()
 

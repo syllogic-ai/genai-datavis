@@ -57,10 +57,10 @@ def get_data(file_id: str, chart_id: str, supabase: Client = None, duck_connecti
 
     try:
         # Fetch the SQL query from the chart
-        chart_result = supabase.table("charts").select("sql").eq("id", chart_id).execute()
+        chart_result = supabase.table("widgets").select("sql").eq("id", chart_id).execute()
 
         if not chart_result.data:
-            logfire.warn("No chart found", chart_id=chart_id)
+            logfire.warn("No widget found", chart_id=chart_id)
             return pd.DataFrame()
 
         sql_query = chart_result.data[0].get("sql")
@@ -76,10 +76,14 @@ def get_data(file_id: str, chart_id: str, supabase: Client = None, duck_connecti
 
         storage_path = file_result.data[0]["storage_path"]
 
-        # Download the file from Supabase Storage (assumes public bucket or signed URL)
-        response = requests.get(storage_path)
+        # Construct the full public URL
+        bucket_name, file_key = storage_path.split('/', 1)
+        public_url = supabase.storage.from_(bucket_name).get_public_url(file_key)
+
+        # Download the file from Supabase Storage
+        response = requests.get(public_url)
         if response.status_code != 200:
-            logfire.error("Failed to download CSV", storage_path=storage_path, status_code=response.status_code)
+            logfire.error("Failed to download CSV", storage_path=public_url, status_code=response.status_code)
             return pd.DataFrame()
 
         df = pd.read_csv(io.StringIO(response.text))

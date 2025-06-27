@@ -51,42 +51,42 @@
 }
 
 .dark {
-  --background: hsl(0 0% 9.02%);
-  --foreground: hsl(0 0% 89.80%);
-  --card: hsl(0 0% 14.90%);
-  --card-foreground: hsl(0 0% 89.80%);
-  --popover: hsl(0 0% 14.90%);
-  --popover-foreground: hsl(0 0% 89.80%);
-  --primary: hsl(37.69 92.13% 50.20%);
-  --primary-foreground: hsl(0 0% 0%);
-  --secondary: hsl(0 0% 14.90%);
-  --secondary-foreground: hsl(0 0% 89.80%);
-  --muted: hsl(0 0% 14.90%);
-  --muted-foreground: hsl(0 0% 63.92%);
-  --accent: hsl(22.73 82.50% 31.37%);
-  --accent-foreground: hsl(48 96.64% 76.67%);
-  --destructive: hsl(0 84.24% 60.20%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --border: hsl(0 0% 25.10%);
-  --input: hsl(0 0% 25.10%);
-  --ring: hsl(37.69 92.13% 50.20%);
-  --chart-1: hsl(43.26 96.41% 56.27%);
-  --chart-2: hsl(32.13 94.62% 43.73%);
-  --chart-3: hsl(22.73 82.50% 31.37%);
-  --chart-4: hsl(25.96 90.48% 37.06%);
-  --chart-5: hsl(22.73 82.50% 31.37%);
-  --sidebar: hsl(0 0% 5.88%);
-  --sidebar-foreground: hsl(0 0% 89.80%);
-  --sidebar-primary: hsl(37.69 92.13% 50.20%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(22.73 82.50% 31.37%);
-  --sidebar-accent-foreground: hsl(48 96.64% 76.67%);
-  --sidebar-border: hsl(0 0% 25.10%);
-  --sidebar-ring: hsl(37.69 92.13% 50.20%);
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.1400 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.1800 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.2500 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted: oklch(0.2300 0 0);
+  --muted-foreground: oklch(0.7200 0 0);
+  --accent: oklch(0.3200 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --destructive: oklch(0.6900 0.2000 23.9100);
+  --destructive-foreground: oklch(0 0 0);
+  --border: oklch(0.2600 0 0);
+  --input: oklch(0.3200 0 0);
+  --ring: oklch(0.7200 0 0);
+  --chart-1: hsl(151.20 26.04% 37.65%);
+  --chart-2: hsl(197, 26%, 38%);
+  --chart-3: hsl(58, 30%, 54%);
+  --chart-4: oklch(0.4400 0 0);
+  --chart-5: oklch(0.9200 0 0);
+  --sidebar: oklch(0.1800 0 0);
+  --sidebar-foreground: oklch(1 0 0);
+  --sidebar-primary: oklch(1 0 0);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-accent: oklch(0.3200 0 0);
+  --sidebar-accent-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.3200 0 0);
+  --sidebar-ring: oklch(0.7200 0 0);
   --font-sans: Open Sans, sans-serif;
   --font-serif: Source Serif 4, serif;
   --font-mono: JetBrains Mono, monospace;
-  --radius: 1rem;
+  --radius: 0.7rem;
   --shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
   --shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
   --shadow-sm: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
@@ -210,6 +210,10 @@ body {
 .hide-scrollbar {
   scrollbar-width: none; /* Firefox */
   -ms-overflow-style: none; /* IE and Edge */ 
+}
+
+@utility no-scrollbar {
+  @apply [scrollbar-width:none] [&::-webkit-scrollbar]:hidden;
 }
 
 .hide-scrollbar::-webkit-scrollbar {

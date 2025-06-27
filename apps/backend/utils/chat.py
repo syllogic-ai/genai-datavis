@@ -112,7 +112,7 @@ async def update_chart_specs(chart_id: str, chart_specs: Dict[str, Any]) -> bool
     Update the chart_specs entry in the given chat_id.
     
     Args:
-        chat_id: The ID of the chat to update
+        chart_id: The ID of the chart to update
         chart_specs: The chart specs to update
         
     Returns:
@@ -120,9 +120,9 @@ async def update_chart_specs(chart_id: str, chart_specs: Dict[str, Any]) -> bool
     """
     try:
         # Update the chart_specs for the given chat_id
-        update_result = await async_supabase.table("charts").update({
-            "chart_specs": chart_specs,
-            "chart_type": chart_specs["chartType"]
+        update_result = await async_supabase.table("widgets").update({
+            "config": chart_specs,
+            "type": chart_specs["chartType"]
         }).eq("id", chart_id).execute()
             
         if not update_result.data or len(update_result.data) == 0:
@@ -183,41 +183,15 @@ async def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
     """
     Get the chart specs for a given chart ID.
     """
-    chart_specs = async_supabase.table("charts").select("chart_specs").eq("id", chart_id).execute()
-    return chart_specs.data[0]["chart_specs"]
-
-async def get_last_chart_id(chat_id: str) -> str | None:
-    """
-    Get the last chart message ID for a given chat ID.
-
-    Args:
-        chat_id: The ID of the chat to get the last chart message for.
-
-    Returns:
-        str | None: The message content of the last chart message, or None if not found.
-    """
-    try:
-        result = await async_supabase.rpc('get_last_chart_message', {
-            'chat_id': chat_id
-        }).execute()
-
-        if result.data is None or result.data == '':
-            print(f"No chart message found for chat ID {chat_id}")
-            return None
-            
-        # The RPC function is expected to return a single text value
-        return result.data
-        
-    except Exception as e:
-        print(f"Error getting last chart ID for chat {chat_id}: {str(e)}")
-        return None
+    chart_specs = await async_supabase.table("widgets").select("config").eq("id", chart_id).execute()
+    return chart_specs.data[0]["config"]
 
 async def get_last_chart_id_from_chat_id(chat_id: str) -> str | None:
     """
     Get the last chart message ID for a given chat ID.
     """
     try:
-        result = async_supabase.table("charts").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
+        result = await async_supabase.table("widgets").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
         return result.data[0]["id"] if result.data else None
     except Exception as e:
         print(f"Error getting last chart ID from chat ID {chat_id}: {str(e)}")

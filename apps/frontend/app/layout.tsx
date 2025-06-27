@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "GenAI DataVis",
   description: "Data visualization with AI",
 };
-
+ 
 export default function RootLayout({
   children,
 }: Readonly<{

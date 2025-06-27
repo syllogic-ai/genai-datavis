@@ -47,8 +47,12 @@ def extract_schema_sample(file_id: str) -> DatasetProfile:
     
     storage_path = fetch_dataset(file_id)
     
-    # Read the CSV data
-    df_scan = pl.read_csv(storage_path, low_memory=True)
+    # Construct the full public URL
+    bucket_name, file_key = storage_path.split('/', 1)
+    public_url = async_supabase.storage.from_(bucket_name).get_public_url(file_key)
+    
+    # Read the CSV data from the public URL
+    df_scan = pl.read_csv(public_url, low_memory=True)
 
     # Transform columns to a dictionary of column_name: data_type
     columns_dict = {col: str(df_scan[col].dtype) for col in df_scan.columns}
@@ -66,7 +70,12 @@ def get_column_unique_values(file_id: str, column_name: str) -> list[str]:
     Get unique values for a given column.
     """
     storage_path = fetch_dataset(file_id)
-    df_scan = pl.read_csv(storage_path, low_memory=True)
+    
+    # Construct the full public URL
+    bucket_name, file_key = storage_path.split('/', 1)
+    public_url = async_supabase.storage.from_(bucket_name).get_public_url(file_key)
+    
+    df_scan = pl.read_csv(public_url, low_memory=True)
     print(df_scan[column_name].unique().to_list())
     return df_scan[column_name].unique().to_list()
 

@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Union, Any, Literal
 from pydantic import BaseModel, ConfigDict
 from enum import Enum
+from datetime import datetime
 
 
 class DatasetProfile(BaseModel):
@@ -22,7 +23,8 @@ class Deps(BaseModel):
     is_follow_up: bool = False
     duck: Any  # duckdb.DuckDBPyConnection
     supabase: Any  # Client
-    message_history: List[str]
+    message_history: str
+    widget_type: Optional[str] = None
 
 class GradientStops(BaseModel):
     """
@@ -261,18 +263,25 @@ class ChatRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ChartRow(BaseModel):
+class WidgetRow(BaseModel):
     """
-    Represents a chart in the database.
-    Maps to the 'charts' table and contains chart specification and metadata.
+    Represents a widget in the database.
+    Maps to the 'widgets' table and contains widget specification and metadata.
     """
     id: str
-    chat_id: str
-    file_id: Optional[str] = None  # Keeping for backward compatibility
-    chart_type: str
-    spec: ChartSpec  # Using spec for backward compatibility, equivalent to chartSpecs
-    created_at: str
-    model_config = ConfigDict(extra="forbid")
+    dashboard_id: str
+    title: str
+    type: str
+    config: Dict[str, Any]
+    data: Optional[Any] = None
+    sql: Optional[str] = None
+    layout: Dict[str, Any]
+    chat_id: Optional[str] = None
+    is_configured: bool = False
+    cache_key: Optional[str] = None
+    last_data_fetch: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class LLMUsageRow(BaseModel):
@@ -280,15 +289,12 @@ class LLMUsageRow(BaseModel):
     Represents LLM usage metrics in the database.
     Maps to the 'llm_usage' table and tracks API usage, tokens, and costs.
     """
-    request_id: str
+    id: str
+    user_id: Optional[str] = None
     chat_id: Optional[str] = None
-    file_id: Optional[str] = None  # Keeping for backward compatibility
     model: str
-    provider: str
-    api_request: str
-    input_tokens: int  # tokens_in for backward compatibility
-    output_tokens: int  # tokens_out for backward compatibility
-    compute_time: float
-    total_cost: float  # cost for backward compatibility
-    model_config = ConfigDict(extra="forbid") 
+    input_tokens: int
+    output_tokens: int
+    total_cost: float
+    created_at: datetime 
     
