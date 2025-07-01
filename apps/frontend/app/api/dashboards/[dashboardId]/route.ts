@@ -1,6 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { updateDashboard } from '@/app/lib/actions';
+import { updateDashboard, getDashboard } from '@/app/lib/actions';
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ dashboardId: string }> }
+) {
+  try {
+    const { userId } = await auth();
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { dashboardId } = await context.params;
+    
+    // Get dashboard
+    const dashboard = await getDashboard(dashboardId, userId);
+    
+    if (!dashboard) {
+      return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
+    }
+
+    return NextResponse.json(dashboard);
+  } catch (error) {
+    console.error('Error fetching dashboard:', error);
+    return NextResponse.json(
+      { error: 'Failed to fetch dashboard' }, 
+      { status: 500 }
+    );
+  }
+}
 
 export async function PATCH(
   request: NextRequest,

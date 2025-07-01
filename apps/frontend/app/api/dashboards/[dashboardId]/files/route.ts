@@ -64,12 +64,26 @@ export async function GET(
     const { dashboardId } = await params;
     const files = await getDashboardFiles(dashboardId, userId);
 
+    // If dashboard doesn't exist, return 404
+    if (files === null) {
+      return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
+    }
+
     return NextResponse.json({
       success: true,
       files,
     });
   } catch (error) {
     console.error('Error fetching dashboard files:', error);
+    
+    // If it's a "not found" error, return 404
+    if (error instanceof Error && error.message.includes('not found')) {
+      return NextResponse.json(
+        { error: 'Dashboard not found' },
+        { status: 404 }
+      );
+    }
+    
     return NextResponse.json(
       { error: 'Failed to fetch dashboard files' },
       { status: 500 }

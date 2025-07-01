@@ -34,9 +34,7 @@ import {
 import { CsvDataPreview } from "./CsvDataPreview";
 import { FileInfoModal } from "./FileInfoModal";
 import { Button } from "../ui/button";
-import { Dropzone } from '@/components/dropzone';
-import { useSupabaseUpload } from '@/hooks/use-supabase-upload';
-import { DropzoneEmptyState, DropzoneContent } from '@/components/dropzone';
+import { EnhancedFileManager, type ExistingFile } from '@/components/enhanced-file-manager';
 import { File as FileType } from '@/db/schema';
 
 const BUCKET_NAME = 'test-bucket';
@@ -54,14 +52,6 @@ export function DashboardHeader({
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [hasProcessedUpload, setHasProcessedUpload] = useState(false);
 
-  // Initialize useSupabaseUpload
-  const upload = useSupabaseUpload({
-    bucketName: BUCKET_NAME,
-    allowedMimeTypes: ['text/csv'],
-    maxFiles: 1,
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-    upsert: true,
-  });
 
   // Load existing files for the dashboard
   const loadDashboardFiles = useCallback(async () => {
@@ -87,70 +77,11 @@ export function DashboardHeader({
     }
   }, [dashboardId, loadDashboardFiles]);
 
-  // Handle successful upload
-  const handleUploadSuccess = useCallback(async () => {
-    if (upload.files.length === 0 || !dashboardId || isProcessingUpload || hasProcessedUpload) {
-      return;
-    }
 
-    setIsProcessingUpload(true);
-    const uploadedFile = upload.files[0];
-    const storagePath = `${BUCKET_NAME}/${uploadedFile.name}`;
-
-    try {
-      // Create database record and link to dashboard
-      const response = await fetch(`/api/dashboards/${dashboardId}/files`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: uploadedFile.name,
-          storagePath: storagePath,
-          fileType: 'original',
-        }),
-      });
-
-      if (response.ok) {
-        const { file } = await response.json();
-        setUploadedFiles(prev => [...prev, file]);
-        setHasProcessedUpload(true);
-        
-        // Close modal after successful upload
-        setTimeout(() => {
-          setIsFileUploadModalOpen(false);
-        }, 500);
-      } else {
-        throw new Error('Failed to create file record');
-      }
-    } catch (error) {
-      console.error('Error creating file record:', error);
-    } finally {
-      setIsProcessingUpload(false);
-    }
-  }, [upload.files, dashboardId, isProcessingUpload, hasProcessedUpload]);
-
-  // Watch for upload success
-  useEffect(() => {
-    if (upload.isSuccess && !isProcessingUpload && !hasProcessedUpload) {
-      handleUploadSuccess();
-    }
-  }, [upload.isSuccess, isProcessingUpload, hasProcessedUpload, handleUploadSuccess]);
-
-  // Handle modal close with proper cleanup
+  // Handle modal close
   const handleModalClose = useCallback((open: boolean) => {
     setIsFileUploadModalOpen(open);
-    
-    if (!open) {
-      // Clean up upload state when modal closes
-      setTimeout(() => {
-        upload.setFiles([]);
-        upload.setErrors([]);
-        setIsProcessingUpload(false);
-        setHasProcessedUpload(false);
-      }, 100);
-    }
-  }, [upload]);
+  }, []);
 
   return (
     <header className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 flex h-12 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear">
@@ -222,30 +153,43 @@ export function DashboardHeader({
 
       {/* File Upload Modal */}
       <ResponsiveModal open={isFileUploadModalOpen} onOpenChange={handleModalClose}>
-        <ResponsiveModalContent className="max-w-lg">
+        <ResponsiveModalContent className="max-w-4xl">
           <ResponsiveModalHeader>
-            <ResponsiveModalTitle>Upload File</ResponsiveModalTitle>
+            <ResponsiveModalTitle>Manage Data Sources</ResponsiveModalTitle>
             <ResponsiveModalDescription>
-              Upload a CSV file to add as a data source for your dashboard.
+              Upload new files or manage existing data sources for your dashboard.
             </ResponsiveModalDescription>
           </ResponsiveModalHeader>
           <div className="p-6 pt-0">
-            <Dropzone {...upload}>
-              <DropzoneEmptyState />
-              <DropzoneContent />
-            </Dropzone>
-            
-            {upload.errors.length > 0 && (
-              <div className="mt-4 p-3 bg-red-100 text-red-700 rounded text-sm">
-                Upload failed. Please try again.
-              </div>
-            )}
-            
-            {isProcessingUpload && (
-              <div className="mt-4 p-3 bg-blue-100 text-blue-700 rounded text-sm">
-                Processing upload...
-              </div>
-            )}
+            <EnhancedFileManager
+              dashboardId={dashboardId || ''}
+              existingFiles={uploadedFiles.map((file): ExistingFile => ({
+                id: file.id,
+                name: file.originalFilename || 'Unknown',
+                size: 0, // File size not available in current schema
+                type: file.fileType || 'application/octet-stream',
+                storagePath: file.storagePath,
+                uploadedAt: file.createdAt || new Date(),
+                status: file.status || 'ready'
+              }))}
+              onFileAdded={(file) => {
+                setUploadedFiles(prev => [...prev, {
+                  id: file.id,
+                  originalFilename: file.name,
+                  storagePath: file.storagePath,
+                  fileType: file.type,
+                  status: 'ready',
+                  createdAt: file.uploadedAt,
+                  userId: '',
+                  dashboardId: null
+                }]);
+              }}
+              onFileRemoved={(fileId) => {
+                setUploadedFiles(prev => prev.filter(f => f.id !== fileId));
+              }}
+              onRefreshFiles={loadDashboardFiles}
+              maxFiles={5}
+            />
           </div>
         </ResponsiveModalContent>
       </ResponsiveModal>

@@ -4,9 +4,12 @@ import { motion, AnimatePresence } from "motion/react";
 import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
 import { ChatSidebar } from "@/components/dashboard/chat-sidebar";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
+import { useSetupState } from "./hooks/useSetupState";
+import { SetupPhase } from "./components/SetupPhase";
+import { ChatPhase } from "./components/ChatPhase";
 import { useDashboardContext } from "@/components/dashboard/DashboardUserContext";
 import { useModalCleanup } from "@/hooks/useModalCleanup";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -18,6 +21,7 @@ import toast, { Toaster } from 'react-hot-toast';
 
 export default function EnhancedDashboardPage() {
   const params = useParams();
+  const router = useRouter();
   const dashboardId = params.dashboardId as string;
   const { updateCurrentDashboard } = useDashboardContext();
   const { setOpen: setNavigationSidebarOpen } = useSidebar();
@@ -27,7 +31,8 @@ export default function EnhancedDashboardPage() {
   
   // Initialize modal cleanup to prevent overlay issues
   const { manualCleanup } = useModalCleanup();
-  
+
+  // Dashboard state management (load widgets first)
   const {
     widgets,
     dashboardName,
@@ -41,6 +46,18 @@ export default function EnhancedDashboardPage() {
     saveWidgets,
     addWidgetRef,
   } = useDashboardState(dashboardId);
+
+  // Setup state management (depends on widget count)
+  const {
+    files,
+    setupState,
+    isLoading: isSetupLoading,
+    error: setupError,
+    removeFile,
+    addFile,
+    markFirstMessage,
+    refreshFiles,
+  } = useSetupState(dashboardId, widgets.length);
 
   // Memoize dashboard object to prevent recreation on every render
   const dashboardObj = React.useMemo(() => ({
@@ -82,6 +99,21 @@ export default function EnhancedDashboardPage() {
     }
   };
 
+  // Phase transition handlers
+  const handleSetupComplete = () => {
+    // Navigate to dashboard without setup parameter
+    router.replace(`/dashboard/${dashboardId}`);
+  };
+
+  const handleFirstMessage = () => {
+    markFirstMessage();
+  };
+
+  const handleBackToSetup = () => {
+    // Navigate back to setup mode
+    router.replace(`/dashboard/${dashboardId}?setup=true`);
+  };
+
 
   const handlePublish = async () => {
     const success = await saveWidgets();
@@ -98,7 +130,7 @@ export default function EnhancedDashboardPage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || isSetupLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex items-center gap-2">
@@ -109,19 +141,51 @@ export default function EnhancedDashboardPage() {
     );
   }
 
-  if (error) {
+  if (error || setupError) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-red-600 mb-2">Error</h2>
-          <p className="text-gray-600">{error}</p>
+          <p className="text-gray-600">{error || setupError}</p>
         </div>
       </div>
     );
   }
 
+  // Progressive flow: Setup → Chat → Full Dashboard
+  if (setupState.isSetupMode) {
+    return (
+      <SetupPhase
+        dashboardId={dashboardId}
+        files={files}
+        onFileAdded={addFile}
+        onFileRemoved={removeFile}
+        onContinue={handleSetupComplete}
+        onRefreshFiles={refreshFiles}
+        isLoading={false}
+      />
+    );
+  }
+
+  if (setupState.isChatMode) {
+    return (
+      <ChatPhase
+        dashboardId={dashboardId}
+        files={files}
+        onFirstMessage={handleFirstMessage}
+        onBack={handleBackToSetup}
+      />
+    );
+  }
+
+  // Full Dashboard (Phase 3)
   return (
-    <div className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.5, ease: "easeOut" }}
+      className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col"
+    >
       {/* Header with Publish Button */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -211,6 +275,6 @@ export default function EnhancedDashboardPage() {
         </div>
       </AnimatePresence>
 
-    </div>
+    </motion.div>
   );
 }

@@ -11,6 +11,7 @@ export const users = pgTable("users", {
 export const files = pgTable("files", {
   id: text("id").primaryKey(), // Can be any string ID
   userId: text("user_id").notNull().references(() => users.id),
+  dashboardId: text("dashboard_id").references(() => dashboards.id, { onDelete: "cascade" }), // Link files to dashboard
   fileType: text("file_type").notNull(), // 'original' | 'cleaned' | 'meta'
   originalFilename: text("original_filename"),
   storagePath: text("storage_path").notNull(),
@@ -26,8 +27,7 @@ export const dashboards = pgTable("dashboards", {
   description: text("description"),
   icon: text("icon").default("document-text").notNull(),
   
-  // Single file per dashboard for MVP simplicity
-  fileId: text("file_id").references(() => files.id),
+  // Removed single file reference - now files reference dashboards instead
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

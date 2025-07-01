@@ -74,71 +74,73 @@ export function NavMain({
     );
   }, [currentDashboardId, pathname]);
 
-  // Load widget counts for all dashboards (only once on mount)
-  const loadDashboardWidgets = useCallback(async () => {
-    console.log(`[NavMain] Loading widget counts for ${dashboards.length} dashboards`);
-    
-    const dashboardsWithWidgetData = await Promise.all(
-      dashboards.map(async (dashboard) => {
-        try {
-          // If this is the current dashboard, use the provided widgets
-          if (dashboard.id === activeDashboardId && currentDashboardWidgets.length > 0) {
-            console.log(`[NavMain] Using provided widgets for current dashboard ${dashboard.id}: ${currentDashboardWidgets.length} widgets`);
-            return {
-              ...dashboard,
-              isActive: true,
-              widgets: currentDashboardWidgets,
-              widgetCount: currentDashboardWidgets.length,
-            };
-          }
+  // Cache widget counts to avoid repeated API calls
+  const [widgetCounts, setWidgetCounts] = useState<Record<string, number>>({});
+  const [loadedDashboardIds, setLoadedDashboardIds] = useState<Set<string>>(new Set());
 
-          // For other dashboards, fetch widget count from API
-          const response = await fetch(`/api/dashboards/${dashboard.id}/widgets`);
-          if (!response.ok) {
-            console.warn(`[NavMain] Failed to load widgets for dashboard ${dashboard.id}`);
-            return {
-              ...dashboard,
-              isActive: dashboard.id === activeDashboardId,
-              widgets: [],
-              widgetCount: 0,
-            };
-          }
+  // Load widget count for a specific dashboard (lazy loading)
+  const loadWidgetCountForDashboard = useCallback(async (dashboardId: string): Promise<number> => {
+    // Return cached count if available
+    if (widgetCounts[dashboardId] !== undefined) {
+      return widgetCounts[dashboardId];
+    }
 
-          const { widgets } = await response.json();
-          console.log(`[NavMain] Loaded ${widgets.length} widgets for dashboard ${dashboard.id}`);
-          
-          return {
-            ...dashboard,
-            isActive: dashboard.id === activeDashboardId,
-            widgets: widgets || [],
-            widgetCount: widgets?.length || 0,
-          };
-        } catch (error) {
-          console.error(`[NavMain] Error loading widgets for dashboard ${dashboard.id}:`, error);
-          return {
-            ...dashboard,
-            isActive: dashboard.id === activeDashboardId,
-            widgets: [],
-            widgetCount: 0,
-          };
-        }
-      })
-    );
+    // If this is the current dashboard and we have widgets, use them
+    if (dashboardId === activeDashboardId && currentDashboardWidgets.length > 0) {
+      const count = currentDashboardWidgets.length;
+      setWidgetCounts(prev => ({ ...prev, [dashboardId]: count }));
+      return count;
+    }
+
+    try {
+      console.log(`[NavMain] Loading widget count for dashboard ${dashboardId}`);
+      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`);
+      if (!response.ok) {
+        console.warn(`[NavMain] Failed to load widgets for dashboard ${dashboardId}`);
+        setWidgetCounts(prev => ({ ...prev, [dashboardId]: 0 }));
+        return 0;
+      }
+
+      const { widgets } = await response.json();
+      const count = widgets?.length || 0;
+      console.log(`[NavMain] Loaded ${count} widgets for dashboard ${dashboardId}`);
+      
+      setWidgetCounts(prev => ({ ...prev, [dashboardId]: count }));
+      setLoadedDashboardIds(prev => new Set(prev).add(dashboardId));
+      return count;
+    } catch (error) {
+      console.error(`[NavMain] Error loading widgets for dashboard ${dashboardId}:`, error);
+      setWidgetCounts(prev => ({ ...prev, [dashboardId]: 0 }));
+      return 0;
+    }
+  }, [widgetCounts, activeDashboardId, currentDashboardWidgets]);
+
+  // Update dashboards with widget data (without fetching all at once)
+  const updateDashboardsWithWidgetData = useCallback(() => {
+    const dashboardsWithWidgetData = dashboards.map(dashboard => ({
+      ...dashboard,
+      isActive: dashboard.id === activeDashboardId,
+      widgets: dashboard.id === activeDashboardId ? currentDashboardWidgets : [],
+      widgetCount: widgetCounts[dashboard.id] ?? 0, // Use cached count or 0
+    }));
 
     setDashboardsWithWidgets(dashboardsWithWidgetData);
-  }, [dashboards, activeDashboardId, currentDashboardWidgets]);
+  }, [dashboards, activeDashboardId, currentDashboardWidgets, widgetCounts]);
 
-  // Load dashboard widgets on mount and when dashboards change
+  // Update dashboard list when dashboards or widget counts change
   useEffect(() => {
     if (dashboards.length > 0) {
-      loadDashboardWidgets();
+      updateDashboardsWithWidgetData();
     }
-  }, [dashboards, loadDashboardWidgets]);
+  }, [dashboards, updateDashboardsWithWidgetData]);
 
-  // Update current dashboard widgets when they change
+  // Update current dashboard widget count when widgets change
   useEffect(() => {
     if (activeDashboardId && currentDashboardWidgets.length >= 0) {
       console.log(`[NavMain] Updating current dashboard ${activeDashboardId} widgets: ${currentDashboardWidgets.length}`);
+      
+      // Update the cached widget count for the current dashboard
+      setWidgetCounts(prev => ({ ...prev, [activeDashboardId]: currentDashboardWidgets.length }));
       
       setDashboardsWithWidgets(prev => 
         prev.map(dashboard => 
@@ -156,6 +158,13 @@ export function NavMain({
       onWidgetUpdate?.(activeDashboardId, currentDashboardWidgets);
     }
   }, [activeDashboardId, currentDashboardWidgets, onWidgetUpdate]);
+
+  // Load widget count for current dashboard immediately
+  useEffect(() => {
+    if (activeDashboardId && !loadedDashboardIds.has(activeDashboardId)) {
+      loadWidgetCountForDashboard(activeDashboardId);
+    }
+  }, [activeDashboardId, loadedDashboardIds, loadWidgetCountForDashboard]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -197,7 +206,13 @@ export function NavMain({
                     className={`${
                       dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
                     }`}
-                    onMouseEnter={() => setHoveredDashboard(dashboard.id)}
+                    onMouseEnter={() => {
+                      setHoveredDashboard(dashboard.id);
+                      // Lazy load widget count when user hovers over dashboard
+                      if (!loadedDashboardIds.has(dashboard.id)) {
+                        loadWidgetCountForDashboard(dashboard.id);
+                      }
+                    }}
                     onMouseLeave={() => setHoveredDashboard(null)}
                   >
                     <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">

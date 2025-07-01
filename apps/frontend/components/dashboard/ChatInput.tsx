@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 
 interface ChatInputProps {
-  availableItems: TagItem[];
+  availableItems?: TagItem[];
   onSubmit?: (data: {
     selectedItems: TagItem[];
     message: string;
@@ -33,10 +33,12 @@ interface ChatInputProps {
   isLoading?: boolean;
   isDisabled?: boolean;
   className?: string;
+  showTagSelector?: boolean;
+  showWidgetDropdown?: boolean;
 }
 
 export function ChatInput({
-  availableItems,
+  availableItems = [],
   onSubmit,
   triggerLabel = "Add Context",
   searchPlaceholder = "Search widgets...",
@@ -49,6 +51,8 @@ export function ChatInput({
   isLoading = false,
   isDisabled = false,
   className = "",
+  showTagSelector = true,
+  showWidgetDropdown = true,
 }: ChatInputProps) {
   const [selectedItems, setSelectedItems] = useState<TagItem[]>([]);
   const [message, setMessage] = useState("");
@@ -92,16 +96,18 @@ export function ChatInput({
 
   return (
     <Card className={`h-fit w-[500px] flex flex-col gap-0 ${className}`}>
-      <CardHeader className="ml-2 pb-0 mb-0 px-2">
-        <TagSelector
-          availableItems={availableItems}
-          selectedItems={selectedItems}
-          onSelectionChange={setSelectedItems}
-          triggerLabel={triggerLabel}
-          searchPlaceholder={searchPlaceholder}
-          emptyStateMessage={emptyStateMessage}
-        />
-      </CardHeader>
+      {showTagSelector && (
+        <CardHeader className="ml-2 pb-0 mb-0 px-2">
+          <TagSelector
+            availableItems={availableItems}
+            selectedItems={selectedItems}
+            onSelectionChange={setSelectedItems}
+            triggerLabel={triggerLabel}
+            searchPlaceholder={searchPlaceholder}
+            emptyStateMessage={emptyStateMessage}
+          />
+        </CardHeader>
+      )}
       <CardContent className="py-0 my-0 px-2">
         <Textarea
           className="placeholder:text-primary/60 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 resize-none rows-1"
@@ -112,20 +118,24 @@ export function ChatInput({
         />
       </CardContent>
       <CardFooter className="w-full flex justify-between px-4">
-        <div className="max-w-xs h-fit py-1">
-          <Select value={widgetType} onValueChange={setWidgetType}>
-            <SelectTrigger className="h-fit py-1 text-xs border bg-secondary hover:bg-primary/3">
-              <SelectValue placeholder="Widget" />
-            </SelectTrigger>
-            <SelectContent className="h-fit py-1 text-xs border bg-secondary hover:bg-secondary">
-              {widgetOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {showWidgetDropdown ? (
+          <div className="max-w-xs h-fit py-1">
+            <Select value={widgetType} onValueChange={setWidgetType}>
+              <SelectTrigger className="h-fit py-1 text-xs border bg-secondary hover:bg-primary/3">
+                <SelectValue placeholder="Widget" />
+              </SelectTrigger>
+              <SelectContent className="h-fit py-1 text-xs border bg-secondary hover:bg-secondary">
+                {widgetOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div />
+        )}
         <Button
           type="submit"
           size="icon"

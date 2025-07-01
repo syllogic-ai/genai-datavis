@@ -16,7 +16,10 @@
       "Bash(ls:*)",
       "Bash(cp:*)",
       "Bash(npm run typecheck:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(curl:*)",
+      "Bash(mv:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": []
   }

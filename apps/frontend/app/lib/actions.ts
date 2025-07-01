@@ -4,7 +4,17 @@ import db from '@/db';
 import { files, chats, dashboards, widgets } from '../../db/schema'; // Import Drizzle schemas
 import { eq, and, desc } from 'drizzle-orm'; // Import eq, and, and desc operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
-import { supabase } from './supabase';
+import { createClient } from '@supabase/supabase-js';
+
+// Create server-side supabase client 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('[actions.ts] Missing Supabase environment variables');
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 import { ChatMessage, normalizeMessages } from './types';
 
 // Create a new file in the database using Drizzle
@@ -314,7 +324,6 @@ export async function createDashboard(
       name: name,
       description: description || null,
       icon: icon || "DocumentTextIcon",
-      fileId: null, // For now, dashboards don't have a default file
       updatedAt: new Date(),
     }).returning();
 
@@ -523,12 +532,12 @@ export async function updateDashboardFile(dashboardId: string, fileId: string, u
       throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
     }
 
-    const result = await db.update(dashboards)
+    // Update the file to link it to the dashboard
+    const result = await db.update(files)
       .set({
-        fileId: fileId,
-        updatedAt: new Date(),
+        dashboardId: dashboardId,
       })
-      .where(eq(dashboards.id, dashboardId))
+      .where(eq(files.id, fileId))
       .returning();
 
     if (!result || result.length === 0) {
@@ -548,7 +557,7 @@ export async function updateDashboardFile(dashboardId: string, fileId: string, u
 export async function getDashboardFiles(dashboardId: string, userId: string) {
   try {
     // First verify the dashboard belongs to the user
-    const dashboardResult = await db.select({ fileId: dashboards.fileId })
+    const dashboardResult = await db.select({ id: dashboards.id })
       .from(dashboards)
       .where(and(
         eq(dashboards.id, dashboardId),
@@ -556,19 +565,20 @@ export async function getDashboardFiles(dashboardId: string, userId: string) {
       ));
 
     if (!dashboardResult || dashboardResult.length === 0) {
-      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+      // Return null to indicate dashboard not found, let caller handle
+      return null;
     }
 
-    // If dashboard has a linked file, get it
-    if (dashboardResult[0].fileId) {
-      const fileResult = await db.select()
-        .from(files)
-        .where(eq(files.id, dashboardResult[0].fileId));
+    // Get all files linked to this dashboard
+    const fileResult = await db.select()
+      .from(files)
+      .where(and(
+        eq(files.dashboardId, dashboardId),
+        eq(files.userId, userId)
+      ))
+      .orderBy(desc(files.createdAt));
       
-      return fileResult;
-    }
-
-    return [];
+    return fileResult;
   } catch (error) {
     console.error('Error getting dashboard files:', error);
     throw error;
@@ -588,6 +598,105 @@ export async function getUserFiles(userId: string) {
     return result;
   } catch (error) {
     console.error('Error fetching user files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a file
+ */
+export async function deleteFile(fileId: string, userId: string) {
+  try {
+    console.log(`[deleteFile] Starting deletion for fileId: ${fileId}, userId: ${userId}`);
+    
+    // First verify the file belongs to the user
+    const fileResult = await db.select()
+      .from(files)
+      .where(and(
+        eq(files.id, fileId),
+        eq(files.userId, userId)
+      ));
+
+    if (!fileResult || fileResult.length === 0) {
+      console.error(`[deleteFile] File not found: fileId=${fileId}, userId=${userId}`);
+      throw new Error(`File with ID ${fileId} not found or doesn't belong to user`);
+    }
+
+    const file = fileResult[0];
+    console.log(`[deleteFile] Found file:`, {
+      id: file.id,
+      originalFilename: file.originalFilename,
+      storagePath: file.storagePath,
+      userId: file.userId
+    });
+
+    // Delete the file from Supabase storage
+    if (file.storagePath) {
+      console.log(`[deleteFile] Original storagePath: ${file.storagePath}`);
+      
+      try {
+        let bucketName = 'test-bucket'; // Default bucket
+        let filePath = file.storagePath;
+        
+        // Handle different storage path formats
+        if (file.storagePath.includes('/')) {
+          const pathParts = file.storagePath.split('/');
+          
+          // If it starts with bucket name (new format): "test-bucket/dashboards/id/file.csv"
+          if (pathParts[0] === 'test-bucket') {
+            bucketName = pathParts[0];
+            filePath = pathParts.slice(1).join('/');
+          }
+          // If it's old format: "test-bucket/file.csv" or just "dashboards/id/file.csv"
+          else if (pathParts.length === 2 && pathParts[0] === 'test-bucket') {
+            bucketName = pathParts[0];
+            filePath = pathParts[1];
+          }
+          // If it's just a path without bucket: "dashboards/id/file.csv"
+          else {
+            filePath = file.storagePath;
+          }
+        }
+        
+        console.log(`[deleteFile] Attempting to delete from bucket: ${bucketName}, path: ${filePath}`);
+        
+        const { error: storageError } = await supabase.storage
+          .from(bucketName)
+          .remove([filePath]);
+        
+        if (storageError) {
+          console.error('Error deleting file from storage:', storageError);
+          console.error('Storage error details:', JSON.stringify(storageError, null, 2));
+          // Continue with database deletion even if storage fails to avoid orphaned DB records
+          console.warn(`[deleteFile] Storage deletion failed for ${file.storagePath}, but continuing with database deletion`);
+          console.warn(`[deleteFile] This may leave an orphaned file in storage that can be overwritten on re-upload`);
+        } else {
+          console.log(`[deleteFile] Successfully deleted file from storage: ${file.storagePath}`);
+        }
+      } catch (storageErr) {
+        console.error('Exception during storage deletion:', storageErr);
+        console.warn(`[deleteFile] Storage deletion threw exception for ${file.storagePath}, but continuing with database deletion`);
+      }
+    }
+
+    // Delete the file record from database
+    console.log(`[deleteFile] Deleting database record for fileId: ${fileId}`);
+    const result = await db.delete(files)
+      .where(and(
+        eq(files.id, fileId),
+        eq(files.userId, userId)
+      ))
+      .returning();
+
+    if (!result || result.length === 0) {
+      console.error(`[deleteFile] Failed to delete database record for fileId: ${fileId}`);
+      throw new Error("Failed to delete file record from database.");
+    }
+
+    console.log(`[deleteFile] Successfully deleted file: ${fileId}`);
+    return result[0];
+  } catch (error) {
+    console.error('Error deleting file:', error);
     throw error;
   }
 }
