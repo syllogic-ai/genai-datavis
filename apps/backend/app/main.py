@@ -655,6 +655,8 @@ async def compute_chart_spec_data(
         chart_id=chart_id
     )
     
+    logfire.info("Chart ID: ", chart_id=chart_id)
+
     try:
         # Get the data using the utility function
         data_df = get_data(

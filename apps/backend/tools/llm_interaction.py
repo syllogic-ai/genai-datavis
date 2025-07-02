@@ -25,7 +25,8 @@ from httpx import AsyncClient
 
 from apps.backend.core.config import async_supabase as sb
 from apps.backend.core.models import Deps, DatasetProfile
-from apps.backend.services.orchestrator_agent import orchestrator_agent
+# from apps.backend.services.orchestrator_agent import orchestrator_agent
+from apps.backend.services.coordinator_agent import coordinator_agent
 
 
 # Fix SSL certificate verification issues for macOS
@@ -122,14 +123,18 @@ async def process_user_request(
     )
     
     try:
-        # Run the orchestrator agent which will manage the workflow
-        result = await orchestrator_agent.run(
+        # Run the coordinator agent which will manage the workflow
+        # result = await orchestrator_agent.run(
+        #     user_prompt,
+        #     deps=deps,
+        # )
+        result = await coordinator_agent.run(
             user_prompt,
             deps=deps,
         )
         
         logfire.info(
-            "Orchestrator result",
+            "Coordinator result",
             usage=result.usage
         )
        
@@ -146,14 +151,14 @@ async def process_user_request(
         if output.chart_id:
             response["chart_id"] = output.chart_id
         
-        # Add insights if available
-        if output.insights:
-            response["insights"] = output.insights
+        # # Add insights if available
+        # if output.insights:
+        #     response["insights"] = output.insights
         
         end_time = time.time()
         duration = end_time - start_time
         
-        await _log_llm(result.usage(), orchestrator_agent, duration, deps.chat_id, deps.request_id)  
+        _log_llm(result.usage(), coordinator_agent, duration, deps.chat_id, deps.request_id)
         
         logfire.info("Request processed successfully", 
                    execution_time=end_time - start_time,
