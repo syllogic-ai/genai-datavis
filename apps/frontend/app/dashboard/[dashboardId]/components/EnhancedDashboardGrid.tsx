@@ -15,7 +15,7 @@ import { TextBlock } from "./widgets/TextBlock";
 import { ChartWidget } from "./widgets/ChartWidget";
 import { KPICard } from "./widgets/KPICard";
 import { TableWidget } from "./widgets/TableWidget";
-import { findAvailablePosition, getDimensionsFromSize } from "../utils/gridUtils";
+import { findAvailablePosition, getDimensionsFromSize, getResponsiveDimensions } from "../utils/gridUtils";
 import { ResizePopup } from "./ResizePopup";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
@@ -98,14 +98,41 @@ export function EnhancedDashboardGrid({
     const layouts: Layouts = {};
     Object.keys(GRID_PROPS.cols).forEach(breakpoint => {
       layouts[breakpoint] = widgets.map(widget => {
-        // For responsive behavior, we might need to adjust layouts based on breakpoint
         const layout = { ...widget.layout };
         
-        // For smaller screens, ensure text widgets stay full width
+        // Get the widget's size from layout dimensions
+        const currentSize = `${layout.w}x${layout.h}`;
+        let widgetSize = "chart-s"; // default
+        
+        // Determine the widget size based on dimensions and type
         if (widget.type === 'text') {
-          const colsForBreakpoint = GRID_PROPS.cols[breakpoint as keyof typeof GRID_PROPS.cols];
-          layout.w = colsForBreakpoint; // Full width for text on any screen size
-          layout.x = 0; // Always start at left
+          widgetSize = layout.h === 1 ? "text-xs" : "text-s";
+        } else if (widget.type === 'kpi') {
+          widgetSize = "kpi";
+        } else {
+          // For charts and tables, determine size from dimensions
+          if (layout.w === 4 && layout.h === 2) widgetSize = "chart-s";
+          else if (layout.w === 4 && layout.h === 4) widgetSize = "chart-m";
+          else if (layout.w === 6 && layout.h === 4) widgetSize = "chart-l";
+          else if (layout.w === 8 && layout.h === 4) widgetSize = "chart-xl";
+        }
+        
+        // Get responsive dimensions for this breakpoint
+        const responsiveDimensions = getResponsiveDimensions(widgetSize, breakpoint);
+        
+        // Apply responsive sizing
+        layout.w = responsiveDimensions.w;
+        layout.h = responsiveDimensions.h;
+        
+        // For text widgets, always start at x=0 and use full width
+        if (widget.type === 'text') {
+          layout.x = 0;
+        }
+        
+        // Ensure the widget doesn't exceed column boundaries
+        const colsForBreakpoint = GRID_PROPS.cols[breakpoint as keyof typeof GRID_PROPS.cols];
+        if (layout.x + layout.w > colsForBreakpoint) {
+          layout.x = Math.max(0, colsForBreakpoint - layout.w);
         }
         
         return layout;
@@ -382,7 +409,7 @@ export function EnhancedDashboardGrid({
             transformScale={1}
             autoSize={true}
             measureBeforeMount={false}
-   
+            isResizable={false}
           >
             {widgets.map((widget, index) => {
               // Create a wrapper function to match the expected signature

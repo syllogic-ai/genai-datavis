@@ -130,7 +130,7 @@ async def update_widget_specs(widget_id: str, widget_specs: Dict[str, Any], char
         # Prepare update data
         update_data = {
             "config": widget_specs,
-            "type": widget_specs["chartType"]
+            # Keep widget type as "chart" for frontend compatibility - chartType goes in config
         }
         
         # Add chart data if provided

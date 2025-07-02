@@ -139,9 +139,11 @@ async def process_user_request(
             "chat_id": chat_id,
         }
         
-        # Add chart ID if available
+        # Add chart ID(s) if available - support both single and multiple widgets
         if output.widget_id:
             response["widget_id"] = output.widget_id
+        if output.widget_ids:
+            response["widget_ids"] = output.widget_ids
         
         # # Add insights if available
         # if output.insights:
@@ -150,7 +152,7 @@ async def process_user_request(
         end_time = time.time()
         duration = end_time - start_time
         
-        _log_llm(result.usage(), coordinator_agent, duration, deps.chat_id, deps.request_id)
+        await _log_llm(result.usage(), coordinator_agent, duration, deps.chat_id, deps.request_id)
         
         logfire.info("Request processed successfully", 
                    execution_time=end_time - start_time,

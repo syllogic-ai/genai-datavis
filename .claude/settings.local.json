@@ -12,7 +12,10 @@
       "Bash(python:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(npm run type-check:*)",
+      "Bash(true)",
+      "Bash(npx tsc:*)"
     ],
     "deny": []
   }

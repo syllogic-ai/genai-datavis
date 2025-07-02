@@ -51,8 +51,22 @@ def extract_schema_sample(file_id: str) -> DatasetProfile:
     bucket_name, file_key = storage_path.split('/', 1)
     public_url = async_supabase.storage.from_(bucket_name).get_public_url(file_key)
     
-    # Read the CSV data from the public URL
-    df_scan = pl.read_csv(public_url, low_memory=True)
+    # Read the CSV data from the public URL with encoding handling
+    try:
+        df_scan = pl.read_csv(public_url, low_memory=True, encoding="utf8")
+    except Exception as utf8_error:
+        print(f"UTF-8 encoding failed for {public_url}, trying utf8-lossy: {utf8_error}")
+        try:
+            # Try with lossy UTF-8 encoding that replaces invalid chars
+            df_scan = pl.read_csv(public_url, low_memory=True, encoding="utf8-lossy")
+        except Exception as lossy_error:
+            print(f"UTF-8 lossy encoding failed, trying latin-1: {lossy_error}")
+            try:
+                # Fallback to latin-1 which can read any byte sequence
+                df_scan = pl.read_csv(public_url, low_memory=True, encoding="latin-1")
+            except Exception as final_error:
+                print(f"All encoding attempts failed: {final_error}")
+                raise ValueError(f"Unable to read CSV file due to encoding issues. Original error: {utf8_error}")
 
     # Transform columns to a dictionary of column_name: data_type
     columns_dict = {col: str(df_scan[col].dtype) for col in df_scan.columns}
@@ -75,7 +89,22 @@ def get_column_unique_values(file_id: str, column_name: str) -> list[str]:
     bucket_name, file_key = storage_path.split('/', 1)
     public_url = async_supabase.storage.from_(bucket_name).get_public_url(file_key)
     
-    df_scan = pl.read_csv(public_url, low_memory=True)
+    # Read the CSV data from the public URL with encoding handling
+    try:
+        df_scan = pl.read_csv(public_url, low_memory=True, encoding="utf8")
+    except Exception as utf8_error:
+        print(f"UTF-8 encoding failed for {public_url}, trying utf8-lossy: {utf8_error}")
+        try:
+            # Try with lossy UTF-8 encoding that replaces invalid chars
+            df_scan = pl.read_csv(public_url, low_memory=True, encoding="utf8-lossy")
+        except Exception as lossy_error:
+            print(f"UTF-8 lossy encoding failed, trying latin-1: {lossy_error}")
+            try:
+                # Fallback to latin-1 which can read any byte sequence
+                df_scan = pl.read_csv(public_url, low_memory=True, encoding="latin-1")
+            except Exception as final_error:
+                print(f"All encoding attempts failed: {final_error}")
+                raise ValueError(f"Unable to read CSV file due to encoding issues. Original error: {utf8_error}")
     print(df_scan[column_name].unique().to_list())
     return df_scan[column_name].unique().to_list()
 

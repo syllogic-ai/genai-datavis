@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+import logfire
 
 from ..core.models import LLMUsageRow
 from ..core.config import async_supabase

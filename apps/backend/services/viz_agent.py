@@ -228,8 +228,10 @@ class KPIInput(BaseModel):
     kpiLabel: Optional[str] = Field(default=None, description="Main label text displayed below the value")
     kpiSubLabel: Optional[str] = Field(default=None, description="Secondary label text displayed below the main label")
     changeColumn: Optional[str] = Field(default=None, description="The column to use for the change value")
+    kpiCalculateChange: Optional[bool] = Field(default=False, description="Whether to auto-calculate percentage change from period-over-period data")
+    kpiChangePeriod: Optional[str] = Field(default="previous", description="Period comparison for auto-calculation: 'previous', 'month', 'quarter', 'year'")
     # kpiChange: Optional[float] = Field(default=None, description="Numeric value representing the change (e.g., 5.2 for 5.2% increase)")
-    # kpiChangeDirection: Optional[str] = Field(default=None, description="Direction of change ('up', 'down', or 'flat')")
+    # kpiChangeDirection: Optional[str] = Field(default=None, description="Direction of change ('increase', 'decrease', or 'flat')")
     kpiChangeFormat: Optional[str] = Field(default=None, description="Format string for the change value (e.g., '+0.0%')")
     kpiValueFormat: Optional[str] = Field(default=None, description="Format string for the main value")
     kpiStyles: Optional[kpiStylesClass] = Field(default=None, description="Styling options for the KPI component")
@@ -247,12 +249,14 @@ class KPIOutput(BaseModel):
     kpiLabel: Optional[str] = Field(default=None, description="Main label text displayed below the value")
     kpiSubLabel: Optional[str] = Field(default=None, description="Secondary label text displayed below the main label")
     # kpiChange: Optional[float] = Field(default=None, description="Numeric value representing the change (e.g., 5.2 for 5.2% increase)")
-    # kpiChangeDirection: Optional[str] = Field(default=None, description="Direction of change ('up', 'down', or 'flat')")
+    # kpiChangeDirection: Optional[str] = Field(default=None, description="Direction of change ('increase', 'decrease', or 'flat')")
     kpiChangeFormat: Optional[str] = Field(default=None, description="Format string for the change value (e.g., '+0.0%')")
     kpiValueFormat: Optional[str] = Field(default=None, description="Format string for the main value")
     kpiStyles: Optional[kpiStylesClass] = Field(default=None, description="Styling options for the KPI component")
     dataColumn: str = Field(description="The column to use for the KPI value")
     changeColumn: Optional[str] = Field(default=None, description="The column to use for the change value")
+    kpiCalculateChange: Optional[bool] = Field(default=False, description="Whether to auto-calculate percentage change from period-over-period data")
+    kpiChangePeriod: Optional[str] = Field(default="previous", description="Period comparison for auto-calculation: 'previous', 'month', 'quarter', 'year'")
 
 # =============================================== Pie chart definitions ===========================================
 class pieConfigClass(BaseModel):
@@ -590,7 +594,9 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
         title=input.title,
         description=input.description,
         dataColumn=input.dataColumn,
-        changeColumn=input.changeColumn
+        changeColumn=input.changeColumn,
+        kpiCalculateChange=input.kpiCalculateChange,
+        kpiChangePeriod=input.kpiChangePeriod
     )
 
     try:

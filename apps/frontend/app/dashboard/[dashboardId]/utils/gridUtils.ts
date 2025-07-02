@@ -1,6 +1,6 @@
-// Grid size mappings
+// Grid size mappings for different breakpoints
 export const sizeToGridMap = {
-  // Charts and Tables - 4×2, 4×4, 6×4, 8×4
+  // Charts and Tables - responsive sizing
   "chart-s": { w: 4, h: 2 },  // Small chart/table
   "chart-m": { w: 4, h: 4 },  // Medium chart/table
   "chart-l": { w: 6, h: 4 },  // Large chart/table
@@ -9,9 +9,58 @@ export const sizeToGridMap = {
   // KPI Cards - Only 4×2
   "kpi": { w: 4, h: 2 },
   
-  // Text blocks - 12×1, 12×2 only
+  // Text blocks - always full width
   "text-xs": { w: 12, h: 1 },   // 12×1 (default)
   "text-s": { w: 12, h: 2 },    // 12×2
+};
+
+// Responsive size mappings for different breakpoints
+export const responsiveSizeMap = {
+  lg: { // ≥1200px - 12 columns
+    "chart-s": { w: 4, h: 2 },
+    "chart-m": { w: 4, h: 4 },
+    "chart-l": { w: 6, h: 4 },
+    "chart-xl": { w: 8, h: 4 },
+    "kpi": { w: 4, h: 2 },
+    "text-xs": { w: 12, h: 1 },
+    "text-s": { w: 12, h: 2 }
+  },
+  md: { // ≥996px - 8 columns
+    "chart-s": { w: 4, h: 2 },
+    "chart-m": { w: 4, h: 4 },
+    "chart-l": { w: 4, h: 4 }, // Reduced from 6 to 4
+    "chart-xl": { w: 8, h: 4 },
+    "kpi": { w: 4, h: 2 },
+    "text-xs": { w: 8, h: 1 },
+    "text-s": { w: 8, h: 2 }
+  },
+  sm: { // ≥768px - 4 columns
+    "chart-s": { w: 2, h: 2 },
+    "chart-m": { w: 2, h: 4 },
+    "chart-l": { w: 4, h: 4 },
+    "chart-xl": { w: 4, h: 4 },
+    "kpi": { w: 2, h: 2 },
+    "text-xs": { w: 4, h: 1 },
+    "text-s": { w: 4, h: 2 }
+  },
+  xs: { // ≥480px - 2 columns
+    "chart-s": { w: 2, h: 2 },
+    "chart-m": { w: 2, h: 4 },
+    "chart-l": { w: 2, h: 4 },
+    "chart-xl": { w: 2, h: 4 },
+    "kpi": { w: 2, h: 2 },
+    "text-xs": { w: 2, h: 1 },
+    "text-s": { w: 2, h: 2 }
+  },
+  xxs: { // <480px - 1 column
+    "chart-s": { w: 1, h: 2 },
+    "chart-m": { w: 1, h: 4 },
+    "chart-l": { w: 1, h: 4 },
+    "chart-xl": { w: 1, h: 4 },
+    "kpi": { w: 1, h: 2 },
+    "text-xs": { w: 1, h: 1 },
+    "text-s": { w: 1, h: 2 }
+  }
 };
 
 export const gridToSizeMap = {
@@ -54,6 +103,27 @@ export function getGridSizeFromDimensions(w: number, h: number, widgetType?: str
 
 export function getDimensionsFromSize(size: string): { w: number; h: number } {
   return sizeToGridMap[size as keyof typeof sizeToGridMap] || sizeToGridMap["chart-s"];
+}
+
+// Get responsive dimensions for a size at a specific breakpoint
+export function getResponsiveDimensions(size: string, breakpoint: string): { w: number; h: number } {
+  const breakpointMap = responsiveSizeMap[breakpoint as keyof typeof responsiveSizeMap];
+  if (!breakpointMap) {
+    return getDimensionsFromSize(size);
+  }
+  
+  return breakpointMap[size as keyof typeof breakpointMap] || breakpointMap["chart-s"];
+}
+
+// Convert widget size to work with current breakpoint
+export function adaptSizeToBreakpoint(size: string, breakpoint: string, widgetType: string): string {
+  // Text widgets always span full width at their breakpoint
+  if (widgetType === 'text') {
+    return size; // Text widgets handle their own responsive behavior
+  }
+  
+  // For other widgets, return the size as-is (dimensions will be calculated responsively)
+  return size;
 }
 
 // Check if two widgets would collide

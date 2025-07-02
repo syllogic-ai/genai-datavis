@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional, Union, Literal
 import json
 import time
+import asyncio
 import logfire
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent, ModelRetry
@@ -12,10 +13,31 @@ from apps.backend.utils.chat import append_chat_message, get_message_history
 from apps.backend.services.sql_agent import sql_agent, SQLOutput, ConfidenceInput
 from apps.backend.services.viz_agent import viz_agent
 
+# Rate limiting helper
+async def with_rate_limit_retry(func, max_retries=3, base_delay=2.0):
+    """Execute function with exponential backoff for rate limiting"""
+    for attempt in range(max_retries + 1):
+        try:
+            return await func()
+        except Exception as e:
+            if "rate_limit" in str(e).lower() or "429" in str(e):
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    logfire.warn(f"Rate limit hit, retrying in {delay}s (attempt {attempt + 1}/{max_retries + 1})")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    logfire.error(f"Max retries reached for rate limiting")
+                    raise
+            else:
+                # If it's not a rate limit error, don't retry
+                raise
+
 class AnalysisOutput(BaseModel):
     """Output from the coordinator agent."""
     answer: str = Field(description="Answer to the user's question")
-    widget_id: Optional[str] = Field(default=None, description="ID of the widget if one was created")
+    widget_id: Optional[str] = Field(default=None, description="ID of the widget if one was created (deprecated, use widget_ids)")
+    widget_ids: Optional[List[str]] = Field(default=None, description="IDs of widgets created (supports multiple widgets)")
     confidence_score: Optional[int] = Field(default=None, description="Confidence score from 0 to 100 if SQL was generated")
     confidence_reasoning: Optional[str] = Field(default=None, description="Explanation of the confidence score if calculated")
     follow_up_questions: Optional[List[str]] = Field(default=None, description="Follow-up questions to improve confidence if score is low")
@@ -52,9 +74,10 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     The column types are:
     {json.dumps(column_types, indent=2)}
     
-    You have two tools available:
-    1. `generate_sql`: Generates SQL queries to extract data from the dataset. You should only run this tool if the user is asking for a new data extract that is not based on the last interaction.
+    You have three tools available:
+    1. `generate_sql`: Generates SQL queries to extract data from the dataset. Use for single widget creation.
     2. `visualize_chart`: Visualizing the generated SQL query using a variety of visualization tools.
+    3. `create_specific_widget`: Create a specific, targeted widget with a clear purpose and distinct configuration.
        
     CONFIDENCE SCORING HANDLING:
     - The SQL agent will always return a confidence score (0-100) indicating how well the generated query matches the user's request
@@ -68,6 +91,35 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     - Check the confidence score from the SQL generation
     - If confidence score >= 50: proceed with visualize_chart tool to produce a visualization
     - When a user only asks for a formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again
+    
+    MULTI-WIDGET GENERATION:
+    When the user requests multiple visualizations or a comprehensive analysis, create multiple distinct widgets by:
+    
+    1. ANALYZE the user's request and identify what specific insights they need
+    2. PLAN different widgets that each serve a unique purpose:
+       * Different chart types for different perspectives (bar for comparisons, line for trends, pie for distributions)
+       * Different data focuses (totals vs. averages vs. counts vs. percentages)
+       * Different time periods or groupings
+       * Different metrics or dimensions
+    
+    3. EXECUTE by calling `create_specific_widget` ONE AT A TIME sequentially (not all at once) with:
+       * Distinct widget_description for each widget
+       * Different chart_type (bar, line, pie, table, kpi)
+       * Unique focus_area for each widget
+    
+    4. COLLECT all widget IDs and return them in widget_ids (not widget_id)
+    
+    IMPORTANT FOR RATE LIMITING: 
+    - Create widgets ONE BY ONE, not all at once
+    - Wait for each widget to complete before creating the next
+    - No artificial limit on widget count - create as many as the user needs
+    
+    Examples of good multi-widget planning:
+    - "Sales overview" → Bar chart of sales by region + Line chart of sales trends + KPI of total revenue
+    - "Compare products" → Bar chart comparing revenue + Pie chart showing market share + Table with detailed metrics
+    - "Performance dashboard" → KPI cards for key metrics + Trend lines + Comparison charts
+    
+    IMPORTANT: Each widget must have a DISTINCT purpose and show DIFFERENT data or perspectives.
 
     Context:
     - Is this a follow-up question: {ctx.deps.is_follow_up}
@@ -127,7 +179,7 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
                      chat_id=ctx.deps.chat_id, 
                      request_id=ctx.deps.request_id)
  
-        _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
         
         return result.output
     
@@ -287,12 +339,71 @@ async def visualize_chart(ctx: RunContext[Deps], widget_id: str) -> dict:
         await append_chat_message(ctx.deps.chat_id, message=message)
         
         end_time = time.time()
-        _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
         
         return result.output
     
     except Exception as e:
         end_time = time.time()
+        raise
+
+@coordinator_agent.tool
+async def create_specific_widget(ctx: RunContext[Deps], widget_description: str, chart_type: str, focus_area: str) -> str:
+    """
+    Create a specific widget with a targeted purpose.
+    
+    Args:
+        widget_description: Detailed description of what this widget should show
+        chart_type: Type of chart (bar, line, pie, table, kpi)
+        focus_area: What specific aspect of the data this widget focuses on
+    
+    Returns:
+        Widget ID of the created widget
+    """
+    
+    # Create a very specific prompt for this widget
+    focused_prompt = f"Create a {chart_type} chart that shows {widget_description}. Focus specifically on {focus_area}. Make sure this visualization is distinct and provides unique insights."
+    
+    logfire.info(f"Creating specific widget: {chart_type} - {widget_description}")
+    
+    # Add a small delay to prevent API rate limiting
+    await asyncio.sleep(1.0)  # 1 second delay between widget creations
+    
+    try:
+        # Update the deps with the focused prompt
+        focused_deps = Deps(
+            chat_id=ctx.deps.chat_id,
+            request_id=ctx.deps.request_id,
+            file_id=ctx.deps.file_id,
+            user_prompt=focused_prompt,
+            widget_id=None,
+            is_follow_up=False,  # Treat each widget creation as independent
+            duck=ctx.deps.duck,
+            supabase=ctx.deps.supabase,
+            message_history=ctx.deps.message_history
+        )
+        
+        # Generate SQL for this specific visualization with rate limiting
+        sql_result = await with_rate_limit_retry(
+            lambda: sql_agent.run(focused_prompt, deps=focused_deps)
+        )
+        
+        if sql_result.output.widget_id:
+            # Now create the visualization with rate limiting
+            viz_result = await with_rate_limit_retry(
+                lambda: visualize_chart(ctx, sql_result.output.widget_id)
+            )
+            
+            logfire.info(f"Successfully created {chart_type} widget", 
+                       widget_id=sql_result.output.widget_id,
+                       description=widget_description)
+            
+            return sql_result.output.widget_id
+        else:
+            raise Exception("SQL generation did not create a widget")
+    
+    except Exception as e:
+        logfire.error(f"Failed to create {chart_type} widget: {widget_description}", error=str(e))
         raise
 
 
@@ -302,6 +413,13 @@ async def validate_coordinator_output(
     output: AnalysisOutput
 ) -> AnalysisOutput:
     """Validate the intent analysis output."""
+    
+    # Ensure backward compatibility - if widget_ids is set but widget_id is not, set widget_id to first widget
+    if output.widget_ids and not output.widget_id:
+        output.widget_id = output.widget_ids[0]
+    # If widget_id is set but widget_ids is not, create widget_ids list
+    elif output.widget_id and not output.widget_ids:
+        output.widget_ids = [output.widget_id]
     
     # Ensure the answer is meaningful
     if not output.answer or len(output.answer.strip()) < 20:

@@ -28,6 +28,8 @@ interface ChatMessage {
   targetWidgetType?: string;
   isPending?: boolean; // Add flag for messages waiting for backend confirmation
   tempId?: string; // Temporary ID for pending messages
+  widget_ids?: string[]; // Support for multiple widgets
+  chart_id?: string; // Backward compatibility
 }
 
 export function ChatSidebar({
@@ -54,7 +56,9 @@ export function ChatSidebar({
       timestamp: msg.timestamp || new Date().toISOString(),
       contextWidgetIds: undefined, // This info isn't stored in the normalized format
       targetWidgetType: undefined,
-      isPending: false
+      isPending: false,
+      widget_ids: msg.widget_ids, // Include multiple widgets
+      chart_id: msg.chart_id // Include chart ID for backward compatibility
     }));
     
     // Filter out pending messages that are now confirmed in the real-time conversation
@@ -153,7 +157,7 @@ export function ChatSidebar({
       role: 'user',
       message: data.message,
       timestamp: new Date().toISOString(),
-      contextWidgetIds: data.selectedItems.map(item => item.id),
+      contextWidgetIds: data.selectedItems?.length ? data.selectedItems.map(item => item.id) : undefined,
       targetWidgetType: data.widgetType,
       isPending: true,
       tempId
@@ -167,7 +171,7 @@ export function ChatSidebar({
       const analyzeRequest = {
         message: newMessage.message,
         dashboardId,
-        contextWidgetIds: newMessage.contextWidgetIds?.length > 0 ? newMessage.contextWidgetIds : undefined,
+        contextWidgetIds: newMessage.contextWidgetIds && newMessage.contextWidgetIds.length > 0 ? newMessage.contextWidgetIds : undefined,
         targetWidgetType: newMessage.targetWidgetType || undefined,
         chatId
       };
@@ -289,6 +293,26 @@ export function ChatSidebar({
                     <div className="flex items-start gap-2">
                       <div className="flex-1">
                         <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                        
+                        {/* Show widget creation info */}
+                        {(msg.widget_ids || msg.chart_id) && (
+                          <div className="mt-2 p-2 bg-green-100 dark:bg-green-900/20 rounded text-xs">
+                            {msg.widget_ids && msg.widget_ids.length > 1 ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-green-700 dark:text-green-300">
+                                  ✅ Created {msg.widget_ids.length} widgets
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1">
+                                <span className="text-green-700 dark:text-green-300">
+                                  ✅ Widget created
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        
                         <div className="flex items-center gap-2 mt-1">
                           <p className="text-xs opacity-70">
                             {new Date(msg.timestamp).toLocaleTimeString()}

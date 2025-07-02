@@ -28,13 +28,13 @@ export interface WidgetTypeConfig {
 
 export const GRID_PROPS = {
   className: "layout",
-  cols: { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 },
+  cols: { lg: 12, md: 8, sm: 4, xs: 2, xxs: 1 },
   rowHeight: 100,
   margin: [16, 16] as [number, number],
   containerPadding: [16, 16] as [number, number],
   compactType: "vertical" as const,
   preventCollision: false,
   isDraggable: true,
-  isResizable: true,
-  resizeHandles: ['se'] as Array<'s' | 'w' | 'e' | 'n' | 'sw' | 'nw' | 'se' | 'ne'>,
+  isResizable: false, // Disable built-in resizing completely
+  resizeHandles: [] as Array<'s' | 'w' | 'e' | 'n' | 'sw' | 'nw' | 'se' | 'ne'>,
 };

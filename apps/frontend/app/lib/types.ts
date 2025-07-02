@@ -5,6 +5,8 @@ export type ChatMessage = {
   role: "user" | "system" | "chart";
   content: string;
   timestamp?: string;
+  widget_ids?: string[]; // Support for multiple widgets
+  chart_id?: string; // Backward compatibility
 };
 
 export type ChartMessage = {

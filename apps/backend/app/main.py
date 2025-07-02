@@ -525,9 +525,22 @@ async def process_analysis_task(
                     }
                     
             except Exception as e:
-                logfire.error(f"Error getting dashboard files: {e}")
+                error_msg = str(e)
+                logfire.error(f"Error processing dashboard request: {error_msg}", 
+                            dashboard_id=dashboard_id,
+                            file_id=dashboard_file_id if 'dashboard_file_id' in locals() else None,
+                            error_type=type(e).__name__)
+                
+                # Provide more specific error messages based on the error type
+                if "utf-8" in error_msg.lower() or "encoding" in error_msg.lower():
+                    user_message = "I encountered an encoding issue with your data file. Please ensure your CSV file is saved with UTF-8 encoding, or try re-uploading the file."
+                elif "file" in error_msg.lower() and "not found" in error_msg.lower():
+                    user_message = "I couldn't find the data file for this dashboard. Please make sure you've uploaded a CSV file to this dashboard."
+                else:
+                    user_message = "I encountered an error while processing your request. Please try again, or check if your data file is properly formatted."
+                
                 result = {
-                    "answer": "I encountered an error while trying to access the dashboard data. Please try again.",
+                    "answer": user_message,
                     "request_id": request_id,
                     "chat_id": chat_id,
                     "dashboard_id": dashboard_id
@@ -561,15 +574,23 @@ async def process_analysis_task(
             "created_at": datetime.now().isoformat(),
             "request_id": request_id,
         }
-        if result.get("chart_id"):
-            chat_message_payload["chart_id"] = result.get("chart_id")
+        
+        # Handle both single and multiple widgets
+        if result.get("widget_id"):
+            chat_message_payload["chart_id"] = result.get("widget_id")
+        elif result.get("widget_ids"):
+            # For multiple widgets, store the first one as chart_id for backward compatibility
+            # and store all widget IDs
+            chat_message_payload["chart_id"] = result.get("widget_ids")[0]
+            chat_message_payload["widget_ids"] = result.get("widget_ids")
         
         # Send message to the chat
         await append_chat_message(chat_id, chat_message_payload)
         
         # Trigger dashboard refresh if this was a dashboard-centric request
-        if dashboard_id and (result.get("chart_id") or result.get("widget_operations")):
-            operation_type = "chart_created" if result.get("chart_id") else "widget_operations"
+        widget_created = result.get("widget_id") or result.get("widget_ids")
+        if dashboard_id and (widget_created or result.get("widget_operations")):
+            operation_type = "widgets_created" if widget_created else "widget_operations"
             await trigger_dashboard_refresh(dashboard_id, supabase, operation_type)
         
         return Response(
@@ -753,6 +774,7 @@ async def compute_chart_spec_data(
             processing_time=time.time() - start_time
             )
 
+            # Handle change column
             if "changeColumn" in widget_specs.keys():
                 change_col = widget_specs["changeColumn"]
             else: 
@@ -763,14 +785,53 @@ async def compute_chart_spec_data(
                 logfire.info("KPI Change col exists!", 
                     change_col=change_col)
                 change_value = data_cur.iloc[0][change_col]
-                change_direction = "up" if data_cur.iloc[0][change_col] > 0 else "down" if data_cur.iloc[0][change_col] < 0 else "flat"
                 
-                if change_value:
-                    widget_specs["kpiChange"] = change_value / 100 # Assuming that the change calculated is %
-                    widget_specs["kpiChangeDirection"] = change_direction
+                # Determine change direction using proper mapping
+                if change_value > 0:
+                    change_direction = "increase"
+                elif change_value < 0:
+                    change_direction = "decrease"
+                else:
+                    change_direction = "flat"
+                
+                # Store the change value as percentage (assuming it's already in percentage format)
+                widget_specs["kpiChange"] = float(change_value)
+                widget_specs["kpiChangeDirection"] = change_direction
+                
+                logfire.info("KPI Change calculated", 
+                    change_value=change_value,
+                    change_direction=change_direction)
             else:
-                change_direction = None
-                change_value = None
+                # Try to calculate percentage change if we have period data
+                if "kpiCalculateChange" in widget_specs and widget_specs["kpiCalculateChange"]:
+                    try:
+                        # Check if we have multiple rows for comparison
+                        if len(data_cur) >= 2:
+                            current_value = data_cur.iloc[0][data_col]
+                            previous_value = data_cur.iloc[1][data_col]
+                            
+                            if previous_value != 0:
+                                change_percentage = ((current_value - previous_value) / previous_value) * 100
+                                
+                                if change_percentage > 0:
+                                    change_direction = "increase"
+                                elif change_percentage < 0:
+                                    change_direction = "decrease"
+                                else:
+                                    change_direction = "flat"
+                                
+                                widget_specs["kpiChange"] = float(change_percentage)
+                                widget_specs["kpiChangeDirection"] = change_direction
+                                
+                                logfire.info("Auto-calculated KPI change", 
+                                    current_value=current_value,
+                                    previous_value=previous_value,
+                                    change_percentage=change_percentage,
+                                    change_direction=change_direction)
+                    except Exception as e:
+                        logfire.error("Failed to auto-calculate KPI change", error=str(e))
+            
+            # Set the main KPI value
             widget_specs["kpiValue"] = data_cur.iloc[0][data_col]
 
             logfire.info(
