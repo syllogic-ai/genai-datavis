@@ -50,17 +50,17 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
     chartType: chartType as any,
     title: widget.config.title || "Sample Chart",
     description: widget.config.description || "Sample chart description",
-    data: sampleData,
-    xAxisConfig: {
+    data: widget.data || sampleData,
+    xAxisConfig: widget.config.xAxisConfig || {
       dataKey: "name",
     },
-    chartConfig: {
+    chartConfig: widget.config.chartConfig || {
       value: {
         label: "Value",
         color: "hsl(var(--chart-1))",
       },
       revenue: {
-        label: "Revenue",
+        label: "Revenue",  
         color: "hsl(var(--chart-2))",
       },
       cost: {
