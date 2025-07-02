@@ -104,6 +104,17 @@ export async function getChats(userId: string) {
   return result;
 }
 
+export async function getDashboardChats(userId: string, dashboardId: string) {
+  const result = await db.select()
+    .from(chats)
+    .where(and(
+      eq(chats.userId, userId),
+      eq(chats.dashboardId, dashboardId)
+    ))
+    .orderBy(desc(chats.updatedAt));
+  return result;
+}
+
 /**
  * Get a single dashboard by ID
  */

@@ -46,6 +46,36 @@ export async function createChat(
 }
 
 /**
+ * Create a new empty chat session
+ */
+export async function createEmptyChat(
+  userId: string,
+  dashboardId: string
+) {
+  const chatId = uuidv4();
+  const newChat = {
+    id: chatId,
+    userId,
+    dashboardId,
+    title: "New Chat",
+    conversation: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  try {
+    const insertedChats = await db.insert(chats).values(newChat).returning();
+    if (insertedChats.length === 0) {
+      throw new Error('Failed to create new chat.');
+    }
+    return insertedChats[0];
+  } catch (error) {
+    console.error('Error creating chat:', error);
+    throw error;
+  }
+}
+
+/**
  * Rename a chat
  */
 export async function renameChat(chatId: string, userId: string, newTitle: string) {
@@ -71,6 +101,61 @@ export async function renameChat(chatId: string, userId: string, newTitle: strin
     return result[0];
   } catch (error) {
     console.error('Error renaming chat:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update chat conversation with new message
+ */
+export async function updateChatConversation(
+  chatId: string,
+  userId: string,
+  newMessage: {
+    role: string;
+    message: string;
+    timestamp: string;
+    contextWidgetIds?: string[];
+    targetWidgetType?: 'chart' | 'table' | 'kpi';
+    targetChartSubType?: 'line' | 'area' | 'bar' | 'horizontal-bar' | 'pie';
+  }
+) {
+  try {
+    // First get the current conversation
+    const currentChat = await db.select()
+      .from(chats)
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ))
+      .limit(1);
+
+    if (!currentChat || currentChat.length === 0) {
+      throw new Error(`Chat ${chatId} not found`);
+    }
+
+    const currentConversation = currentChat[0].conversation || [];
+    const updatedConversation = [...currentConversation, newMessage];
+
+    // Update the chat with the new conversation
+    const result = await db.update(chats)
+      .set({ 
+        conversation: updatedConversation,
+        updatedAt: new Date()
+      })
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ))
+      .returning();
+
+    if (!result || result.length === 0) {
+      throw new Error(`Failed to update chat ${chatId}`);
+    }
+
+    return result[0];
+  } catch (error) {
+    console.error('Error updating chat conversation:', error);
     throw error;
   }
 }

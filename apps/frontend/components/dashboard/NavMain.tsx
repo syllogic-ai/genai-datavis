@@ -78,6 +78,8 @@ export function NavMain({
   const [widgetCounts, setWidgetCounts] = useState<Record<string, number>>({});
   const [loadedDashboardIds, setLoadedDashboardIds] = useState<Set<string>>(new Set());
 
+  // Chat functionality moved to chat sidebar
+
   // Load widget count for a specific dashboard (lazy loading)
   const loadWidgetCountForDashboard = useCallback(async (dashboardId: string): Promise<number> => {
     // Return cached count if available
@@ -165,6 +167,8 @@ export function NavMain({
       loadWidgetCountForDashboard(activeDashboardId);
     }
   }, [activeDashboardId, loadedDashboardIds, loadWidgetCountForDashboard]);
+
+  // Chat loading moved to chat sidebar
 
   // Keyboard shortcuts
   useEffect(() => {

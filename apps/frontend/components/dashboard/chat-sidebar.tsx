@@ -7,10 +7,18 @@ import { type DashboardWidget } from "./widget-context-selector";
 import { ChatInput } from "./ChatInput";
 import { TagItem } from "@/components/ui/tags/tag-selector";
 import { cn } from "@/lib/utils";
-import { X } from "lucide-react";
+import { X, Plus, MessageSquare } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 import { v4 as uuidv4 } from 'uuid';
+import { Widget } from "@/types/enhanced-dashboard-types";
+import { Chat } from "@/db/schema";
+import { getDashboardChats } from "@/app/lib/actions";
+import { createEmptyChat } from "@/app/lib/chatActions";
+import { useUser } from "@clerk/nextjs";
+import { useRouter, usePathname } from "next/navigation";
+import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
+import Link from "next/link";
 
 export interface ChatSidebarProps {
   dashboardId: string;
@@ -18,6 +26,7 @@ export interface ChatSidebarProps {
   isOpen: boolean;
   onToggle: () => void;
   className?: string;
+  dashboardWidgets?: Widget[]; // Add dashboard widgets prop
 }
 
 interface ChatMessage {
@@ -38,12 +47,28 @@ export function ChatSidebar({
   isOpen,
   onToggle,
   className,
+  dashboardWidgets = [],
 }: ChatSidebarProps) {
   // State management
   const [isLoading, setIsLoading] = React.useState(false);
-  const [widgetsLoading, setWidgetsLoading] = React.useState(false);
-  const [availableWidgets, setAvailableWidgets] = React.useState<DashboardWidget[]>([]);
   const [pendingMessages, setPendingMessages] = React.useState<ChatMessage[]>([]);
+  const [dashboardChats, setDashboardChats] = React.useState<Chat[]>([]);
+  const [isLoadingChats, setIsLoadingChats] = React.useState(false);
+  const [showChatList, setShowChatList] = React.useState(false);
+  
+  // Hooks
+  const { user } = useUser();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Convert dashboard widgets to TagItem format
+  const availableWidgetItems = React.useMemo((): TagItem[] => {
+    return dashboardWidgets.map(widget => ({
+      id: widget.id,
+      label: widget.config?.title || `${widget.type.charAt(0).toUpperCase() + widget.type.slice(1)} Widget`,
+      type: widget.type,
+    }));
+  }, [dashboardWidgets]);
   
   // Use real-time chat hook for conversation
   const { conversation, isLoading: chatLoading, error: chatError } = useChatRealtime(chatId);
@@ -77,64 +102,77 @@ export function ChatSidebar({
   }, [conversation, pendingMessages]);
 
 
-  // Fetch available widgets for the dashboard
-  React.useEffect(() => {
-    const fetchWidgets = async () => {
-      if (!dashboardId) return;
+  // Load chats for current dashboard
+  const loadDashboardChats = React.useCallback(async () => {
+    if (!user?.id) return;
+    
+    setIsLoadingChats(true);
+    try {
+      const chats = await getDashboardChats(user.id, dashboardId);
+      setDashboardChats(chats);
+    } catch (error) {
+      console.error('Error loading dashboard chats:', error);
+      setDashboardChats([]);
+    } finally {
+      setIsLoadingChats(false);
+    }
+  }, [user?.id, dashboardId]);
+
+  // Create new chat
+  const handleCreateNewChat = React.useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      const newChat = await createEmptyChat(user.id, dashboardId);
+      setDashboardChats(prev => [newChat, ...prev]);
       
-      setWidgetsLoading(true);
-      try {
-        // TODO: Replace with actual API call using Drizzle ORM
-        // const response = await fetch(`/api/dashboards/${dashboardId}/widgets`);
-        // const widgets = await response.json();
-        
-        // Mock data for now - using fixed date to prevent infinite re-renders
-        const mockDate = new Date('2024-01-01');
-        const mockWidgets: DashboardWidget[] = [
-          {
-            id: "widget-1",
-            title: "Sales Overview",
-            type: "line-chart",
-            dashboardId,
-            createdAt: mockDate,
-          },
-          {
-            id: "widget-2", 
-            title: "Revenue Table",
-            type: "table",
-            dashboardId,
-            createdAt: mockDate,
-          },
-          {
-            id: "widget-3",
-            title: "Key Metrics",
-            type: "kpi-card",
-            dashboardId,
-            createdAt: mockDate,
-          },
-        ];
-        
-        setAvailableWidgets(mockWidgets);
-      } catch (error) {
-        console.error("Failed to fetch widgets:", error);
-      } finally {
-        setWidgetsLoading(false);
+      // Emit event for other components
+      chatEvents.emit(CHAT_EVENTS.CHAT_CREATED, newChat);
+      
+      // Navigate to the new chat
+      router.push(`/dashboard/${dashboardId}?chat=${newChat.id}`);
+      
+      // Hide chat list after creating new chat
+      setShowChatList(false);
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+    }
+  }, [user?.id, dashboardId, router]);
+
+  // Load chats when sidebar opens
+  React.useEffect(() => {
+    if (isOpen) {
+      loadDashboardChats();
+    }
+  }, [isOpen, loadDashboardChats]);
+
+  // Listen for chat events to update the list
+  React.useEffect(() => {
+    const handleChatRenamed = (data: { chatId: string; newTitle: string }) => {
+      setDashboardChats(prev => 
+        prev.map(chat => 
+          chat.id === data.chatId ? { ...chat, title: data.newTitle } : chat
+        )
+      );
+    };
+
+    const handleChatCreated = (data: Chat) => {
+      if (data.dashboardId === dashboardId) {
+        setDashboardChats(prev => {
+          const exists = prev.some(chat => chat.id === data.id);
+          return exists ? prev : [data, ...prev];
+        });
       }
     };
 
-    if (isOpen && dashboardId) {
-      fetchWidgets();
-    }
-  }, [isOpen, dashboardId]);
+    chatEvents.on(CHAT_EVENTS.CHAT_RENAMED, handleChatRenamed);
+    chatEvents.on(CHAT_EVENTS.CHAT_CREATED, handleChatCreated);
 
-  // Transform widgets to TagItems for ChatInput
-  const widgetTagItems: TagItem[] = React.useMemo(() => {
-    return availableWidgets.map(widget => ({
-      id: widget.id,
-      label: widget.title,
-      category: "Widget"
-    }));
-  }, [availableWidgets]);
+    return () => {
+      chatEvents.off(CHAT_EVENTS.CHAT_RENAMED, handleChatRenamed);
+      chatEvents.off(CHAT_EVENTS.CHAT_CREATED, handleChatCreated);
+    };
+  }, [dashboardId]);
 
   // Handle message submission from ChatInput
   const handleChatSubmit = async (data: {
@@ -247,18 +285,95 @@ export function ChatSidebar({
       style={{ minWidth: isOpen ? "400px" : "0px" }}
     >
         {/* Header */}
-        <div className="flex items-center justify-between py-2 px-4 border-b shrink-0 relative z-10 bg-background">
-          <div className="flex items-center gap-2">
-            <h2 className="font-semibold">New widget</h2>
+        <div className="border-b shrink-0 relative z-10 bg-background">
+          {/* Main header */}
+          <div className="flex items-center justify-between py-2 px-4">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowChatList(!showChatList)}
+                className="h-8 text-sm flex-shrink-0"
+              >
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Chats
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleCreateNewChat}
+                title="New Chat"
+                className="h-8 w-8 flex-shrink-0"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              {/* Current chat indicator */}
+              {dashboardChats.length > 0 && (
+                <div className="text-xs text-muted-foreground truncate ml-2">
+                  Current: {dashboardChats.find(chat => chat.id === chatId)?.title || "Unknown Chat"}
+                </div>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onToggle}
+              className="h-8 w-8 flex-shrink-0"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggle}
-            className="h-8 w-8"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+
+          {/* Chat list dropdown */}
+          <AnimatePresence>
+            {showChatList && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="border-t bg-background overflow-hidden"
+              >
+                <div className="p-2 max-h-60 overflow-y-auto">
+                  {isLoadingChats ? (
+                    <div className="text-center text-muted-foreground py-4">
+                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+                      Loading chats...
+                    </div>
+                  ) : dashboardChats.length > 0 ? (
+                    <div className="space-y-1">
+                      {dashboardChats.map((chat) => {
+                        const isActive = chatId === chat.id;
+                        return (
+                          <Link 
+                            key={chat.id} 
+                            href={`/dashboard/${dashboardId}?chat=${chat.id}`}
+                            onClick={() => setShowChatList(false)}
+                          >
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 p-2 rounded text-sm cursor-pointer transition-colors",
+                                isActive 
+                                  ? "bg-primary text-primary-foreground" 
+                                  : "hover:bg-muted"
+                              )}
+                            >
+                              <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">{chat.title}</span>
+                            </div>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-4 text-sm">
+                      No chats yet. Click + to create one!
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Chat History - with bottom padding for fixed input */}
@@ -286,6 +401,8 @@ export function ChatSidebar({
                       "p-3 rounded-lg max-w-[85%] break-words transition-opacity",
                       msg.role === 'user'
                         ? "ml-auto bg-primary text-primary-foreground"
+                        : msg.role === 'system'
+                        ? "mr-auto bg-muted/50 text-muted-foreground border"
                         : "mr-auto bg-muted",
                       msg.isPending && "opacity-70" // Show pending messages with reduced opacity
                     )}
@@ -344,7 +461,7 @@ export function ChatSidebar({
         {/* Fixed Chat Input at Bottom */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-background border-t z-20">
           <ChatInput
-            availableItems={widgetTagItems}
+            availableItems={availableWidgetItems}
             onSubmit={handleChatSubmit}
             isLoading={isLoading}
             triggerLabel="Add Widget Context"

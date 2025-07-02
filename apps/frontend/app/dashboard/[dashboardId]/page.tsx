@@ -238,6 +238,7 @@ export default function EnhancedDashboardPage() {
             chatId={chatId}
             isOpen={isChatSidebarOpen}
             onToggle={handleChatSidebarToggle}
+            dashboardWidgets={widgets}
           />
         )}
       </motion.div>
