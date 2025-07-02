@@ -26,6 +26,8 @@ interface ChatMessage {
   timestamp: string;
   contextWidgetIds?: string[];
   targetWidgetType?: string;
+  isPending?: boolean; // Add flag for messages waiting for backend confirmation
+  tempId?: string; // Temporary ID for pending messages
 }
 
 export function ChatSidebar({
@@ -39,20 +41,36 @@ export function ChatSidebar({
   const [isLoading, setIsLoading] = React.useState(false);
   const [widgetsLoading, setWidgetsLoading] = React.useState(false);
   const [availableWidgets, setAvailableWidgets] = React.useState<DashboardWidget[]>([]);
+  const [pendingMessages, setPendingMessages] = React.useState<ChatMessage[]>([]);
   
   // Use real-time chat hook for conversation
   const { conversation, isLoading: chatLoading, error: chatError } = useChatRealtime(chatId);
   
-  // Convert real-time conversation to our local format
+  // Convert real-time conversation to our local format and merge with pending messages
   const chatHistory = React.useMemo(() => {
-    return conversation.map(msg => ({
+    const realTimeMessages = conversation.map(msg => ({
       role: msg.role as 'user' | 'assistant' | 'system',
       message: msg.content,
       timestamp: msg.timestamp || new Date().toISOString(),
       contextWidgetIds: undefined, // This info isn't stored in the normalized format
-      targetWidgetType: undefined
+      targetWidgetType: undefined,
+      isPending: false
     }));
-  }, [conversation]);
+    
+    // Filter out pending messages that are now confirmed in the real-time conversation
+    const filteredPendingMessages = pendingMessages.filter(pending => {
+      // Simple deduplication by timestamp and content for now
+      return !realTimeMessages.some(real => 
+        real.message === pending.message && 
+        Math.abs(new Date(real.timestamp).getTime() - new Date(pending.timestamp).getTime()) < 5000 // 5 second window
+      );
+    });
+    
+    // Combine and sort by timestamp
+    return [...realTimeMessages, ...filteredPendingMessages].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+  }, [conversation, pendingMessages]);
 
 
   // Fetch available widgets for the dashboard
@@ -130,16 +148,19 @@ export function ChatSidebar({
       isLoading
     });
 
+    const tempId = uuidv4();
     const newMessage: ChatMessage = {
       role: 'user',
       message: data.message,
       timestamp: new Date().toISOString(),
       contextWidgetIds: data.selectedItems.map(item => item.id),
       targetWidgetType: data.widgetType,
+      isPending: true,
+      tempId
     };
 
-    // Don't add to local state - the conversation will be updated by the backend
-    // and we'll receive it via real-time subscriptions
+    // Immediately add user message to pending state for instant display
+    setPendingMessages(prev => [...prev, newMessage]);
     setIsLoading(true);
 
     try {
@@ -182,13 +203,20 @@ export function ChatSidebar({
       
       if (result.success) {
         console.log(`Message sent successfully. Task ID: ${result.taskId}`);
-        // The conversation will be updated by the backend via real-time subscriptions
+        // Remove the pending message since it's now being processed
+        // Real-time subscriptions will handle the confirmed message
+        setTimeout(() => {
+          setPendingMessages(prev => prev.filter(msg => msg.tempId !== tempId));
+        }, 1000); // Small delay to ensure smooth transition
       } else {
         throw new Error(result.error || 'Unknown error occurred');
       }
       
     } catch (error) {
       console.error("Failed to analyze message:", error);
+      
+      // Remove the pending message on error
+      setPendingMessages(prev => prev.filter(msg => msg.tempId !== tempId));
       
       // Show user-friendly error message
       alert(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
@@ -232,7 +260,7 @@ export function ChatSidebar({
         {/* Chat History - with bottom padding for fixed input */}
         <div className="flex-1 overflow-hidden relative">
           <ScrollArea className="h-full">
-            <div className="p-4 space-y-4 pb-32"> {/* Extra bottom padding for fixed input */}
+            <div className="p-4 space-y-4 pb-56"> {/* Further increased bottom padding for chat input to ensure all messages are visible */}
               {chatLoading && chatHistory.length === 0 ? (
                 <div className="text-center text-muted-foreground">
                   <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
@@ -249,18 +277,31 @@ export function ChatSidebar({
               ) : (
                 chatHistory.map((msg, index) => (
                   <div
-                    key={index}
+                    key={msg.tempId || index}
                     className={cn(
-                      "p-3 rounded-lg max-w-[85%] break-words",
+                      "p-3 rounded-lg max-w-[85%] break-words transition-opacity",
                       msg.role === 'user'
                         ? "ml-auto bg-primary text-primary-foreground"
-                        : "mr-auto bg-muted"
+                        : "mr-auto bg-muted",
+                      msg.isPending && "opacity-70" // Show pending messages with reduced opacity
                     )}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                    <p className="text-xs opacity-70 mt-1">
-                      {new Date(msg.timestamp).toLocaleTimeString()}
-                    </p>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs opacity-70">
+                            {new Date(msg.timestamp).toLocaleTimeString()}
+                          </p>
+                          {msg.isPending && (
+                            <div className="flex items-center gap-1">
+                              <div className="animate-spin h-2 w-2 border border-current border-t-transparent rounded-full" />
+                              <span className="text-xs opacity-70">Sending...</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ))
               )}

@@ -105,7 +105,7 @@ async def process_task_from_queue():
                 file_id = task_data["file_id"]
                 user_prompt = task_data["user_prompt"]
                 is_follow_up = task_data.get("is_follow_up", False)
-                last_chart_id = task_data.get("last_chart_id")
+                widget_type = task_data.get("widget_type")
                 
                 logger.info(f"Processing task {request_id} for chat {chat_id}, file {file_id}")
 
@@ -120,7 +120,7 @@ async def process_task_from_queue():
                     file_id=file_id,
                     user_prompt=user_prompt,
                     is_follow_up=is_follow_up,
-                    last_chart_id=last_chart_id,
+                    widget_type=widget_type,
                     duck_connection=duckdb_worker_connection,
                     supabase_client=supabase_worker_client
                 )

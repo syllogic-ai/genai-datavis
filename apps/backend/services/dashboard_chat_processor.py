@@ -15,7 +15,7 @@ import duckdb
 
 from apps.backend.core.models import WidgetOperation, ConversationItem
 from apps.backend.services.orchestrator_stub import OrchestratorAgent
-from apps.backend.services.intent_analysis_agent import IntentAnalysisAgent
+from apps.backend.services.coordinator_agent import coordinator_agent
 # Note: append_chat_message will be handled by the main orchestrator
 from apps.backend.utils.widget_operations import create_widget, update_widget, get_dashboard_files
 
@@ -29,7 +29,7 @@ class DashboardChatProcessor:
     def __init__(self, supabase_client: Client, duck_connection: duckdb.DuckDBPyConnection):
         self.supabase = supabase_client
         self.duck = duck_connection
-        self.intent_agent = IntentAnalysisAgent()
+        # Using coordinator_agent directly instead of a separate instance
         self.orchestrator = OrchestratorAgent()
     
     async def process_message(
@@ -71,12 +71,21 @@ class DashboardChatProcessor:
             # Get dashboard context
             dashboard_context = await self._get_dashboard_context(dashboard_id, context_widget_ids)
             
-            # Analyze user intent
-            intent_result = await self.intent_agent.analyze_intent(
-                user_prompt=user_prompt,
-                dashboard_context=dashboard_context,
-                target_widget_type=target_widget_type
-            )
+            # TODO: Implement intent analysis with coordinator_agent
+            # For now, create a basic intent result structure
+            intent_result = {
+                "intent": "create_chart",
+                "operation_type": "create",
+                "widget_types": ["chart"],
+                "widget_specs": [{
+                    "type": "chart",
+                    "title": "Data Analysis Chart",
+                    "config": {"chartType": "line"},
+                    "data": None,
+                    "sql": None,
+                    "layout": None
+                }]
+            }
             
             logfire.info(
                 "Intent analysis completed",

@@ -114,33 +114,41 @@ async def get_message_history(chat_id: str, last_n: int = None) -> List[Dict[str
         print(f"Error getting message history for chat {chat_id}: {str(e)}")
         return []
 
-async def update_chart_specs(chart_id: str, chart_specs: Dict[str, Any]) -> bool:
+async def update_widget_specs(widget_id: str, widget_specs: Dict[str, Any], chart_data: list = None) -> bool:
     """
-    Update the chart_specs entry in the given chat_id.
+    Update the widget_specs entry in the given widget_id.
     
     Args:
-        chart_id: The ID of the chart to update
-        chart_specs: The chart specs to update
+        widget_id: The ID of the widget to update
+        widget_specs: The widget specs to update
+        chart_data: Optional chart data to update in the data column
         
     Returns:
         bool: True if successful, False otherwise
     """
     try:
+        # Prepare update data
+        update_data = {
+            "config": widget_specs,
+            "type": widget_specs["chartType"]
+        }
+        
+        # Add chart data if provided
+        if chart_data is not None:
+            update_data["data"] = chart_data
+            
         # Update the chart_specs for the given chat_id
-        update_result = await async_supabase.table("widgets").update({
-            "config": chart_specs,
-            "type": chart_specs["chartType"]
-        }).eq("id", chart_id).execute()
+        update_result = async_supabase.table("widgets").update(update_data).eq("id", widget_id).execute()
             
         if not update_result.data or len(update_result.data) == 0:
-            print(f"Failed to update chart_specs for chart {chart_id}")
+            print(f"Failed to update widget_specs for widget {widget_id}")
             return False
             
-        print(f"Successfully updated chart_specs for chart {chart_id}")
+        print(f"Successfully updated widget_specs for widget {widget_id}")
         return True
         
     except Exception as e:
-        print(f"Error updating chart_specs: {str(e)}")
+        print(f"Error updating widget_specs: {str(e)}")
         return False
 
 async def convert_data_to_chart_data_1d(data_cur: pd.DataFrame, data_cols: list[str], x_key: str, y_col: str) -> list[dict]:
@@ -186,34 +194,13 @@ async def convert_data_to_chart_data(data_cur: pd.DataFrame, data_cols: list[str
         chart_data_array.append(item)
     return chart_data_array 
 
-async def get_chart_specs(chart_id: str, supabase: Client) -> Dict[str, Any]:
+async def get_widget_specs(widget_id: str, supabase: Client) -> Dict[str, Any]:
     """
-    Get the chart specs for a given chart ID.
+    Get the widget specs for a given widget ID.
     """
-    chart_specs = await async_supabase.table("widgets").select("config").eq("id", chart_id).execute()
-    return chart_specs.data[0]["config"]
+    widget_specs = async_supabase.table("widgets").select("config").eq("id", widget_id).execute()
+    return widget_specs.data[0]["config"]
 
-async def get_last_chart_id_from_chat_id(chat_id: str) -> str | None:
-    """
-    Get the last chart message ID for a given chat ID.
-    """
-    try:
-        logfire.info(f"Attempting to get last chart ID for chat {chat_id}")
-        # Use sync client to avoid async issues
-        result = sync_supabase.table("widgets").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
-        
-        if result.data:
-            chart_id = result.data[0]["id"]
-            logfire.info(f"Found chart ID {chart_id} for chat {chat_id}")
-            return chart_id
-        else:
-            logfire.info(f"No widgets found for chat {chat_id}")
-            return None
-            
-    except Exception as e:
-        logfire.error(f"Error getting last chart ID from chat ID {chat_id}: {str(e)}")
-        print(f"Error getting last chart ID from chat ID {chat_id}: {str(e)}")
-        return None
 
 
 # =============================================== Helper functions ===============================================

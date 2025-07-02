@@ -9,7 +9,7 @@ from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 from apps.backend.core.models import Deps, DatasetProfile
 from apps.backend.utils.files import extract_schema_sample, get_column_unique_values
 from apps.backend.utils.logging import _log_llm
-from apps.backend.utils.chat import append_chat_message, get_last_chart_id_from_chat_id, get_message_history
+from apps.backend.utils.chat import append_chat_message, get_message_history
 import duckdb
 from supabase import Client
 
@@ -34,8 +34,8 @@ class ConfidenceOutput(BaseModel):
     potential_issues: List[str] = Field(description="List of potential issues or concerns")
 
 class SQLOutput(BaseModel):
-    """Output from SQL generation, includes chart ID."""
-    chart_id: str = Field(description="The ID of the widget that was updated with the SQL query. This should be the same as the 'last_chart_id' from the context.")
+    """Output from SQL generation, includes widget ID."""
+    widget_id: str = Field(description="The ID of the widget that was created or updated with the SQL query.")
     sql: str = Field(description="The generated SQL query")
     insights_title: Optional[str] = Field(default=None, description="Title of the insights if generated")
     insights_analysis: Optional[str] = Field(default=None, description="Business insights analysis if generated")
@@ -46,7 +46,7 @@ class SQLOutput(BaseModel):
 
 # Declare the SQL agent
 sql_agent = Agent(
-    "openai:gpt-4o",
+    "openai:gpt-4.1",
     deps_type=Deps,
     output_type=SQLOutput,
 )
@@ -136,7 +136,6 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - When working with dates, always make sure that you transform them to date format first (e.g. strptime(date_column, '%d/%m/%Y')::DATE)
     - To truncate dates to specific parts, use date_trunc(): date_trunc('month', CAST(date_column AS DATE))
     
-    Previous chart ID (if referenced): {ctx.deps.last_chart_id or "None"}
     User prompt: {ctx.deps.user_prompt}
     """
 
@@ -144,15 +143,17 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
 
 @sql_agent.tool
 async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
-    """Execute the SQL query and create a chart record in Supabase."""
+    """Execute the SQL query and create or update a widget record in Supabase."""
     start_time = time.time()
     successful_execution = False
     
     sql = input.sql
-    chart_id = ctx.deps.last_chart_id
-
-    if not chart_id:
-        raise ValueError("No chart_id provided to update with SQL query.")
+    # Always create a new widget for each request
+    widget_id = str(uuid.uuid4())
+    logfire.info("Creating new widget", 
+                 new_widget_id=widget_id,
+                 chat_id=ctx.deps.chat_id, 
+                 request_id=ctx.deps.request_id)
     
     # Convert to uppercase for case-insensitive comparison
     sql_upper = sql.upper()
@@ -169,46 +170,100 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                          request_id=ctx.deps.request_id)
             raise ValueError(error_msg)
     
-    # Update the widget record in Supabase with the generated SQL
+    # Create or update the widget record in Supabase with the generated SQL
     try:
-        # Use the Supabase client to update the record
-        result = ctx.deps.supabase.table("widgets").update({
-            "sql": sql
-        }).eq("id", chart_id).execute()
+        # Always create new widget
+        from datetime import datetime
         
-        # Verify the update was successful
-        if not result.data:
-            error_msg = "Failed to update widget record"
-            logfire.warn("Widget update failed", 
-                         error=error_msg, 
-                         chat_id=ctx.deps.chat_id, 
-                         request_id=ctx.deps.request_id)
-            successful_execution = False
-        elif len(result.data) == 0:
-            error_msg = "No data was returned from the query"
-            logfire.warn("Widget update failed", 
-                         error=error_msg, 
-                         chat_id=ctx.deps.chat_id, 
-                         request_id=ctx.deps.request_id)
+        # Get dashboard_id from deps or determine it from context
+        dashboard_id = ctx.deps.dashboard_id
+        if not dashboard_id:
+            # If no dashboard_id in deps, we need to handle this case
+            # For now, we'll try to get it from the chat
+            try:
+                chat_result = ctx.deps.supabase.table("chats").select("dashboard_id").eq("id", ctx.deps.chat_id).execute()
+                if chat_result.data and len(chat_result.data) > 0:
+                    dashboard_id = chat_result.data[0]["dashboard_id"]
+                else:
+                    error_msg = "Cannot create widget: no dashboard_id available"
+                    logfire.error("Widget creation failed", 
+                                 error=error_msg,
+                                 chat_id=ctx.deps.chat_id, 
+                                 request_id=ctx.deps.request_id)
+                    raise ValueError(error_msg)
+            except Exception as e:
+                error_msg = f"Error getting dashboard_id from chat: {str(e)}"
+                logfire.error("Dashboard ID lookup failed", 
+                             error=str(e),
+                             chat_id=ctx.deps.chat_id, 
+                             request_id=ctx.deps.request_id)
+                raise ValueError(error_msg)
+            
+        # Create basic widget layout - positioned to avoid overlap
+        widget_layout = {
+                "i": widget_id,
+                "x": 0,
+                "y": 0, 
+                "w": 6,
+                "h": 4,
+                "minW": 3,
+                "minH": 3,
+                "isResizable": True
+            }
+            
+        # Create basic widget configuration
+        widget_config = {
+                "chartType": "line",  # Default chart type
+                "showLegend": True,
+                "showGrid": True,
+                "colors": ["#8884d8", "#82ca9d", "#ffc658"]
+        }
+        
+        # Insert new widget
+        result = ctx.deps.supabase.table("widgets").insert({
+            "id": widget_id,
+            "dashboard_id": dashboard_id,
+            "title": "Data Analysis Chart",
+            "type": "chart",
+            "config": widget_config,
+            "data": None,
+            "sql": sql,
+            "layout": widget_layout,
+            "chat_id": ctx.deps.chat_id,
+            "is_configured": True,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat()
+        }).execute()
+            
+        if not result.data or len(result.data) == 0:
+            error_msg = "Failed to create new widget record"
+            logfire.warn("Widget creation failed", 
+                             error=error_msg,
+                             widget_id=widget_id,
+                             chat_id=ctx.deps.chat_id, 
+                             request_id=ctx.deps.request_id)
             successful_execution = False
         else:
-            logfire.info("Chart created successfully", 
-                         chart_id=chart_id, 
+            logfire.info("Widget created successfully", 
+                         widget_id=widget_id,
+                         dashboard_id=dashboard_id,
                          chat_id=ctx.deps.chat_id, 
                          request_id=ctx.deps.request_id)
             successful_execution = True
 
     except Exception as e:
-        error_msg = f"Error updating widget record: {str(e)}"
-        logfire.error("Supabase error", 
-                     error=str(e), 
+        error_msg = f"Error creating/updating widget record: {str(e)}"
+        logfire.error("Widget operation failed", 
+                     error=str(e),
+                     widget_id=widget_id,
+                     operation="create",
                      chat_id=ctx.deps.chat_id, 
                      request_id=ctx.deps.request_id)
         raise ValueError(error_msg)
     
     end_time = time.time()
     
-    return SQLOutput(chart_id=chart_id, sql=sql, success=successful_execution)
+    return SQLOutput(widget_id=widget_id, sql=sql, success=successful_execution)
 
 @sql_agent.tool
 async def get_column_unique_values(ctx: RunContext[Deps], column_name: str) -> list[str]:

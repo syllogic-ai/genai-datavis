@@ -8,29 +8,22 @@ from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 from apps.backend.core.models import Deps, DatasetProfile
 from apps.backend.utils.files import extract_schema_sample
 from apps.backend.utils.logging import _log_llm
-from apps.backend.utils.chat import get_last_chart_id_from_chat_id, append_chat_message, get_message_history
+from apps.backend.utils.chat import append_chat_message, get_message_history
 from apps.backend.services.sql_agent import sql_agent, SQLOutput, ConfidenceInput
-# from apps.backend.services.business_insights_agent import business_insights_agent
 from apps.backend.services.viz_agent import viz_agent
 
 class AnalysisOutput(BaseModel):
-    """Output from the intent analysis agent including all results."""
+    """Output from the coordinator agent."""
     answer: str = Field(description="Answer to the user's question")
-    chart_id: Optional[str] = Field(default=None, description="ID of the chart if one was created")
-    insights_title: Optional[str] = Field(default=None, description="Title of the insights if generated")
-    insights_analysis: Optional[str] = Field(default=None, description="Business insights analysis if generated")
+    widget_id: Optional[str] = Field(default=None, description="ID of the widget if one was created")
     confidence_score: Optional[int] = Field(default=None, description="Confidence score from 0 to 100 if SQL was generated")
     confidence_reasoning: Optional[str] = Field(default=None, description="Explanation of the confidence score if calculated")
     follow_up_questions: Optional[List[str]] = Field(default=None, description="Follow-up questions to improve confidence if score is low")
 
-# class BusinessInsightsOutput(BaseModel):
-#     """Simplified business insights output with just title and analysis text."""
-#     title: str = Field(description="Title summarizing the insights")
-#     analysis: str = Field(description="Detailed analysis text")
 
-# Declare the intent analysis agent
+# Declare the coordinator agent
 coordinator_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:gpt-4.1",
     deps_type=Deps,
     output_type=AnalysisOutput,
 )
@@ -59,7 +52,7 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     The column types are:
     {json.dumps(column_types, indent=2)}
     
-    You have three tools available:
+    You have two tools available:
     1. `generate_sql`: Generates SQL queries to extract data from the dataset. You should only run this tool if the user is asking for a new data extract that is not based on the last interaction.
     2. `visualize_chart`: Visualizing the generated SQL query using a variety of visualization tools.
        
@@ -77,7 +70,6 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     - When a user only asks for a formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again
 
     Context:
-    - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
     - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
@@ -98,8 +90,8 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         
         end_time = time.time()
         
-        # Store the new chart_id in the context for other tools to use
-        ctx.deps.last_chart_id = result.output.chart_id
+        # Store the widget_id for potential visualization
+        created_widget_id = result.output.widget_id
         
         # Always calculate confidence score for the generated SQL
         profile = extract_schema_sample(ctx.deps.file_id)
@@ -110,12 +102,22 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         )
         
         # Calculate confidence using a direct function call
-        confidence_score, follow_up_questions = await calculate_confidence_direct(
+        confidence_score, confidence_reasoning = await calculate_confidence_direct(
             ctx.deps, confidence_input
         )
         
+        # Generate follow-up questions if confidence is low
+        follow_up_questions = []
+        if confidence_score < 50:
+            follow_up_questions = [
+                "What time period are you interested in analyzing?",
+                "Which specific columns from the dataset would you like to include?",
+                "Are there any specific conditions or filters you'd like to apply?"
+            ]
+        
         # Update the SQL output with confidence information
         result.output.confidence_score = confidence_score
+        result.output.confidence_reasoning = confidence_reasoning
         result.output.follow_up_questions = follow_up_questions
         
         # Log confidence information
@@ -247,63 +249,23 @@ async def calculate_confidence_direct(deps: Deps, confidence_input: ConfidenceIn
     
     return confidence_score, reasoning
 
-# @intent_analysis_agent.tool
-# async def generate_insights(ctx: RunContext[Deps], chart_id: str) -> BusinessInsightsOutput:
-    """Generate business insights from query results."""
-    start_time = time.time()
-    
-    # Create a copy of the deps with the chart_id set
-    new_deps = Deps(
-        chat_id=ctx.deps.chat_id,
-        request_id=ctx.deps.request_id,
-        file_id=ctx.deps.file_id,
-        user_prompt=ctx.deps.user_prompt,
-        last_chart_id=chart_id,  # Set the chart_id
-        is_follow_up=ctx.deps.is_follow_up,
-        duck=ctx.deps.duck,
-        supabase=ctx.deps.supabase,
-        message_history=ctx.deps.message_history
-    )
-    
-    try:
-        result = await business_insights_agent.run(
-            ctx.deps.user_prompt,
-            deps=new_deps,
-        )
-        
-        end_time = time.time()
-
-        _log_llm(result.usage(), business_insights_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
-        
-        return result.output
-    
-    except Exception as e:
-        end_time = time.time()
-        
-        logfire.error("Insights generation failed", 
-                    execution_time=end_time - start_time,
-                    error=str(e),
-                    chat_id=ctx.deps.chat_id, 
-                    request_id=ctx.deps.request_id)
-        raise
 
 @coordinator_agent.tool
-async def visualize_chart(ctx: RunContext[Deps]) -> dict:
+async def visualize_chart(ctx: RunContext[Deps], widget_id: str) -> dict:
     """
     Run the viz_agent with the provided visualization input and current data context.
     This tool allows the intent_analysis_agent to delegate chart spec generation to the viz_agent.
     """
     start_time = time.time()
     
-    chart_id = ctx.deps.last_chart_id # await get_last_chart_id_from_chat_id(ctx.deps.chat_id)
-    logfire.info("Chart ID: ", chart_id=chart_id)
+    logfire.info("Visualizing widget: ", widget_id=widget_id)
     
     newDeps = Deps(
         chat_id=ctx.deps.chat_id,
         request_id=ctx.deps.request_id,
         file_id=ctx.deps.file_id,
         user_prompt=ctx.deps.user_prompt,
-        last_chart_id=chart_id,
+        widget_id=widget_id,  # Pass the widget_id to viz_agent
         is_follow_up=ctx.deps.is_follow_up,
         duck=ctx.deps.duck,
         supabase=ctx.deps.supabase,
@@ -319,7 +281,7 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
         # Add the visualization result to the chat history
         message = {
             "role": "chart",
-            "content": chart_id,
+            "content": widget_id,
         }
         
         await append_chat_message(ctx.deps.chat_id, message=message)
@@ -333,76 +295,6 @@ async def visualize_chart(ctx: RunContext[Deps]) -> dict:
         end_time = time.time()
         raise
 
-# @coordinator_agent.tool
-# async def generate_follow_up_questions(ctx: RunContext[Deps], confidence_reasoning: str, user_prompt: str) -> List[str]:
-    """Generate follow-up questions to improve SQL confidence when score is low."""
-    
-    # Get the dataset profile for context
-    profile = extract_schema_sample(ctx.deps.file_id)
-    columns = list(profile.columns.keys())
-    
-    follow_up_prompt = f"""
-    You are helping to improve a SQL query by asking clarifying questions. The user's original request was: "{user_prompt}"
-    
-    The confidence score was low because: {confidence_reasoning}
-    
-    Available columns in the dataset: {json.dumps(columns, indent=2)}
-    
-    Generate 3-5 specific, actionable follow-up questions that would help clarify the user's request and improve the SQL query confidence. Focus on:
-    
-    1. **Time periods**: "What time period are you interested in?" "Do you want data from this year, last year, or a specific date range?"
-    2. **Specific columns**: "Which specific columns would you like to see?" "Are you looking for sales, revenue, quantity, or something else?"
-    3. **Business logic**: "How should we calculate totals?" "Do you want to exclude any specific categories or conditions?"
-    4. **Aggregation level**: "Do you want daily, weekly, monthly, or yearly data?" "Should we group by any specific categories?"
-    5. **Filters**: "Are there any specific conditions we should apply?" "Should we exclude null values or specific categories?"
-    
-    Make the questions specific to the available data columns and the user's original request. Return only the questions as a JSON array of strings.
-    """
-    
-    try:
-        # Use the agent's model to generate follow-up questions
-        response = await ctx.agent.model.complete(
-            messages=[{"role": "user", "content": follow_up_prompt}],
-            response_format={"type": "json_object"}
-        )
-        
-        # Parse the response
-        questions_data = json.loads(response.content)
-        follow_up_questions = questions_data.get("questions", [])
-        
-        # Ensure we have at least 3 questions
-        if len(follow_up_questions) < 2:
-            # Fallback questions
-            follow_up_questions = [
-                "What time period are you interested in analyzing?",
-                "Which specific columns from the dataset would you like to include?",
-                "Are there any specific conditions or filters you'd like to apply?",
-                "How would you like the data to be aggregated or grouped?",
-                "Are there any business rules or calculations I should be aware of?"
-            ]
-        
-        logfire.info("Generated follow-up questions for low confidence", 
-                     user_prompt=user_prompt,
-                     confidence_reasoning=confidence_reasoning,
-                     questions_count=len(follow_up_questions),
-                     chat_id=ctx.deps.chat_id, 
-                     request_id=ctx.deps.request_id)
-        
-        return follow_up_questions[:5]  # Limit to 5 questions
-        
-    except Exception as e:
-        error_msg = f"Error generating follow-up questions: {str(e)}"
-        logfire.error("Follow-up questions generation failed", 
-                     error=str(e), 
-                     chat_id=ctx.deps.chat_id, 
-                     request_id=ctx.deps.request_id)
-        
-        # Return default questions on error
-        return [
-            "What time period are you interested in analyzing?",
-            "Which specific columns from the dataset would you like to include?",
-            "Are there any specific conditions or filters you'd like to apply?"
-        ]
 
 @coordinator_agent.output_validator
 async def validate_coordinator_output(

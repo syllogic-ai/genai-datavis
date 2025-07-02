@@ -25,13 +25,13 @@ def filter_messages_to_role_content(json_array: Union[str, List[Dict[str, Any]]]
         if isinstance(message, dict) and any(k in message for k in ['role', 'content'])
     ]
 
-def get_data(file_id: str, chart_id: str, supabase: Client = None, duck_connection: duckdb.DuckDBPyConnection = None) -> pd.DataFrame:
+def get_data(file_id: str, widget_id: str, supabase: Client = None, duck_connection: duckdb.DuckDBPyConnection = None) -> pd.DataFrame:
     """
-    Retrieve and execute SQL on a dataset associated with a chart.
+    Retrieve and execute SQL on a dataset associated with a widget.
 
     Args:
         file_id: ID of the uploaded file.
-        chart_id: ID of the chart.
+        widget_id: ID of the widget.
         supabase: Optional Supabase client. If not provided, function should be called from a context where supabase is in scope.
         duck_connection: Optional DuckDB connection. If not provided, function should be called from a context where duck_connection is in scope.
 
@@ -53,19 +53,19 @@ def get_data(file_id: str, chart_id: str, supabase: Client = None, duck_connecti
         from apps.backend.app.main import duck_connection
     
     start_time = time.time()
-    logfire.info("Getting chart data", file_id=file_id, chart_id=chart_id)
+    logfire.info("Getting widget data", file_id=file_id, widget_id=widget_id)
 
     try:
-        # Fetch the SQL query from the chart
-        chart_result = supabase.table("widgets").select("sql").eq("id", chart_id).execute()
+        # Fetch the SQL query from the widget
+        widget_result = supabase.table("widgets").select("sql").eq("id", widget_id).execute()
 
-        if not chart_result.data:
-            logfire.warn("No widget found", chart_id=chart_id)
+        if not widget_result.data:
+            logfire.warn("No widget found", widget_id=widget_id)
             return pd.DataFrame()
 
-        sql_query = chart_result.data[0].get("sql")
+        sql_query = widget_result.data[0].get("sql")
         if not sql_query:
-            logfire.warn("No SQL query found", chart_id=chart_id)
+            logfire.warn("No SQL query found", widget_id=widget_id)
             return pd.DataFrame()
 
         # Fetch the storage path for the file

@@ -11,11 +11,11 @@ httpx==0.28.1
 huggingface_hub==0.30.2
 duckdb==1.2.2
 polars==1.29.0
-pydantic-ai==0.1.6
+pydantic-ai==0.3.5
 pydantic>=2.6.3
 pydantic-core==2.33.1
 openai>=1.76.1
-pydantic-ai-slim[openai]>=0.1.6
+pydantic-ai-slim[openai]>=0.3.5
 pydantic-ai[openai]
 sqlalchemy>=2.0.0
 jitter

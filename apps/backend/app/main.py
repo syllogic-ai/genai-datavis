@@ -1,6 +1,6 @@
 from httpx import request
 from apps.backend.tools.llm_interaction import process_user_request
-from apps.backend.utils.chat import append_chat_message, get_chart_specs, convert_data_to_chart_data, convert_data_to_chart_data_1d
+from apps.backend.utils.chat import append_chat_message, get_widget_specs, convert_data_to_chart_data, convert_data_to_chart_data_1d
 from apps.backend.utils.files import fetch_dataset
 from apps.backend.utils.utils import get_data
 from fastapi import FastAPI, HTTPException, Request, Response, Depends, Header
@@ -133,7 +133,6 @@ class AnalysisRequest(BaseModel):
     chat_id: str
     request_id: str
     is_follow_up: bool = False
-    last_chart_id: Optional[str] = None
     widget_type: Optional[str] = None
 
 # New request model for dashboard-centric chat messages
@@ -320,7 +319,7 @@ async def analyze_data(
         file_id=request.file_id,
         prompt=request.prompt,
         is_follow_up=request.is_follow_up,
-        has_last_chart=request.last_chart_id is not None
+        widget_type=request.widget_type
     )
     
     # Prepare task data
@@ -330,7 +329,6 @@ async def analyze_data(
         "file_id": request.file_id,
         "user_prompt": request.prompt,
         "is_follow_up": request.is_follow_up,
-        "last_chart_id": request.last_chart_id,
         "received_at": datetime.now().isoformat(),
         "widget_type": request.widget_type
     }
@@ -438,12 +436,12 @@ async def process_analysis_task(
         # Handle both old and new message formats
         dashboard_id = task_data.get("dashboard_id")
         file_id = task_data.get("file_id")  # Legacy support
-        context_widget_ids = task_data.get("context_widget_ids")
-        target_widget_type = task_data.get("target_widget_type")
+        context_widget_ids = task_data.get("contextWidgetIds")
+        target_widget_type = task_data.get("targetWidgetType")
         
         # Legacy fields
         is_follow_up = task_data.get("is_follow_up", False)
-        last_chart_id = task_data.get("last_chart_id")
+        # Removed last_widget_id logic - always create new widgets
         widget_type = task_data.get("widget_type")
         
         # Check required fields based on message type
@@ -503,7 +501,6 @@ async def process_analysis_task(
                         file_id=dashboard_file_id,
                         user_prompt=user_prompt,
                         is_follow_up=False,
-                        last_chart_id=None,
                         widget_type=target_widget_type,
                         duck_connection=duck_connection,
                         supabase_client=supabase,
@@ -514,8 +511,8 @@ async def process_analysis_task(
                     
                     # Add dashboard context to result
                     result["dashboard_id"] = dashboard_id
-                    result["context_widget_ids"] = context_widget_ids
-                    result["target_widget_type"] = target_widget_type
+                    result["contextWidgetIds"] = context_widget_ids
+                    result["targetWidgetType"] = target_widget_type
                     
                 else:
                     # No files associated with dashboard - create a helpful response
@@ -543,7 +540,6 @@ async def process_analysis_task(
                 file_id=file_id,
                 user_prompt=user_prompt,
                 is_follow_up=is_follow_up,
-                last_chart_id=last_chart_id,
                 widget_type=widget_type,
                 duck_connection=duck_connection,
                 supabase_client=supabase
@@ -661,7 +657,7 @@ async def compute_chart_spec_data(
         # Get the data using the utility function
         data_df = get_data(
             file_id=file_id, 
-            chart_id=chart_id,
+            widget_id=chart_id,
             supabase=get_supabase_client(),
             duck_connection=get_db_connection()
         )
@@ -670,30 +666,30 @@ async def compute_chart_spec_data(
             logfire.warn(
                 "No data returned from get_data",
                 file_id=file_id,
-                chart_id=chart_id
+                widget_id=chart_id
             )
             return ChartSpecResponse(
                 chart_specs={}
             )
         
-        chart_specs = await get_chart_specs(
-            chart_id=chart_id,
+        widget_specs = await get_widget_specs(
+            widget_id=chart_id,
             supabase=get_supabase_client()
         )
         
 
-        if chart_specs["chartType"] == "pie":
-            # x_key = list(chart_specs["chartConfig"].keys())[0]
-            x_key = chart_specs["xAxisConfig"]["dataKey"]
+        if widget_specs["chartType"] == "pie":
+            # x_key = list(widget_specs["chartConfig"].keys())[0]
+            x_key = widget_specs["xAxisConfig"]["dataKey"]
             data_cols = data_df[x_key].unique()
-            y_col = chart_specs["dataColumn"]
+            y_col = widget_specs["dataColumn"]
 
             chart_config = {}
             for i, col in enumerate(data_cols):
                 chart_config[col] = {
-                    "color": chart_specs["colors"][i % len(chart_specs["colors"])]
+                    "color": widget_specs["colors"][i % len(widget_specs["colors"])]
                 }
-            chart_specs["chartConfig"] = chart_config
+            widget_specs["chartConfig"] = chart_config
 
             # Update chart specs in the database
             chart_data = await convert_data_to_chart_data_1d(
@@ -703,12 +699,12 @@ async def compute_chart_spec_data(
                 y_col
             )
 
-            chart_specs["data"] = chart_data
+            widget_specs["data"] = chart_data
 
-            row_count = len(chart_specs["data"])
+            row_count = len(widget_specs["data"])
 
-        elif chart_specs["chartType"] == "table":
-            data_cols = list(chart_specs["columns"])
+        elif widget_specs["chartType"] == "table":
+            data_cols = list(widget_specs["columns"])
             x_key = ""
 
             # Update chart specs in the database
@@ -718,18 +714,18 @@ async def compute_chart_spec_data(
                 x_key
             )
 
-            chart_specs["data"] = chart_data
+            widget_specs["data"] = chart_data
 
-            row_count = len(chart_specs["data"])
+            row_count = len(widget_specs["data"])
 
-        elif chart_specs["chartType"] != "kpi":
+        elif widget_specs["chartType"] != "kpi":
             logfire.info(
-            f"{chart_specs['chartType']} chart under preparation",
-            specs=chart_specs,
+            f"{widget_specs['chartType']} chart under preparation",
+            specs=widget_specs,
             processing_time=time.time() - start_time
             )
-            data_cols = list(chart_specs["chartConfig"].keys())
-            x_key = chart_specs["xAxisConfig"]["dataKey"]
+            data_cols = list(widget_specs["chartConfig"].keys())
+            x_key = widget_specs["xAxisConfig"]["dataKey"]
 
             # Update chart specs in the database
             chart_data = await convert_data_to_chart_data(
@@ -738,27 +734,27 @@ async def compute_chart_spec_data(
                 x_key
             )
             
-            chart_specs["data"] = chart_data
+            widget_specs["data"] = chart_data
             
-            row_count = len(chart_specs["data"])
+            row_count = len(widget_specs["data"])
 
-            print("chart_specs: ", chart_specs)
+            print("widget_specs: ", widget_specs)
         
         else:
             data_cur = data_df
-            data_col = chart_specs["dataColumn"]
+            data_col = widget_specs["dataColumn"]
             
             logfire.info(
             "KPI card under preparation",
             data_cur_col=data_cur.columns,
             data_col=data_col,
             data_iloc=data_cur.iloc[0][data_col],
-            specs=chart_specs,
+            specs=widget_specs,
             processing_time=time.time() - start_time
             )
 
-            if "changeColumn" in chart_specs.keys():
-                change_col = chart_specs["changeColumn"]
+            if "changeColumn" in widget_specs.keys():
+                change_col = widget_specs["changeColumn"]
             else: 
                 change_col = None
 
@@ -770,19 +766,19 @@ async def compute_chart_spec_data(
                 change_direction = "up" if data_cur.iloc[0][change_col] > 0 else "down" if data_cur.iloc[0][change_col] < 0 else "flat"
                 
                 if change_value:
-                    chart_specs["kpiChange"] = change_value / 100 # Assuming that the change calculated is %
-                    chart_specs["kpiChangeDirection"] = change_direction
+                    widget_specs["kpiChange"] = change_value / 100 # Assuming that the change calculated is %
+                    widget_specs["kpiChangeDirection"] = change_direction
             else:
                 change_direction = None
                 change_value = None
-            chart_specs["kpiValue"] = data_cur.iloc[0][data_col]
+            widget_specs["kpiValue"] = data_cur.iloc[0][data_col]
 
             logfire.info(
             "KPI card final specs",
             data_cur_col=data_cur.columns,
             data_cur=data_cur,
             data_col=data_col,
-            specs=chart_specs,
+            specs=widget_specs,
             processing_time=time.time() - start_time
             )
 
@@ -792,20 +788,20 @@ async def compute_chart_spec_data(
                 
         logfire.info(
             "Chart spec data computed successfully",
-            chart_id=chart_id,
+            widget_id=chart_id,
             row_count=row_count,
             processing_time=time.time() - start_time,
-            chart_specs=chart_specs
+            chart_specs=widget_specs
         )
         
         return ChartSpecResponse(
-            chart_specs=chart_specs
+            chart_specs=widget_specs
         )
         
     except Exception as e:
         logfire.error(
             "Error computing chart spec data",
-            chart_id=chart_id,
+            widget_id=chart_id,
             error=str(e),
             error_type=type(e).__name__,
             processing_time=time.time() - start_time

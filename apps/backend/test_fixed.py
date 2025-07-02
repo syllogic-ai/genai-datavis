@@ -22,7 +22,7 @@ class AnalysisRequest(BaseModel):
     chat_id: str
     request_id: str
     is_follow_up: bool = False
-    last_chart_id: Optional[str] = None
+    widget_type: Optional[str] = None
 
 class AnalysisResponse(BaseModel):
     """Response model for the analysis endpoint."""

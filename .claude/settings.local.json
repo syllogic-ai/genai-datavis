@@ -8,7 +8,11 @@
       "Bash(npm run dev:*)",
       "WebFetch(domain:novel.sh)",
       "Bash(ls:*)",
-      "WebFetch(domain:docs.anthropic.com)"
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(python:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
     ],
     "deny": []
   }

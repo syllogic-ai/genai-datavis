@@ -7,10 +7,62 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 import pandas as pd
 
-from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, get_last_chart_id_from_chat_id, remove_null_pairs, update_chart_specs
+from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, remove_null_pairs, update_widget_specs
 from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.utils import get_data
 from apps.backend.core.models import Deps
+import requests
+import io
+
+# =============================================== Helper Functions ===============================================
+
+async def execute_sql_and_get_data(ctx: RunContext[Deps]) -> list:
+    """
+    Execute SQL query from widget and return chart data
+    """
+    try:
+        # Get widget SQL
+        widget_result = ctx.deps.supabase.table("widgets").select("sql").eq("id", ctx.deps.widget_id).execute()
+        if not widget_result.data or not widget_result.data[0].get("sql"):
+            logfire.warn("No SQL found for widget", widget_id=ctx.deps.widget_id)
+            return []
+        
+        sql_query = widget_result.data[0]["sql"]
+        
+        # Get file and load data into DuckDB
+        file_result = ctx.deps.supabase.table("files").select("storage_path").eq("id", ctx.deps.file_id).execute()
+        if not file_result.data:
+            logfire.warn("No file found", file_id=ctx.deps.file_id)
+            return []
+        
+        storage_path = file_result.data[0]["storage_path"]
+        bucket_name, file_key = storage_path.split('/', 1)
+        public_url = ctx.deps.supabase.storage.from_(bucket_name).get_public_url(file_key)
+        
+        # Download and load CSV
+        response = requests.get(public_url)
+        if response.status_code != 200:
+            logfire.error("Failed to download CSV", url=public_url, status=response.status_code)
+            return []
+        
+        df = pd.read_csv(io.StringIO(response.text))
+        ctx.deps.duck.register("csv_data", df)
+        
+        # Execute SQL query
+        result_df = ctx.deps.duck.execute(sql_query).fetchdf()
+        chart_data = result_df.to_dict('records') if not result_df.empty else []
+        
+        logfire.info("SQL executed successfully in viz_agent", 
+                    widget_id=ctx.deps.widget_id,
+                    rows_returned=len(chart_data))
+        
+        return chart_data
+        
+    except Exception as e:
+        logfire.error("Failed to execute SQL in viz_agent", 
+                     error=str(e), 
+                     widget_id=ctx.deps.widget_id)
+        return []
 
 # =============================================== Chart Configuration Classes ===============================================
 
@@ -296,16 +348,15 @@ class TableOutput(BaseModel):
 
 # Declare the agent
 viz_agent = Agent(
-    "openai:gpt-4o-mini",
-    deps_type=Deps,
-    allow_tool_output=True
+    "openai:gpt-4.1",
+    deps_type=Deps
 )
 
 # Declare the systems prompt
 @viz_agent.system_prompt
 async def system_prompt(ctx: RunContext[Deps]) -> str:
     
-    data_cur = get_data(ctx.deps.file_id, ctx.deps.last_chart_id, ctx.deps.supabase, ctx.deps.duck)
+    data_cur = get_data(ctx.deps.file_id, ctx.deps.widget_id, ctx.deps.supabase, ctx.deps.duck)
     data_cols = data_cur.columns.tolist()
     
     logfire.info("Data columns", data_cols=data_cols)
@@ -408,7 +459,7 @@ async def update_color(ctx: RunContext[Deps], chart_specs: dict, update_col: str
     # Update the color
     chart_specs["chartConfig"][update_col]["color"] = update_color
 
-    await update_chart_specs(ctx.deps.last_chart_id, chart_specs)
+    await update_widget_specs(ctx.deps.widget_id, chart_specs)
 
     return chart_specs
 
@@ -438,11 +489,14 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
     )
 
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        widget_id = ctx.deps.widget_id
+        # Execute SQL and get chart data
+        chart_data = await execute_sql_and_get_data(ctx)
+        # Update widget with both config and data
+        await update_widget_specs(widget_id, response.model_dump(), chart_data)
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
-    except:
-        print(f"No chat ID in context! Supabase entry not updated.")
+    except Exception as e:
+        print(f"Error in visualize_bar: {str(e)}")
 
     return response
 
@@ -474,8 +528,8 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
     )
 
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        widget_id = ctx.deps.widget_id
+        await update_widget_specs(widget_id, response.model_dump())
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
@@ -508,8 +562,8 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
     )
 
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        widget_id = ctx.deps.widget_id
+        await update_widget_specs(widget_id, response.model_dump())
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
@@ -540,8 +594,8 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
     )
 
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        widget_id = ctx.deps.widget_id
+        await update_widget_specs(widget_id, response.model_dump())
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
@@ -572,8 +626,8 @@ async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChart
     )
 
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        widget_id = ctx.deps.widget_id
+        await update_widget_specs(widget_id, response.model_dump())
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")
@@ -620,8 +674,8 @@ async def visualize_table(ctx: RunContext[Deps], input: TableInput) -> TableOutp
     )
 
     try:
-        chart_id = ctx.deps.last_chart_id
-        await update_chart_specs(chart_id, response.model_dump())
+        widget_id = ctx.deps.widget_id
+        await update_widget_specs(widget_id, response.model_dump())
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except:
         print(f"No chat ID in context! Supabase entry not updated.")

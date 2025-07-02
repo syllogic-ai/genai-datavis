@@ -7,12 +7,12 @@ from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 
 from apps.backend.core.models import Deps, DatasetProfile
 from apps.backend.utils.files import extract_schema_sample
-from apps.backend.services.intent_analysis_agent import intent_analysis_agent, AnalysisOutput
+from apps.backend.services.coordinator_agent import coordinator_agent, AnalysisOutput
 
 class OrchestratorOutput(BaseModel):
     """Output from the orchestrator agent."""
     answer: str = Field(description="Final answer to the user's question")
-    chart_id: Optional[str] = Field(default=None, description="ID of the chart if one was created")
+    widget_id: Optional[str] = Field(default=None, description="ID of the widget if one was created")
     insights: Dict[str, str] = {"test": "test"}
     # insights: Optional[Dict[str, str]] = Field(default=None, description="Business insights if generated")
 
@@ -71,7 +71,7 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     If a chart formatting is asked (e.g. change the color of a chart component), the intent agent should regenerate the chart and update it accordingly.
     {dashboard_context}
     Context:
-    - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
+    - Widget type (if any): {ctx.deps.widget_type or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
     - Message history: {ctx.deps.message_history} 
@@ -87,7 +87,7 @@ async def analyze_intent(ctx: RunContext[Deps]) -> AnalysisOutput:
     start_time = time.time()
     
     try:
-        result = await intent_analysis_agent.run(
+        result = await coordinator_agent.run(
             ctx.deps.user_prompt,
             deps=ctx.deps,
         )

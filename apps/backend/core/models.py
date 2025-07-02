@@ -19,16 +19,16 @@ class Deps(BaseModel):
     request_id: str
     file_id: str  # Keep for legacy compatibility
     user_prompt: str
-    last_chart_id: Optional[str] = None
     is_follow_up: bool = False
     duck: Any  # duckdb.DuckDBPyConnection
     supabase: Any  # Client
     message_history: str
     widget_type: Optional[str] = None
+    widget_id: Optional[str] = None  # Current widget being processed
     # New fields for dashboard support
     dashboard_id: Optional[str] = None
-    context_widget_ids: Optional[List[str]] = None
-    target_widget_type: Optional[str] = None
+    contextWidgetIds: Optional[List[str]] = None
+    targetWidgetType: Optional[str] = None
 
 class GradientStops(BaseModel):
     """
@@ -224,6 +224,21 @@ class UserRow(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class DashboardRow(BaseModel):
+    """
+    Represents a dashboard in the database.
+    Maps to the 'dashboards' table and contains dashboard metadata.
+    """
+    id: str
+    user_id: str
+    name: str = "New Dashboard"
+    description: Optional[str] = None
+    icon: str = "document-text"
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(extra="forbid")
+
+
 class FileRow(BaseModel):
     """
     Represents a file in the database.
@@ -231,6 +246,7 @@ class FileRow(BaseModel):
     """
     id: str
     user_id: str
+    dashboard_id: Optional[str] = None  # Link files to dashboard
     file_type: str  # 'original' | 'cleaned' | 'meta'
     original_filename: Optional[str] = None
     storage_path: str
@@ -248,8 +264,9 @@ class ConversationItem(BaseModel):
     role: str
     message: str
     timestamp: str
-    contextWidgetIds: Optional[List[str]] = None
-    targetWidgetType: Optional[str] = None
+    contextWidgetIds: Optional[List[str]] = None  # Match frontend schema exactly
+    targetWidgetType: Optional[str] = None  # Match frontend schema exactly  
+    targetChartSubType: Optional[str] = None  # Match frontend schema exactly
     model_config = ConfigDict(extra="forbid")
 
 
@@ -259,9 +276,9 @@ class ChatRow(BaseModel):
     Maps to the 'chats' table and contains the conversation history.
     """
     id: str
-    user_id: Optional[str] = None
-    file_id: str
-    title: str = "New Chat"
+    user_id: str
+    dashboard_id: str  # Changed from file_id to dashboard_id to match frontend schema
+    title: str = "Dashboard Chat"
     conversation: List[ConversationItem]
     message: ChatMessage  # Keeping for backward compatibility
     created_at: str
@@ -310,9 +327,10 @@ class ChatMessageRequest(BaseModel):
     Request model for chat messages with new dashboard-centric structure.
     """
     message: str
-    dashboardId: str
-    contextWidgetIds: Optional[List[str]] = None
-    targetWidgetType: Optional[str] = None
+    dashboardId: str  # Match frontend naming convention
+    contextWidgetIds: Optional[List[str]] = None  # Match frontend naming convention
+    targetWidgetType: Optional[str] = None  # Match frontend naming convention
+    targetChartSubType: Optional[str] = None  # Match frontend naming convention
     model_config = ConfigDict(extra="forbid")
 
 
