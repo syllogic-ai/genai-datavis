@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 
 from apps.backend.core.models import Deps, DatasetProfile
-from apps.backend.utils.files import extract_schema_sample
+from apps.backend.utils.files import extract_schema_sample, get_column_unique_values
 from apps.backend.utils.logging import _log_llm
 from apps.backend.utils.chat import append_chat_message, get_last_chart_id_from_chat_id, get_message_history
 import duckdb
@@ -21,6 +21,18 @@ class CalcInput(BaseModel):
     """Input for calculation execution."""
     sql: str = Field(description="Generated DuckDB SQL query")
 
+class ConfidenceInput(BaseModel):
+    """Input for confidence scoring."""
+    user_prompt: str = Field(description="The user's original question")
+    generated_sql: str = Field(description="The SQL query that was generated")
+    dataset_schema: Dict[str, str] = Field(description="The dataset schema with column names and types")
+
+class ConfidenceOutput(BaseModel):
+    """Output from confidence scoring."""
+    confidence_score: int = Field(description="Confidence score from 0 to 100")
+    reasoning: str = Field(description="Explanation of the confidence score")
+    potential_issues: List[str] = Field(description="List of potential issues or concerns")
+
 class SQLOutput(BaseModel):
     """Output from SQL generation, includes chart ID."""
     chart_id: str = Field(description="The ID of the chart that has been created")
@@ -28,6 +40,9 @@ class SQLOutput(BaseModel):
     insights_title: Optional[str] = Field(default=None, description="Title of the insights if generated")
     insights_analysis: Optional[str] = Field(default=None, description="Business insights analysis if generated")
     success: bool = Field(default=True, description="Whether the SQL query was executed successfully")
+    confidence_score: Optional[int] = Field(default=None, description="Confidence score from 0 to 100 if calculated")
+    confidence_reasoning: Optional[str] = Field(default=None, description="Explanation of the confidence score if calculated")
+    follow_up_questions: Optional[List[str]] = Field(default=None, description="Follow-up questions to improve confidence if calculated")
 
 # Declare the SQL agent
 sql_agent = Agent(
@@ -177,6 +192,12 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                          chat_id=ctx.deps.chat_id, 
                          request_id=ctx.deps.request_id)
             successful_execution = False
+        else:
+            logfire.info("Chart created successfully", 
+                         chart_id=chart_id, 
+                         chat_id=ctx.deps.chat_id, 
+                         request_id=ctx.deps.request_id)
+            successful_execution = True
 
     except Exception as e:
         error_msg = f"Error creating chart record: {str(e)}"
@@ -200,4 +221,98 @@ async def get_column_unique_values(ctx: RunContext[Deps], column_name: str) -> l
                  unique_values=unique_values, 
                  chat_id=ctx.deps.chat_id, 
                  request_id=ctx.deps.request_id)
-    return unique_values 
+    return unique_values
+
+@sql_agent.tool
+async def calculate_confidence(ctx: RunContext[Deps], input: ConfidenceInput) -> ConfidenceOutput:
+    """Calculate confidence score for how well the generated SQL matches the user's request."""
+    
+    # Get the dataset profile to provide context
+    profile = extract_schema_sample(ctx.deps.file_id)
+    
+    # Create a detailed prompt for confidence evaluation
+    confidence_prompt = f"""
+    You are an expert SQL analyst evaluating the quality and accuracy of a generated SQL query against a user's request.
+    
+    DATASET SCHEMA:
+    {json.dumps(profile.columns, indent=2)}
+    
+    USER'S REQUEST:
+    "{input.user_prompt}"
+    
+    GENERATED SQL QUERY:
+    {input.generated_sql}
+    
+    TASK: Evaluate how well the generated SQL query matches the user's request and provide a confidence score from 0 to 100.
+    
+    EVALUATION CRITERIA:
+    1. **Semantic Alignment (0-30 points)**: Does the SQL query address what the user actually asked for?
+    2. **Technical Accuracy (0-25 points)**: Is the SQL syntactically correct and follows best practices?
+    3. **Data Relevance (0-20 points)**: Are the correct columns and tables being used?
+    4. **Logical Completeness (0-15 points)**: Does the query include all necessary operations (filtering, grouping, etc.)?
+    5. **Edge Case Handling (0-10 points)**: Does the query handle potential data issues (NULLs, edge cases)?
+    
+    CONFIDENCE SCORING:
+    - 90-100: Excellent match, highly confident
+    - 80-89: Very good match, confident
+    - 70-79: Good match, reasonably confident
+    - 60-69: Acceptable match, somewhat confident
+    - 50-59: Partial match, low confidence
+    - 40-49: Poor match, very low confidence
+    - 30-39: Significant mismatch, not confident
+    - 20-29: Major issues, very not confident
+    - 10-19: Critical problems, extremely not confident
+    - 0-9: Complete failure, no confidence
+    
+    Provide your response in the following JSON format:
+    {{
+        "confidence_score": <integer 0-100>,
+        "reasoning": "<detailed explanation of the score>",
+        "potential_issues": ["<issue1>", "<issue2>", ...]
+    }}
+    
+    Be thorough in your analysis and provide specific reasons for your confidence level.
+    """
+    
+    try:
+        # Use the agent's model to evaluate confidence
+        response = await ctx.agent.model.complete(
+            messages=[{"role": "user", "content": confidence_prompt}],
+            response_format={"type": "json_object"}
+        )
+        
+        # Parse the response
+        confidence_data = json.loads(response.content)
+        
+        confidence_score = confidence_data.get("confidence_score", 50)
+        reasoning = confidence_data.get("reasoning", "No reasoning provided")
+        potential_issues = confidence_data.get("potential_issues", [])
+        
+        # Ensure confidence score is within bounds
+        confidence_score = max(0, min(100, confidence_score))
+        
+        logfire.info("Confidence score calculated", 
+                     confidence_score=confidence_score,
+                     user_prompt=input.user_prompt,
+                     chat_id=ctx.deps.chat_id, 
+                     request_id=ctx.deps.request_id)
+        
+        return ConfidenceOutput(
+            confidence_score=confidence_score,
+            reasoning=reasoning,
+            potential_issues=potential_issues
+        )
+        
+    except Exception as e:
+        error_msg = f"Error calculating confidence score: {str(e)}"
+        logfire.error("Confidence calculation failed", 
+                     error=str(e), 
+                     chat_id=ctx.deps.chat_id, 
+                     request_id=ctx.deps.request_id)
+        
+        # Return a default low confidence score on error
+        return ConfidenceOutput(
+            confidence_score=30,
+            reasoning=f"Error occurred during confidence calculation: {str(e)}",
+            potential_issues=["Confidence calculation failed", "Unable to evaluate query quality"]
+        ) 
