@@ -33,6 +33,26 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     # Extract column names for context
     columns = list(profile.columns.keys())
     
+    # Check if this is a dashboard-centric request
+    is_dashboard_request = ctx.deps.dashboard_id is not None
+    dashboard_context = ""
+    
+    if is_dashboard_request:
+        dashboard_context = f"""
+    
+    DASHBOARD CONTEXT:
+    - Dashboard ID: {ctx.deps.dashboard_id}
+    - Context Widget IDs: {ctx.deps.context_widget_ids or "None"}
+    - Target Widget Type: {ctx.deps.target_widget_type or "Any"}
+    
+    This is a dashboard widget request. You should focus on creating or editing dashboard widgets.
+    When creating widgets, ensure they are properly configured with:
+    - Appropriate chart type based on user request
+    - Proper data binding using the available columns
+    - Clear titles and labels
+    - Meaningful SQL queries when needed
+    """
+    
     prompt = f"""
     You are the orchestrator agent for a data analytics platform. Your job is to:
     
@@ -44,11 +64,12 @@ async def orchestrator_system_prompt(ctx: RunContext[Deps]) -> str:
     
     You have access to an intent analysis agent that can:
     - Determine if a query needs SQL generation
-    - Generate data insights when needed.
+    - Generate data insights when needed
+    - Create appropriate visualizations and widgets
 
     Always call the intent agent through the analyze_intent tool!
     If a chart formatting is asked (e.g. change the color of a chart component), the intent agent should regenerate the chart and update it accordingly.
-        
+    {dashboard_context}
     Context:
     - Last chart ID (if any): {ctx.deps.last_chart_id or "None"}
     - Is this a follow-up question: {ctx.deps.is_follow_up}

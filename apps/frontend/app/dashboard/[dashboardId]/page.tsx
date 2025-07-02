@@ -8,6 +8,7 @@ import { useParams, useRouter } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
 import { useSetupState } from "./hooks/useSetupState";
+import { useDashboardChat } from "./hooks/useDashboardChat";
 import { SetupPhase } from "./components/SetupPhase";
 import { ChatPhase } from "./components/ChatPhase";
 import { useDashboardContext } from "@/components/dashboard/DashboardUserContext";
@@ -58,6 +59,13 @@ export default function EnhancedDashboardPage() {
     markFirstMessage,
     refreshFiles,
   } = useSetupState(dashboardId, widgets.length);
+
+  // Chat management for the dashboard
+  const {
+    chatId,
+    isLoading: isChatLoading,
+    error: chatError
+  } = useDashboardChat(dashboardId);
 
   // Memoize dashboard object to prevent recreation on every render
   const dashboardObj = React.useMemo(() => ({
@@ -130,7 +138,7 @@ export default function EnhancedDashboardPage() {
     }
   };
 
-  if (isLoading || isSetupLoading) {
+  if (isLoading || isSetupLoading || isChatLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="flex items-center gap-2">
@@ -141,12 +149,12 @@ export default function EnhancedDashboardPage() {
     );
   }
 
-  if (error || setupError) {
+  if (error || setupError || chatError) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-red-600 mb-2">Error</h2>
-          <p className="text-gray-600">{error || setupError}</p>
+          <p className="text-gray-600">{error || setupError || chatError}</p>
         </div>
       </div>
     );
@@ -224,11 +232,14 @@ export default function EnhancedDashboardPage() {
         </div>
 
         {/* Chat Sidebar - Integrated inline */}
-        <ChatSidebar
-          dashboardId={dashboardId}
-          isOpen={isChatSidebarOpen}
-          onToggle={handleChatSidebarToggle}
-        />
+        {chatId && (
+          <ChatSidebar
+            dashboardId={dashboardId}
+            chatId={chatId}
+            isOpen={isChatSidebarOpen}
+            onToggle={handleChatSidebarToggle}
+          />
+        )}
       </motion.div>
 
       {/* Save Status Indicator */}

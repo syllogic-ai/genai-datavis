@@ -49,7 +49,10 @@ async def process_user_request(
     last_chart_id: Optional[str] = None,
     widget_type: Optional[str] = None,
     duck_connection: Optional[duckdb.DuckDBPyConnection] = None,
-    supabase_client: Optional[Client] = None
+    supabase_client: Optional[Client] = None,
+    dashboard_id: Optional[str] = None,
+    context_widget_ids: Optional[List[str]] = None,
+    target_widget_type: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Process a user request through the multi-agent system.
@@ -64,6 +67,9 @@ async def process_user_request(
         widget_type: Type of widget (if any)
         duck_connection: DuckDB connection (created if not provided)
         supabase_client: Supabase client (created if not provided)
+        dashboard_id: Dashboard ID for context (if any)
+        context_widget_ids: Widget IDs for context (if any)
+        target_widget_type: Target widget type for creation (if any)
         
     Returns:
         Dict containing the final response
@@ -109,7 +115,10 @@ async def process_user_request(
         duck=duck_connection,
         supabase=supabase_client,
         message_history=json.dumps(message_history),
-        widget_type=widget_type
+        widget_type=widget_type,
+        dashboard_id=dashboard_id,
+        context_widget_ids=context_widget_ids,
+        target_widget_type=target_widget_type
     )
     
     try:

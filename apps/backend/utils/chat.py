@@ -14,6 +14,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import supabase from the core configuration
 from apps.backend.core.config import async_supabase
+from supabase import create_client
+import os
+
+# Create a sync client for functions that have issues with async client
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+sync_supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 
 # Add a utility function to update the chat conversation in Supabase
@@ -191,9 +198,20 @@ async def get_last_chart_id_from_chat_id(chat_id: str) -> str | None:
     Get the last chart message ID for a given chat ID.
     """
     try:
-        result = await async_supabase.table("widgets").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
-        return result.data[0]["id"] if result.data else None
+        logfire.info(f"Attempting to get last chart ID for chat {chat_id}")
+        # Use sync client to avoid async issues
+        result = sync_supabase.table("widgets").select("id").eq("chat_id", chat_id).order("created_at", desc=True).limit(1).execute()
+        
+        if result.data:
+            chart_id = result.data[0]["id"]
+            logfire.info(f"Found chart ID {chart_id} for chat {chat_id}")
+            return chart_id
+        else:
+            logfire.info(f"No widgets found for chat {chat_id}")
+            return None
+            
     except Exception as e:
+        logfire.error(f"Error getting last chart ID from chat ID {chat_id}: {str(e)}")
         print(f"Error getting last chart ID from chat ID {chat_id}: {str(e)}")
         return None
 

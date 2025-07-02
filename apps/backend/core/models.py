@@ -17,7 +17,7 @@ class Deps(BaseModel):
     """Dependencies required by all agents in the system."""
     chat_id: str
     request_id: str
-    file_id: str
+    file_id: str  # Keep for legacy compatibility
     user_prompt: str
     last_chart_id: Optional[str] = None
     is_follow_up: bool = False
@@ -25,6 +25,10 @@ class Deps(BaseModel):
     supabase: Any  # Client
     message_history: str
     widget_type: Optional[str] = None
+    # New fields for dashboard support
+    dashboard_id: Optional[str] = None
+    context_widget_ids: Optional[List[str]] = None
+    target_widget_type: Optional[str] = None
 
 class GradientStops(BaseModel):
     """
@@ -244,6 +248,8 @@ class ConversationItem(BaseModel):
     role: str
     message: str
     timestamp: str
+    contextWidgetIds: Optional[List[str]] = None
+    targetWidgetType: Optional[str] = None
     model_config = ConfigDict(extra="forbid")
 
 
@@ -296,5 +302,31 @@ class LLMUsageRow(BaseModel):
     input_tokens: int
     output_tokens: int
     total_cost: float
-    created_at: datetime 
+    created_at: datetime
+
+
+class ChatMessageRequest(BaseModel):
+    """
+    Request model for chat messages with new dashboard-centric structure.
+    """
+    message: str
+    dashboardId: str
+    contextWidgetIds: Optional[List[str]] = None
+    targetWidgetType: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+
+class WidgetOperation(BaseModel):
+    """
+    Represents a widget operation (create or edit) determined by the agentic flow.
+    """
+    operation: Literal["create", "edit"]
+    widget_id: Optional[str] = None  # For edit operations
+    widget_type: str
+    title: str
+    config: Dict[str, Any]
+    data: Optional[Any] = None
+    sql: Optional[str] = None
+    layout: Dict[str, Any]
+    model_config = ConfigDict(extra="forbid")
     

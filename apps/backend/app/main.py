@@ -24,6 +24,7 @@ import asyncio
 import duckdb
 import logging
 import logfire
+from uuid import uuid4
 
 # Load environment variables
 load_dotenv()
@@ -36,6 +37,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the configuration module for Logfire
 from apps.backend.core.config import configure_logfire
+from apps.backend.core.models import ChatMessageRequest, WidgetOperation
+from apps.backend.services.dashboard_chat_processor import process_dashboard_chat_request
+from apps.backend.utils.widget_operations import trigger_dashboard_refresh
 
 # Import Pydantic AI components
 from pydantic_ai import Agent, RunContext
@@ -121,7 +125,7 @@ def get_supabase_client():
 def get_db_connection():
     return duck_connection
 
-# Request model for the analysis endpoint
+# Request model for the analysis endpoint (legacy support)
 class AnalysisRequest(BaseModel):
     """Request model for the analysis endpoint."""
     prompt: str
@@ -131,6 +135,16 @@ class AnalysisRequest(BaseModel):
     is_follow_up: bool = False
     last_chart_id: Optional[str] = None
     widget_type: Optional[str] = None
+
+# New request model for dashboard-centric chat messages
+class ChatAnalysisRequest(BaseModel):
+    """Request model for dashboard-centric chat analysis."""
+    message: str
+    dashboardId: str
+    contextWidgetIds: Optional[List[str]] = None
+    targetWidgetType: Optional[str] = None
+    chat_id: str
+    request_id: str
 
 # Request model for the chart spec data endpoint
 class ChartSpecRequest(BaseModel):
@@ -199,6 +213,89 @@ async def title_generation_system_prompt(ctx: RunContext) -> str:
     )
 
 ANALYSIS_QUEUE_NAME = "analysis_tasks"
+
+@app.post("/chat/analyze", response_model=EnqueueResponse)
+async def analyze_chat_message(
+    request: ChatAnalysisRequest,
+) -> EnqueueResponse:
+    """
+    Receives a chat message for dashboard analysis and enqueues it for background processing.
+    
+    Args:
+        request: The chat message request containing dashboard context
+        
+    Returns:
+        Acknowledgement that the task has been enqueued.
+    """
+    start_time = time.time()
+    
+    # Log the incoming request
+    logfire.info(
+        "Chat analysis request received for queueing",
+        chat_id=request.chat_id,
+        request_id=request.request_id,
+        dashboard_id=request.dashboardId,
+        message=request.message[:100],  # Log first 100 chars
+        has_context_widgets=request.contextWidgetIds is not None,
+        target_widget_type=request.targetWidgetType
+    )
+    
+    # Prepare task data with new structure
+    task_data = {
+        "chat_id": request.chat_id,
+        "request_id": request.request_id,
+        "dashboard_id": request.dashboardId,
+        "user_prompt": request.message,
+        "context_widget_ids": request.contextWidgetIds,
+        "target_widget_type": request.targetWidgetType,
+        "received_at": datetime.now().isoformat()
+    }
+
+    try:
+        # Use QStash to enqueue the task
+        task_id = enqueue_task(ANALYSIS_QUEUE_NAME, task_data)
+        
+        if not task_id:
+            raise HTTPException(
+                status_code=503,
+                detail="Failed to enqueue task to QStash"
+            )
+        
+        processing_time = time.time() - start_time
+        logfire.info(
+            "Chat task successfully enqueued to QStash",
+            request_id=request.request_id,
+            chat_id=request.chat_id,
+            task_id=task_id,
+            queue_name=ANALYSIS_QUEUE_NAME,
+            processing_time=processing_time
+        )
+        
+        return EnqueueResponse(
+            message="Chat analysis task successfully enqueued.",
+            task_id=task_id,
+            queue_name=ANALYSIS_QUEUE_NAME,
+            request_id=request.request_id,
+            chat_id=request.chat_id
+        )
+        
+    except Exception as e:
+        processing_time = time.time() - start_time
+        error_message = str(e)
+        
+        logfire.error(
+            "Failed to enqueue chat analysis task",
+            chat_id=request.chat_id,
+            request_id=request.request_id,
+            error=error_message,
+            error_type=type(e).__name__,
+            processing_time=processing_time
+        )
+        
+        raise HTTPException(
+            status_code=503,
+            detail=f"Chat analysis processing service is temporarily unavailable: {error_message}"
+        )
 
 @app.post("/analyze", response_model=EnqueueResponse)
 async def analyze_data(
@@ -336,20 +433,40 @@ async def process_analysis_task(
     try:
         chat_id = task_data.get("chat_id")
         request_id = task_data.get("request_id")
-        file_id = task_data.get("file_id")
         user_prompt = task_data.get("user_prompt")
+        
+        # Handle both old and new message formats
+        dashboard_id = task_data.get("dashboard_id")
+        file_id = task_data.get("file_id")  # Legacy support
+        context_widget_ids = task_data.get("context_widget_ids")
+        target_widget_type = task_data.get("target_widget_type")
+        
+        # Legacy fields
         is_follow_up = task_data.get("is_follow_up", False)
         last_chart_id = task_data.get("last_chart_id")
         widget_type = task_data.get("widget_type")
         
-        if not all([chat_id, request_id, file_id, user_prompt]):
+        # Check required fields based on message type
+        if dashboard_id:
+            # New dashboard-centric message
+            required_fields = ["chat_id", "request_id", "dashboard_id", "user_prompt"]
+            missing = [field for field, value in {
+                "chat_id": chat_id, 
+                "request_id": request_id,
+                "dashboard_id": dashboard_id,
+                "user_prompt": user_prompt
+            }.items() if not value]
+        else:
+            # Legacy file-based message
+            required_fields = ["chat_id", "request_id", "file_id", "user_prompt"]
             missing = [field for field, value in {
                 "chat_id": chat_id, 
                 "request_id": request_id,
                 "file_id": file_id,
                 "user_prompt": user_prompt
             }.items() if not value]
-            
+        
+        if missing:
             logfire.error(f"Missing required fields in task: {missing}", request_id=request_id)
             return Response(
                 content=json.dumps({"error": f"Missing required fields: {missing}"}),
@@ -365,18 +482,72 @@ async def process_analysis_task(
             file_id=file_id
         )
         
-        # Call the main analysis function
-        result = await process_user_request(
-            chat_id=chat_id,
-            request_id=request_id,
-            file_id=file_id,
-            user_prompt=user_prompt,
-            is_follow_up=is_follow_up,
-            last_chart_id=last_chart_id,
-            widget_type=widget_type,
-            duck_connection=duck_connection,
-            supabase_client=supabase
-        )
+        # Call the appropriate analysis function based on message type
+        if dashboard_id:
+            # Dashboard-centric processing using existing agentic flow
+            logfire.info(f"Processing dashboard chat request for dashboard {dashboard_id}")
+            
+            # Get files associated with this dashboard to use existing agentic flow
+            try:
+                dashboard_files_result = supabase.table("files").select("id").eq("dashboard_id", dashboard_id).limit(1).execute()
+                
+                if dashboard_files_result.data and len(dashboard_files_result.data) > 0:
+                    # Use the first file associated with the dashboard
+                    dashboard_file_id = dashboard_files_result.data[0]["id"]
+                    logfire.info(f"Using file {dashboard_file_id} from dashboard {dashboard_id} for agentic processing")
+                    
+                    # Use existing agentic flow with dashboard context
+                    result = await process_user_request(
+                        chat_id=chat_id,
+                        request_id=request_id,
+                        file_id=dashboard_file_id,
+                        user_prompt=user_prompt,
+                        is_follow_up=False,
+                        last_chart_id=None,
+                        widget_type=target_widget_type,
+                        duck_connection=duck_connection,
+                        supabase_client=supabase,
+                        dashboard_id=dashboard_id,
+                        context_widget_ids=context_widget_ids,
+                        target_widget_type=target_widget_type
+                    )
+                    
+                    # Add dashboard context to result
+                    result["dashboard_id"] = dashboard_id
+                    result["context_widget_ids"] = context_widget_ids
+                    result["target_widget_type"] = target_widget_type
+                    
+                else:
+                    # No files associated with dashboard - create a helpful response
+                    logfire.warn(f"No files found for dashboard {dashboard_id}")
+                    result = {
+                        "answer": f"I'd like to help you create widgets for dashboard {dashboard_id}, but I need some data files to work with. Please upload a data file to this dashboard first, then I can analyze it and create meaningful visualizations based on your request.",
+                        "request_id": request_id,
+                        "chat_id": chat_id,
+                        "dashboard_id": dashboard_id
+                    }
+                    
+            except Exception as e:
+                logfire.error(f"Error getting dashboard files: {e}")
+                result = {
+                    "answer": "I encountered an error while trying to access the dashboard data. Please try again.",
+                    "request_id": request_id,
+                    "chat_id": chat_id,
+                    "dashboard_id": dashboard_id
+                }
+        else:
+            # Legacy file-based processing
+            result = await process_user_request(
+                chat_id=chat_id,
+                request_id=request_id,
+                file_id=file_id,
+                user_prompt=user_prompt,
+                is_follow_up=is_follow_up,
+                last_chart_id=last_chart_id,
+                widget_type=widget_type,
+                duck_connection=duck_connection,
+                supabase_client=supabase
+            )
         
         processing_time = time.time() - start_time
         
@@ -399,6 +570,11 @@ async def process_analysis_task(
         
         # Send message to the chat
         await append_chat_message(chat_id, chat_message_payload)
+        
+        # Trigger dashboard refresh if this was a dashboard-centric request
+        if dashboard_id and (result.get("chart_id") or result.get("widget_operations")):
+            operation_type = "chart_created" if result.get("chart_id") else "widget_operations"
+            await trigger_dashboard_refresh(dashboard_id, supabase, operation_type)
         
         return Response(
             content=json.dumps({"success": True, "request_id": request_id}),

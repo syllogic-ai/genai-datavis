@@ -78,12 +78,26 @@ export function ChatInput({
   const defaultLoadingIndicator = <span className="mx-1">...</span>;
 
   const handleSubmit = () => {
+    console.log('ChatInput handleSubmit called:', {
+      hasOnSubmit: !!onSubmit,
+      message: message.trim(),
+      widgetType,
+      selectedItems,
+      isLoading,
+      isDisabled
+    });
+    
     if (onSubmit && message.trim()) {
       onSubmit({
         selectedItems,
         message,
-        widgetType,
+        widgetType: widgetType || 'chart', // Default to 'chart' if no type selected
       });
+      
+      // Clear the form after submit
+      setMessage('');
+      setWidgetType('');
+      setSelectedItems([]);
     }
   };
 
