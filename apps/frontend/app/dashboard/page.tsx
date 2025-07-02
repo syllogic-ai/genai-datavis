@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useUser } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
+import { useCacheWarming } from "@/lib/cache-warmer";
 
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
@@ -14,16 +15,19 @@ import { PlusIcon, FolderIcon } from "lucide-react";
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoaded, isSignedIn } = useUser();
+  const { warmCache } = useCacheWarming();
   const [dashboards, setDashboards] = useState<Dashboard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch dashboards on component mount
+  // Fetch dashboards on component mount and warm cache
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
+    if (isLoaded && isSignedIn && user?.id) {
       fetchDashboards();
+      // Warm cache in the background for better performance
+      warmCache(user.id).catch(console.warn);
     }
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, user?.id, warmCache]);
 
   const fetchDashboards = async () => {
     try {

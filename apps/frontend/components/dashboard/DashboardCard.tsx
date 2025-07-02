@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Dashboard } from "@/db/schema";
 import { IconRenderer } from "@/components/dashboard/DashboardIconRenderer";
@@ -44,6 +44,35 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
     router.push(`/dashboard/${dashboard.id}`);
   };
 
+  // Prefetch dashboard data on hover for faster loading
+  const handleMouseEnter = useCallback(async () => {
+    try {
+      // Prefetch the dashboard page route
+      router.prefetch(`/dashboard/${dashboard.id}`);
+      
+      // Prefetch dashboard widgets data
+      const widgetsPromise = fetch(`/api/dashboards/${dashboard.id}/widgets`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      // Prefetch dashboard files data (lower priority)
+      const filesPromise = fetch(`/api/dashboards/${dashboard.id}/files`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      // Don't wait for these to complete, just initiate the requests
+      Promise.allSettled([widgetsPromise, filesPromise]).then(() => {
+        console.log(`[PREFETCH] Dashboard ${dashboard.id} data prefetched`);
+      }).catch(() => {
+        // Silently fail prefetch attempts
+      });
+    } catch (error) {
+      // Silently fail prefetch attempts - they're not critical
+    }
+  }, [dashboard.id, router]);
+
   const formatTimeAgo = (date: Date | string | null) => {
     if (!date) return "Unknown";
     try {
@@ -58,6 +87,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
     <Card 
       className="cursor-pointer hover:shadow-md transition-shadow duration-200 border border-gray-200"
       onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
     >
       <CardContent className="px-6">
         <div className="flex items-center gap-4">

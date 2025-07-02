@@ -4,8 +4,9 @@ import db from '@/db';
 import { widgets, dashboards } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { Widget } from '@/types/enhanced-dashboard-types';
+import { dashboardCache, withRedisCache } from '@/lib/redis';
 
-// GET: Load widgets for a dashboard
+// GET: Load widgets for a dashboard with Redis caching
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ dashboardId: string }> }
@@ -19,41 +20,102 @@ export async function GET(
 
     const { dashboardId } = await context.params;
 
-    // Verify dashboard belongs to user
-    const dashboard = await db
-      .select()
-      .from(dashboards)
-      .where(and(eq(dashboards.id, dashboardId), eq(dashboards.userId, userId)))
-      .limit(1);
+    // Cache-first approach with fallback to database
+    const cachedWidgets = await withRedisCache(
+      // Try cache first
+      async () => {
+        const cached = await dashboardCache.getDashboardWidgets(dashboardId, userId);
+        if (cached) {
+          console.log(`[API] Cache HIT - Loaded ${cached.length} widgets for dashboard ${dashboardId}`);
+          return { widgets: cached, fromCache: true };
+        }
+        return null;
+      },
+      // Fallback to database
+      async () => {
+        console.log(`[API] Cache MISS - Loading widgets from database for dashboard ${dashboardId}`);
+        
+        // Verify dashboard belongs to user
+        const dashboard = await db
+          .select()
+          .from(dashboards)
+          .where(and(eq(dashboards.id, dashboardId), eq(dashboards.userId, userId)))
+          .limit(1);
 
-    if (dashboard.length === 0) {
-      return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
+        if (dashboard.length === 0) {
+          throw new Error('Dashboard not found');
+        }
+
+        // Load widgets from database
+        const dashboardWidgets = await db
+          .select()
+          .from(widgets)
+          .where(eq(widgets.dashboardId, dashboardId));
+
+        // Transform database widgets to frontend Widget format
+        const frontendWidgets: Widget[] = dashboardWidgets.map((dbWidget: any) => ({
+          id: dbWidget.id,
+          type: dbWidget.type as Widget['type'],
+          layout: dbWidget.layout,
+          config: dbWidget.config,
+          data: dbWidget.data,
+          sql: dbWidget.sql,
+          chatId: dbWidget.chatId,
+          isConfigured: dbWidget.isConfigured,
+          cacheKey: dbWidget.cacheKey,
+          lastDataFetch: dbWidget.lastDataFetch,
+        }));
+
+        // Cache the results for future requests
+        await dashboardCache.setDashboardWidgets(dashboardId, userId, frontendWidgets);
+        
+        console.log(`[API] Loaded and cached ${frontendWidgets.length} widgets for dashboard ${dashboardId}`);
+        return { widgets: frontendWidgets, fromCache: false };
+      }
+    );
+
+    // If cache operation failed, fall back to database
+    if (!cachedWidgets) {
+      // Verify dashboard belongs to user
+      const dashboard = await db
+        .select()
+        .from(dashboards)
+        .where(and(eq(dashboards.id, dashboardId), eq(dashboards.userId, userId)))
+        .limit(1);
+
+      if (dashboard.length === 0) {
+        return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
+      }
+
+      // Load widgets from database as final fallback
+      const dashboardWidgets = await db
+        .select()
+        .from(widgets)
+        .where(eq(widgets.dashboardId, dashboardId));
+
+      const frontendWidgets: Widget[] = dashboardWidgets.map((dbWidget: any) => ({
+        id: dbWidget.id,
+        type: dbWidget.type as Widget['type'],
+        layout: dbWidget.layout,
+        config: dbWidget.config,
+        data: dbWidget.data,
+        sql: dbWidget.sql,
+        chatId: dbWidget.chatId,
+        isConfigured: dbWidget.isConfigured,
+        cacheKey: dbWidget.cacheKey,
+        lastDataFetch: dbWidget.lastDataFetch,
+      }));
+
+      console.log(`[API] Fallback - Loaded ${frontendWidgets.length} widgets for dashboard ${dashboardId}`);
+      return NextResponse.json({ widgets: frontendWidgets });
     }
 
-    // Load widgets
-    const dashboardWidgets = await db
-      .select()
-      .from(widgets)
-      .where(eq(widgets.dashboardId, dashboardId));
-
-    // Transform database widgets to frontend Widget format
-    const frontendWidgets: Widget[] = dashboardWidgets.map((dbWidget: any) => ({
-      id: dbWidget.id,
-      type: dbWidget.type as Widget['type'],
-      layout: dbWidget.layout,
-      config: dbWidget.config,
-      data: dbWidget.data,
-      sql: dbWidget.sql,
-      chatId: dbWidget.chatId,
-      isConfigured: dbWidget.isConfigured,
-      cacheKey: dbWidget.cacheKey,
-      lastDataFetch: dbWidget.lastDataFetch,
-    }));
-
-    console.log(`[API] Loaded ${frontendWidgets.length} widgets for dashboard ${dashboardId}`);
-    return NextResponse.json({ widgets: frontendWidgets });
+    return NextResponse.json(cachedWidgets);
   } catch (error) {
     console.error('Error loading widgets:', error);
+    if (error instanceof Error && error.message === 'Dashboard not found') {
+      return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
+    }
     return NextResponse.json(
       { error: 'Failed to load widgets' },
       { status: 500 }
@@ -166,6 +228,14 @@ export async function POST(
 
     // Execute all operations
     await Promise.all(promises);
+
+    // Invalidate cache after successful widget updates
+    try {
+      await dashboardCache.invalidateDashboardWidgets(dashboardId, userId);
+      console.log(`[API] Cache invalidated for dashboard ${dashboardId} widgets`);
+    } catch (cacheError) {
+      console.warn('Failed to invalidate widget cache:', cacheError);
+    }
 
     console.log(`[API] Successfully saved widgets for dashboard ${dashboardId}`);
     return NextResponse.json({ success: true });
