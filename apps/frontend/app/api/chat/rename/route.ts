@@ -3,9 +3,15 @@ import { auth } from '@clerk/nextjs/server';
 import { renameChat } from '@/app/lib/chatActions';
 import { OpenAI } from 'openai';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI client only when needed
+const getOpenAIClient = () => {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OpenAI API key is not configured');
+  }
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,6 +38,7 @@ export async function POST(request: NextRequest) {
 
     // Generate a title based on the first message
     try {
+      const openai = getOpenAIClient();
       const completion = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [

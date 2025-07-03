@@ -15,7 +15,8 @@
       "Bash(rg:*)",
       "Bash(npm run type-check:*)",
       "Bash(true)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm run lint)"
     ],
     "deny": []
   }

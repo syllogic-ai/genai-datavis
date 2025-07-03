@@ -16,6 +16,12 @@ export class CacheWarmer {
 
   // Warm cache for a specific user's dashboard data
   async warmUserCache(userId: string): Promise<void> {
+    // Skip cache warming in development to prevent infinite loops with Fast Refresh
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[CACHE_WARMER] Skipping cache warming in development environment')
+      return
+    }
+
     if (this.isWarmingUp) {
       console.log('[CACHE_WARMER] Already warming up, skipping...')
       return

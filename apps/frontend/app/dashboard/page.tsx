@@ -27,7 +27,8 @@ export default function DashboardPage() {
       // Warm cache in the background for better performance
       warmCache(user.id).catch(console.warn);
     }
-  }, [isLoaded, isSignedIn, user?.id, warmCache]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn, user?.id]); // Removed warmCache from deps to prevent infinite loop
 
   const fetchDashboards = async () => {
     try {

@@ -176,6 +176,7 @@ export function DashboardHeader({
                 setUploadedFiles(prev => [...prev, {
                   id: file.id,
                   originalFilename: file.name,
+                  sanitizedFilename: file.name,
                   storagePath: file.storagePath,
                   fileType: file.type,
                   status: 'ready',

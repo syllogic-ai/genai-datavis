@@ -90,6 +90,7 @@ export function NavMain({
   const [hoveredDashboard, setHoveredDashboard] = useState<string | null>(null);
   const [operationLoading, setOperationLoading] = useState<{ [key: string]: boolean }>({});
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
+  const [renamingDashboard, setRenamingDashboard] = useState<Dashboard | null>(null);
 
   // Memoize the active dashboard ID to prevent unnecessary re-renders
   const activeDashboardId = useMemo(() => {
@@ -217,26 +218,74 @@ export function NavMain({
   }, [onDashboardCreated, router]);
 
   const handleDeleteDashboard = useCallback(async (dashboardId: string) => {
+    console.log(`[NavMain] Starting delete operation for dashboard ${dashboardId}`);
     setOperationLoading(prev => ({ ...prev, [dashboardId]: true }));
+    
+    // Set a timeout to prevent infinite loading states
+    const timeoutId = setTimeout(() => {
+      console.warn(`[NavMain] Delete operation timed out for dashboard ${dashboardId}`);
+      setOperationLoading(prev => ({ ...prev, [dashboardId]: false }));
+      setShowDeleteDialog(null);
+      alert('Delete operation timed out. Please try again.');
+    }, 30000); // 30 second timeout
+    
     try {
+      console.log(`[NavMain] Making DELETE request to /api/dashboards/${dashboardId}`);
+      const controller = new AbortController();
+      const timeoutSignal = setTimeout(() => controller.abort(), 25000); // 25 second request timeout
+      
       const response = await fetch(`/api/dashboards/${dashboardId}`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
       });
       
-      if (response.ok) {
-        // If we're deleting the current dashboard, navigate away
-        if (dashboardId === activeDashboardId) {
-          router.push('/dashboard');
+      clearTimeout(timeoutSignal);
+      console.log(`[NavMain] DELETE response status: ${response.status}`);
+      
+      if (!response.ok) {
+        let errorMessage;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+        } catch (parseError) {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
         }
-        
-        // Update the dashboard list by removing the deleted dashboard
-        setDashboardsWithWidgets(prev => 
-          prev.filter(d => d.id !== dashboardId)
-        );
+        throw new Error(errorMessage);
       }
+      
+      const responseData = await response.json();
+      console.log(`[NavMain] DELETE response data:`, responseData);
+      
+      console.log(`[NavMain] Dashboard ${dashboardId} deleted successfully`);
+      
+      // Update the dashboard list by removing the deleted dashboard
+      setDashboardsWithWidgets(prev => {
+        const updated = prev.filter(d => d.id !== dashboardId);
+        console.log(`[NavMain] Updated dashboard list, new count: ${updated.length}`);
+        return updated;
+      });
+      
+      // If we're deleting the current dashboard, navigate away
+      if (dashboardId === activeDashboardId) {
+        console.log(`[NavMain] Navigating away from deleted dashboard ${dashboardId}`);
+        router.push('/dashboard');
+      }
+      
     } catch (error) {
-      console.error('Error deleting dashboard:', error);
+      console.error('[NavMain] Error deleting dashboard:', error);
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        alert('Delete operation was cancelled due to timeout. Please try again.');
+      } else {
+        // Show user-friendly error message
+        alert(`Failed to delete dashboard: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     } finally {
+      clearTimeout(timeoutId);
+      console.log(`[NavMain] Cleaning up delete operation state for dashboard ${dashboardId}`);
       setOperationLoading(prev => ({ ...prev, [dashboardId]: false }));
       setShowDeleteDialog(null);
     }
@@ -368,19 +417,15 @@ export function NavMain({
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              console.log('[NavMain] Rename button clicked for dashboard:', dashboard.id, dashboard.name);
+                              // Store dashboard info and trigger rename mode
+                              setRenamingDashboard(dashboard);
+                              console.log('[NavMain] Set renamingDashboard state:', dashboard);
                             }}
+                            className="focus:bg-blue-50 focus:text-blue-700"
                           >
-                            <DashboardCreateEditPopover
-                              dashboard={dashboard}
-                              onDashboardUpdated={onDashboardUpdated}
-                              asDropdownItem={true}
-                              trigger={
-                                <div className="flex items-center w-full">
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Rename
-                                </div>
-                              }
-                            />
+                            <Edit className="mr-2 h-4 w-4" />
+                            Rename
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -452,15 +497,22 @@ export function NavMain({
                 <AlertDialogTitle className="text-lg font-semibold">Delete Dashboard</AlertDialogTitle>
               </div>
             </div>
-            <AlertDialogDescription className="mt-4 text-sm text-gray-600">
-              Are you sure you want to delete this dashboard? This action will permanently delete:
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>The dashboard and all its widgets</li>
-                <li>All associated data files</li>
-                <li>Chat history and conversations</li>
-              </ul>
-              <p className="mt-3 font-medium text-red-600">This action cannot be undone.</p>
-            </AlertDialogDescription>
+            <div className="mt-4 space-y-3">
+              <AlertDialogDescription className="text-sm text-gray-600">
+                Are you sure you want to delete this dashboard? This action will permanently delete all associated data and cannot be undone.
+              </AlertDialogDescription>
+              <div className="text-sm text-gray-600">
+                <div className="font-medium text-gray-700 mb-1">This includes:</div>
+                <div className="space-y-1 pl-4">
+                  <div>• The dashboard and all its widgets</div>
+                  <div>• All associated data files</div>
+                  <div>• Chat history and conversations</div>
+                </div>
+              </div>
+              <div className="font-medium text-red-600 text-sm">
+                ⚠️ This action cannot be undone.
+              </div>
+            </div>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel 
@@ -489,6 +541,23 @@ export function NavMain({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Rename Dialog */}
+      {renamingDashboard && (
+        <>
+          {console.log('[NavMain] Rendering rename dialog for dashboard:', renamingDashboard.id)}
+          <DashboardCreateEditPopover
+            dashboard={renamingDashboard}
+            onDashboardUpdated={(updatedDashboard) => {
+              console.log('[NavMain] Dashboard updated:', updatedDashboard);
+              onDashboardUpdated?.(updatedDashboard);
+              setRenamingDashboard(null);
+              console.log('[NavMain] Cleared renamingDashboard state');
+            }}
+            trigger={null}
+          />
+        </>
+      )}
     </SidebarGroup>
   );
 }

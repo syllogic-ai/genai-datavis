@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { updateDashboard, getDashboard } from '@/app/lib/actions';
 import db from '@/db';
-import { dashboards, widgets, chats, files } from '@/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { dashboards, widgets, chats, files, llmUsage } from '@/db/schema';
+import { eq, and, inArray } from 'drizzle-orm';
 import { dashboardCache } from '@/lib/redis';
 
 export async function GET(
@@ -110,7 +110,23 @@ export async function DELETE(
       await tx.delete(widgets)
         .where(eq(widgets.dashboardId, dashboardId));
 
-      // 2. Delete all chats associated with the dashboard
+      // 2. Preserve LLM usage records by nullifying chat references before deleting chats
+      // First get all chat IDs for this dashboard
+      const dashboardChats = await tx.select({ id: chats.id })
+        .from(chats)
+        .where(eq(chats.dashboardId, dashboardId));
+      
+      const chatIds = dashboardChats.map(chat => chat.id);
+      
+      // Update LLM usage records to null the chatId reference (preserve the records)
+      if (chatIds.length > 0) {
+        await tx.update(llmUsage)
+          .set({ chatId: null })
+          .where(inArray(llmUsage.chatId, chatIds));
+        console.log(`[API] Preserved LLM usage records by nullifying chat references for ${chatIds.length} chats`);
+      }
+
+      // Now delete all chats associated with the dashboard
       await tx.delete(chats)
         .where(eq(chats.dashboardId, dashboardId));
 

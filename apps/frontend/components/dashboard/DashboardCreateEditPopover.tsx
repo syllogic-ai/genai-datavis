@@ -9,6 +9,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Form,
   FormControl,
   FormField,
@@ -40,7 +46,13 @@ export function DashboardCreateEditPopover({
   onDashboardUpdated,
   asDropdownItem = false,
 }: DashboardCreateEditPopoverProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(trigger === null); // Auto open if no trigger
+  console.log('[DashboardCreateEditPopover] Component initialized:', { 
+    dashboard: dashboard?.id, 
+    trigger: trigger === null ? 'null' : 'exists', 
+    asDropdownItem, 
+    initialOpen: trigger === null 
+  });
   const [selectedIcon, setSelectedIcon] = useState(dashboard?.icon || "DocumentTextIcon");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -149,6 +161,7 @@ export function DashboardCreateEditPopover({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            console.log('Rename button clicked, opening popover...');
             setOpen(true);
           }}
           className="cursor-pointer"
@@ -156,7 +169,7 @@ export function DashboardCreateEditPopover({
           {trigger}
         </div>
         <Popover open={open} onOpenChange={setOpen}>
-          <PopoverContent className="w-80">
+          <PopoverContent className="w-80" side="right" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
             <div className="grid gap-4">
               <div className="space-y-2">
                 <h4 className="font-medium leading-none">
@@ -241,6 +254,95 @@ export function DashboardCreateEditPopover({
           </PopoverContent>
         </Popover>
       </>
+    );
+  }
+
+  // Handle case where there's no trigger (direct popup) - use Dialog instead of Popover
+  if (trigger === null) {
+    console.log('[DashboardCreateEditPopover] Rendering direct dialog mode, open state:', open);
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {dashboard ? "Edit Dashboard" : "Create New Dashboard"}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="flex items-center gap-4">
+              {/* Icon Picker */}
+              <div className="flex-shrink-0">
+                <IconPickerDialog
+                  selectedIcon={selectedIcon}
+                  onIconChange={handleIconChange}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-12 w-12 rounded-sm"
+                    >
+                      <IconRenderer
+                        icon={selectedIcon}
+                        className="h-8 w-8"
+                      />
+                    </Button>
+                  }
+                />
+              </div>
+              
+              {/* Name Form */}
+              <div className="flex-1">
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
+                    <FormField
+                      control={form.control}
+                      name="name"
+                      rules={{
+                        required: "Dashboard name is required",
+                        minLength: {
+                          value: 1,
+                          message: "Name must be at least 1 character",
+                        },
+                      }}
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormControl>
+                            <Input
+                              placeholder="Dashboard name"
+                              className="h-12"
+                              {...field}
+                              onKeyDown={handleKeyDown}
+                              disabled={isLoading}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </form>
+                </Form>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setOpen(false)}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={form.handleSubmit(onSubmit)}
+                disabled={isLoading}
+              >
+                {isLoading ? "Saving..." : dashboard ? "Update" : "Create"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   }
 
