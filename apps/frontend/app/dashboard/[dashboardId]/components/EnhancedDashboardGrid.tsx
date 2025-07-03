@@ -4,6 +4,8 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { Responsive, WidthProvider, Layout, Layouts } from "react-grid-layout";
 import { motion } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
+import { useResponsiveGrid } from "@/components/dashboard/LayoutContext";
+import { cn } from "@/lib/utils";
 
 // Import required CSS for react-grid-layout
 import "react-grid-layout/css/styles.css";
@@ -24,7 +26,6 @@ interface EnhancedDashboardGridProps {
   widgets: Widget[];
   onUpdateWidgets: (widgets: Widget[]) => void;
   onAddWidget?: (addWidgetFn: (type: string) => void) => void;
-  chatSidebarOpen?: boolean;
 }
 
 const defaultLayouts = {
@@ -63,7 +64,6 @@ export function EnhancedDashboardGrid({
   widgets, 
   onUpdateWidgets,
   onAddWidget,
-  chatSidebarOpen = false,
 }: EnhancedDashboardGridProps) {
   const [hoveredItems, setHoveredItems] = useState<Record<string, boolean>>({});
   const [activePopup, setActivePopup] = useState<{
@@ -81,17 +81,34 @@ export function EnhancedDashboardGrid({
   const [isDragging, setIsDragging] = useState(false);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Force grid recalculation when chat sidebar state changes
+  // Use responsive grid hook instead of manual chat sidebar tracking
+  const { gridProps, isTransitioning, effectiveBreakpoint, availableWidth } = useResponsiveGrid();
+  
+  // Update grid when layout changes
   useEffect(() => {
-    // Small delay to ensure the parent container has adjusted its width
+    if (isTransitioning) {
+      // Add transitioning class for smooth animations
+      const gridElement = document.querySelector('.react-grid-layout');
+      if (gridElement) {
+        gridElement.classList.add('layout-transitioning');
+        
+        // Remove class after transition
+        setTimeout(() => {
+          gridElement.classList.remove('layout-transitioning');
+        }, 350);
+      }
+    }
+  }, [isTransitioning]);
+  
+  // Force grid recalculation when layout context changes
+  useEffect(() => {
     const timeoutId = setTimeout(() => {
-      // Trigger a window resize event to force react-grid-layout to recalculate
       window.dispatchEvent(new Event('resize'));
     }, 100);
     
     return () => clearTimeout(timeoutId);
-  }, [chatSidebarOpen]);
-  
+  }, [availableWidth, effectiveBreakpoint]);
+
   const calculateGridHeight = useCallback((layouts: Layout[]) => {
     if (layouts.length === 0) return 400; // Minimum height when empty
     
@@ -109,7 +126,7 @@ export function EnhancedDashboardGrid({
 
   const currentLayouts = useMemo(() => {
     const layouts: Layouts = {};
-    Object.keys(GRID_PROPS.cols).forEach(breakpoint => {
+    Object.keys(gridProps.cols).forEach(breakpoint => {
       layouts[breakpoint] = widgets.map(widget => {
         const layout = { ...widget.layout };
         
@@ -130,20 +147,21 @@ export function EnhancedDashboardGrid({
           else if (layout.w === 8 && layout.h === 4) widgetSize = "chart-xl";
         }
         
-        // Get responsive dimensions for this breakpoint
+        // Get responsive dimensions for this breakpoint using grid props
         const responsiveDimensions = getResponsiveDimensions(widgetSize, breakpoint);
         
-        // Apply responsive sizing
-        layout.w = responsiveDimensions.w;
+        // Apply responsive sizing with bounds checking
+        const colsForBreakpoint = gridProps.cols[breakpoint as keyof typeof gridProps.cols];
+        layout.w = Math.min(responsiveDimensions.w, colsForBreakpoint);
         layout.h = responsiveDimensions.h;
         
-        // For text widgets, always start at x=0 and use full width
+        // For text widgets, always use full width for the breakpoint
         if (widget.type === 'text') {
           layout.x = 0;
+          layout.w = colsForBreakpoint;
         }
         
         // Ensure the widget doesn't exceed column boundaries
-        const colsForBreakpoint = GRID_PROPS.cols[breakpoint as keyof typeof GRID_PROPS.cols];
         if (layout.x + layout.w > colsForBreakpoint) {
           layout.x = Math.max(0, colsForBreakpoint - layout.w);
         }
@@ -152,7 +170,7 @@ export function EnhancedDashboardGrid({
       });
     });
     return layouts;
-  }, [widgets]);
+  }, [widgets, gridProps.cols]);
 
   const findNextAvailablePosition = useCallback((newWidget: { w: number; h: number }, widgetType: string) => {
     const existingLayouts = widgets.map(w => ({ 
@@ -162,8 +180,10 @@ export function EnhancedDashboardGrid({
       h: w.type === 'text' && w.layout.h === 0 ? 1 : w.layout.h 
     }));
     
-    return findAvailablePosition(existingLayouts, newWidget, GRID_PROPS.cols.lg);
-  }, [widgets]);
+    // Use current effective grid columns
+    const currentCols = gridProps.cols.lg || 12;
+    return findAvailablePosition(existingLayouts, newWidget, currentCols);
+  }, [widgets, gridProps.cols.lg]);
 
   const handleAddWidget = useCallback((type: string) => {
     console.log(`[EnhancedDashboardGrid] handleAddWidget called:`, {
@@ -384,14 +404,21 @@ export function EnhancedDashboardGrid({
 
   return (
     <>
-      <div className="w-full p-4 pl-12" style={{ minHeight: gridHeight }}>
+      <div 
+        className="w-full p-4 pl-12 transition-all duration-300 ease-out" 
+        style={{ 
+          minHeight: gridHeight,
+          width: gridProps.width,
+          maxWidth: '100%'
+        }}
+      >
         {widgets.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-center justify-center h-96 "
+            className="flex items-center justify-center h-96"
           >
-            <div className="w-full max-w-2xl mx-auto ">
+            <div className="w-full max-w-2xl mx-auto">
               <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center bg-gray-50/50 dark:bg-gray-800/50">
                 <div className="text-4xl mb-4 text-gray-400">📊</div>
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -408,11 +435,18 @@ export function EnhancedDashboardGrid({
 
         {widgets.length > 0 && (
           <ResponsiveGridLayout
-            key={`grid-${chatSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}
-            {...GRID_PROPS}
+            key={`grid-${effectiveBreakpoint}-${availableWidth}`}
+            className={cn(
+              "layout transition-all duration-300 ease-out",
+              isTransitioning && "layout-transitioning"
+            )}
             layouts={currentLayouts}
-            breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}
-            cols={GRID_PROPS.cols}
+            breakpoints={gridProps.breakpoints}
+            cols={gridProps.cols}
+            rowHeight={gridProps.rowHeight}
+            margin={gridProps.margin}
+            containerPadding={gridProps.containerPadding}
+            width={gridProps.width}
             onLayoutChange={handleLayoutChange}
             onDragStart={handleDragStart}
             onDragStop={handleDragStop}

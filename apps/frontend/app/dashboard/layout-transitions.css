@@ -1,0 +1,207 @@
+/* Dashboard Layout Transitions */
+:root {
+  --layout-transition-duration: 300ms;
+  --layout-transition-easing: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --sidebar-main-width: 280px;
+  --sidebar-chat-width: 400px;
+}
+
+/* Main layout container transitions */
+.dashboard-layout-container {
+  transition: width var(--layout-transition-duration) var(--layout-transition-easing),
+              margin var(--layout-transition-duration) var(--layout-transition-easing),
+              transform var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Grid layout transitions */
+.react-grid-layout {
+  transition: width var(--layout-transition-duration) var(--layout-transition-easing),
+              height var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Individual grid item transitions */
+.react-grid-item {
+  transition: transform var(--layout-transition-duration) var(--layout-transition-easing) !important,
+              width var(--layout-transition-duration) var(--layout-transition-easing) !important,
+              height var(--layout-transition-duration) var(--layout-transition-easing) !important;
+}
+
+/* Grid item during layout transitions */
+.layout-transitioning .react-grid-item {
+  transition: all var(--layout-transition-duration) var(--layout-transition-easing) !important;
+}
+
+/* Placeholder transitions */
+.react-grid-item.react-grid-placeholder {
+  transition: all var(--layout-transition-duration) var(--layout-transition-easing) !important;
+  background: rgba(0, 0, 0, 0.1) !important;
+  border: 2px dashed rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
+}
+
+/* Dark mode placeholder */
+.dark .react-grid-item.react-grid-placeholder {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Resize handle transitions */
+.react-grid-item > .react-resizable-handle {
+  transition: all var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Sidebar transitions */
+.sidebar-container {
+  transition: width var(--layout-transition-duration) var(--layout-transition-easing),
+              opacity var(--layout-transition-duration) var(--layout-transition-easing),
+              transform var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Chat sidebar specific transitions */
+.chat-sidebar {
+  transition: width var(--layout-transition-duration) var(--layout-transition-easing),
+              opacity var(--layout-transition-duration) var(--layout-transition-easing),
+              transform var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Mobile overlay transitions */
+.mobile-chat-overlay {
+  transition: transform var(--layout-transition-duration) var(--layout-transition-easing),
+              opacity var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Widget content transitions during layout changes */
+.widget-content {
+  transition: opacity calc(var(--layout-transition-duration) * 0.8) var(--layout-transition-easing),
+              transform calc(var(--layout-transition-duration) * 0.8) var(--layout-transition-easing);
+}
+
+/* Prevent flicker during transitions */
+.layout-transitioning .widget-content {
+  opacity: 0.95;
+  transform: scale(0.995);
+}
+
+/* Resizable panel transitions */
+.resize-panel-group {
+  transition: all var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+.resize-panel {
+  transition: flex var(--layout-transition-duration) var(--layout-transition-easing),
+              width var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+.resize-handle {
+  transition: background-color calc(var(--layout-transition-duration) * 0.5) var(--layout-transition-easing),
+              opacity calc(var(--layout-transition-duration) * 0.5) var(--layout-transition-easing);
+}
+
+/* Responsive breakpoint transitions */
+@media (max-width: 768px) {
+  :root {
+    --layout-transition-duration: 250ms; /* Slightly faster on mobile */
+  }
+  
+  .react-grid-item {
+    transition-duration: 250ms !important;
+  }
+}
+
+/* High motion preference */
+@media (prefers-reduced-motion: no-preference) {
+  .enhanced-transitions .react-grid-item {
+    transition: transform var(--layout-transition-duration) var(--layout-transition-easing),
+                width var(--layout-transition-duration) var(--layout-transition-easing),
+                height var(--layout-transition-duration) var(--layout-transition-easing),
+                opacity calc(var(--layout-transition-duration) * 0.7) var(--layout-transition-easing),
+                box-shadow calc(var(--layout-transition-duration) * 0.5) var(--layout-transition-easing) !important;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --layout-transition-duration: 0ms;
+  }
+  
+  .react-grid-item,
+  .react-grid-layout,
+  .sidebar-container,
+  .chat-sidebar,
+  .dashboard-layout-container {
+    transition: none !important;
+  }
+}
+
+/* Widget hover effects during transitions */
+.react-grid-item:hover {
+  z-index: 10;
+}
+
+.layout-transitioning .react-grid-item:hover {
+  transform: scale(1.002) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.dark .layout-transitioning .react-grid-item:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Loading state transitions */
+.dashboard-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.dashboard-loading .react-grid-item {
+  transform: scale(0.99);
+  opacity: 0.8;
+}
+
+/* Sidebar width states for JavaScript integration */
+.sidebar-state-closed {
+  --effective-sidebar-width: 0px;
+}
+
+.sidebar-state-main-open {
+  --effective-sidebar-width: var(--sidebar-main-width);
+}
+
+.sidebar-state-chat-open {
+  --effective-sidebar-width: var(--sidebar-chat-width);
+}
+
+.sidebar-state-both-open {
+  --effective-sidebar-width: calc(var(--sidebar-main-width) + var(--sidebar-chat-width));
+}
+
+/* Grid column adaptation classes */
+.grid-cols-1 { --grid-columns: 1; }
+.grid-cols-2 { --grid-columns: 2; }
+.grid-cols-4 { --grid-columns: 4; }
+.grid-cols-8 { --grid-columns: 8; }
+.grid-cols-12 { --grid-columns: 12; }
+
+/* Smooth layout recovery animations */
+.layout-recovery .react-grid-item {
+  transition: all calc(var(--layout-transition-duration) * 1.2) var(--layout-transition-easing) !important;
+}
+
+/* Performance optimizations */
+.react-grid-layout,
+.react-grid-item {
+  will-change: transform, width, height;
+}
+
+.layout-transitioning .react-grid-layout,
+.layout-transitioning .react-grid-item {
+  will-change: auto;
+}
+
+/* Focus and accessibility during transitions */
+.layout-transitioning *:focus {
+  outline: 2px solid var(--focus-color, #007acc);
+  outline-offset: 2px;
+  z-index: 1000;
+}
