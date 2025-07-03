@@ -14,8 +14,17 @@ export const sizeToGridMap = {
   "text-s": { w: 12, h: 2 },    // 12×2
 };
 
-// Responsive size mappings for different breakpoints
+// Enhanced responsive size mappings with sidebar awareness
 export const responsiveSizeMap = {
+  xl: { // ≥1536px - 12 columns
+    "chart-s": { w: 4, h: 2 },
+    "chart-m": { w: 4, h: 4 },
+    "chart-l": { w: 6, h: 4 },
+    "chart-xl": { w: 8, h: 4 },
+    "kpi": { w: 4, h: 2 },
+    "text-xs": { w: 12, h: 1 },
+    "text-s": { w: 12, h: 2 }
+  },
   lg: { // ≥1200px - 12 columns
     "chart-s": { w: 4, h: 2 },
     "chart-m": { w: 4, h: 4 },
@@ -25,11 +34,11 @@ export const responsiveSizeMap = {
     "text-xs": { w: 12, h: 1 },
     "text-s": { w: 12, h: 2 }
   },
-  md: { // ≥996px - 8 columns
+  md: { // ≥996px - 8 columns (or less if sidebar constraints)
     "chart-s": { w: 4, h: 2 },
     "chart-m": { w: 4, h: 4 },
     "chart-l": { w: 4, h: 4 }, // Reduced from 6 to 4
-    "chart-xl": { w: 8, h: 4 },
+    "chart-xl": { w: 6, h: 4 }, // Reduced from 8 to 6
     "kpi": { w: 4, h: 2 },
     "text-xs": { w: 8, h: 1 },
     "text-s": { w: 8, h: 2 }
@@ -105,25 +114,82 @@ export function getDimensionsFromSize(size: string): { w: number; h: number } {
   return sizeToGridMap[size as keyof typeof sizeToGridMap] || sizeToGridMap["chart-s"];
 }
 
-// Get responsive dimensions for a size at a specific breakpoint
-export function getResponsiveDimensions(size: string, breakpoint: string): { w: number; h: number } {
+// Enhanced responsive dimensions with constrained column support
+export function getResponsiveDimensions(size: string, breakpoint: string, maxCols?: number): { w: number; h: number } {
   const breakpointMap = responsiveSizeMap[breakpoint as keyof typeof responsiveSizeMap];
   if (!breakpointMap) {
     return getDimensionsFromSize(size);
   }
   
-  return breakpointMap[size as keyof typeof breakpointMap] || breakpointMap["chart-s"];
-}
-
-// Convert widget size to work with current breakpoint
-export function adaptSizeToBreakpoint(size: string, breakpoint: string, widgetType: string): string {
-  // Text widgets always span full width at their breakpoint
-  if (widgetType === 'text') {
-    return size; // Text widgets handle their own responsive behavior
+  const dimensions = breakpointMap[size as keyof typeof breakpointMap] || breakpointMap["chart-s"];
+  
+  // Apply column constraints if provided
+  if (maxCols && dimensions.w > maxCols) {
+    return {
+      w: maxCols,
+      h: dimensions.h
+    };
   }
   
-  // For other widgets, return the size as-is (dimensions will be calculated responsively)
-  return size;
+  return dimensions;
+}
+
+// Get optimal widget size for available space
+export function getOptimalWidgetSize(
+  widgetType: string, 
+  availableColumns: number, 
+  breakpoint: string
+): string {
+  const sizes = ['chart-s', 'chart-m', 'chart-l', 'chart-xl'];
+  
+  if (widgetType === 'text') {
+    return availableColumns >= 8 ? 'text-s' : 'text-xs';
+  }
+  
+  if (widgetType === 'kpi') {
+    return 'kpi';
+  }
+  
+  // Find the largest size that fits
+  for (const size of sizes.reverse()) {
+    const dimensions = getResponsiveDimensions(size, breakpoint, availableColumns);
+    if (dimensions.w <= availableColumns) {
+      return size;
+    }
+  }
+  
+  return 'chart-s'; // Fallback
+}
+
+// Calculate sidebar-aware breakpoint
+export function getSidebarAwareBreakpoint(
+  windowWidth: number,
+  mainSidebarOpen: boolean,
+  chatSidebarOpen: boolean
+): string {
+  let availableWidth = windowWidth;
+  if (mainSidebarOpen) availableWidth -= 280;
+  if (chatSidebarOpen) availableWidth -= 400;
+  
+  if (availableWidth >= 1536) return 'xl';
+  if (availableWidth >= 1200) return 'lg';
+  if (availableWidth >= 1024) return 'md';
+  if (availableWidth >= 768) return 'sm';
+  if (availableWidth >= 480) return 'xs';
+  return 'xxs';
+}
+
+// Adaptive grid column calculation
+export function getAdaptiveGridColumns(
+  availableWidth: number,
+  baseColumns: number = 12
+): number {
+  const minWidgetWidth = 300; // Minimum widget width in pixels
+  const margin = 32; // Grid margins and padding
+  const effectiveWidth = availableWidth - margin;
+  
+  const maxFittingColumns = Math.floor(effectiveWidth / minWidgetWidth);
+  return Math.min(baseColumns, Math.max(1, maxFittingColumns));
 }
 
 // Check if two widgets would collide
@@ -139,14 +205,15 @@ export function wouldCollide(
   );
 }
 
-// Find next available position for a widget
+// Enhanced position finding with layout recovery
 export function findAvailablePosition(
   existingWidgets: Array<{ x: number; y: number; w: number; h: number }>,
   newWidget: { w: number; h: number },
-  gridCols: number = 12
+  gridCols: number = 12,
+  startY: number = 0
 ): { x: number; y: number } {
-  // Try to find an empty spot
-  for (let y = 0; y < 20; y++) {
+  // Try to find an empty spot starting from the specified Y position
+  for (let y = startY; y < startY + 20; y++) {
     for (let x = 0; x <= gridCols - newWidget.w; x++) {
       const testPosition = { x, y, ...newWidget };
       
@@ -163,6 +230,51 @@ export function findAvailablePosition(
   // If no empty spot found, place at bottom
   const maxY = existingWidgets.length > 0 
     ? Math.max(...existingWidgets.map(w => w.y + w.h))
-    : 0;
+    : startY;
   return { x: 0, y: maxY };
+}
+
+// Layout recovery function for sidebar state changes
+export function recoverLayoutPositions(
+  widgets: Array<{ x: number; y: number; w: number; h: number; id: string }>,
+  newGridCols: number,
+  oldGridCols: number
+): Array<{ x: number; y: number; w: number; h: number; id: string }> {
+  if (newGridCols === oldGridCols) return widgets;
+  
+  const recoveredWidgets = [...widgets];
+  const scale = newGridCols / oldGridCols;
+  
+  // Sort by Y position to maintain vertical order
+  recoveredWidgets.sort((a, b) => a.y - b.y);
+  
+  const adjustedWidgets: typeof recoveredWidgets = [];
+  
+  for (const widget of recoveredWidgets) {
+    // Scale position and size
+    let newX = Math.round(widget.x * scale);
+    let newW = Math.min(Math.max(1, Math.round(widget.w * scale)), newGridCols);
+    
+    // Ensure widget fits within new grid
+    if (newX + newW > newGridCols) {
+      newX = Math.max(0, newGridCols - newW);
+    }
+    
+    // Find available position to avoid collisions
+    const position = findAvailablePosition(
+      adjustedWidgets,
+      { w: newW, h: widget.h },
+      newGridCols,
+      widget.y
+    );
+    
+    adjustedWidgets.push({
+      ...widget,
+      x: position.x,
+      y: position.y,
+      w: newW
+    });
+  }
+  
+  return adjustedWidgets;
 }

@@ -22,6 +22,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import db from "@/db";
 import { eq } from "drizzle-orm";
 import { DashboardProvider } from "@/components/dashboard/DashboardUserContext";
+import { LayoutProvider } from "@/components/dashboard/LayoutContext";
 
 export default async function DashboardLayout({
   children,
@@ -52,18 +53,20 @@ export default async function DashboardLayout({
   
   return (
     <DashboardProvider initialDashboards={dashboards}>
-      <TooltipProvider delayDuration={0}>
-        <SidebarProvider className="">
-          <AppSidebar variant="inset" />
-          <SidebarInset>
-            <div className="flex flex-1 flex-col relative">
-              <div className="@container/main flex flex-1 flex-col gap-2">
-               {children}
+      <LayoutProvider>
+        <TooltipProvider delayDuration={0}>
+          <SidebarProvider className="">
+            <AppSidebar />
+            <SidebarInset>
+              <div className="flex flex-1 flex-col relative">
+                <div className="@container/main flex flex-1 flex-col gap-2">
+                 {children}
+                </div>
               </div>
-            </div>
-          </SidebarInset>
-        </SidebarProvider>
-      </TooltipProvider>
+            </SidebarInset>
+          </SidebarProvider>
+        </TooltipProvider>
+      </LayoutProvider>
     </DashboardProvider>
   );
 } 
