@@ -2,7 +2,7 @@
 
 import db from '@/db';
 import { files, chats, dashboards, widgets } from '../../db/schema'; // Import Drizzle schemas
-import { eq, and, desc } from 'drizzle-orm'; // Import eq, and, and desc operators
+import { eq, and, desc, isNull } from 'drizzle-orm'; // Import eq, and, desc, and isNull operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
 import { createClient } from '@supabase/supabase-js';
 
@@ -16,15 +16,48 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 import { ChatMessage, normalizeMessages } from './types';
+import { generateSanitizedFilename } from './utils';
+
+// Utility function to migrate existing files to use sanitized filenames
+export async function migrateExistingFiles(userId?: string) {
+  try {
+    // Get all files that don't have sanitized filenames
+    const filesToMigrate = userId 
+      ? await db.select().from(files).where(and(isNull(files.sanitizedFilename), eq(files.userId, userId)))
+      : await db.select().from(files).where(isNull(files.sanitizedFilename));
+
+    console.log(`Found ${filesToMigrate.length} files to migrate`);
+
+    for (const file of filesToMigrate) {
+      if (file.originalFilename) {
+        const sanitizedFilename = generateSanitizedFilename(file.originalFilename);
+        
+        // Update the database record
+        await db.update(files)
+          .set({ sanitizedFilename: sanitizedFilename })
+          .where(eq(files.id, file.id));
+        
+        console.log(`Migrated file ${file.id}: ${file.originalFilename} -> ${sanitizedFilename}`);
+      }
+    }
+
+    console.log('Migration completed successfully');
+    return filesToMigrate.length;
+  } catch (error) {
+    console.error('Error migrating existing files:', error);
+    throw error;
+  }
+}
 
 // Create a new file in the database using Drizzle
-export async function createFile(fileId: string, fileType: string, originalFilename: string, storagePath: string, userId: string) {
+export async function createFile(fileId: string, fileType: string, originalFilename: string, sanitizedFilename: string | null, storagePath: string, userId: string) {
   try {
     const result = await db.insert(files).values({
       id: fileId,
       userId: userId,
       fileType: fileType,
       originalFilename: originalFilename,
+      sanitizedFilename: sanitizedFilename,
       storagePath: storagePath,
       status: 'pending', // Assuming 'pending' is the desired initial status based on original code
     }).returning(); // Optional: return the inserted record
@@ -588,6 +621,21 @@ export async function getDashboardFiles(dashboardId: string, userId: string) {
         eq(files.userId, userId)
       ))
       .orderBy(desc(files.createdAt));
+    
+    // Auto-migrate files that don't have sanitized filenames
+    const filesToMigrate = fileResult.filter(file => !file.sanitizedFilename);
+    if (filesToMigrate.length > 0) {
+      console.log(`Auto-migrating ${filesToMigrate.length} files in dashboard ${dashboardId}`);
+      for (const file of filesToMigrate) {
+        if (file.originalFilename) {
+          const sanitizedFilename = generateSanitizedFilename(file.originalFilename);
+          await db.update(files)
+            .set({ sanitizedFilename: sanitizedFilename })
+            .where(eq(files.id, file.id));
+          file.sanitizedFilename = sanitizedFilename;
+        }
+      }
+    }
       
     return fileResult;
   } catch (error) {

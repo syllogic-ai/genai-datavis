@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { createFile, updateDashboardFile, getDashboardFiles } from '@/app/lib/actions';
+import { generateSanitizedFilename } from '@/app/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(
@@ -25,12 +26,14 @@ export async function POST(
     }
 
     const fileId = uuidv4();
+    const sanitizedFilename = generateSanitizedFilename(fileName);
 
     // Create file record in database
     const fileRecord = await createFile(
       fileId,
       fileType,
       fileName,
+      sanitizedFilename,
       storagePath,
       userId
     );

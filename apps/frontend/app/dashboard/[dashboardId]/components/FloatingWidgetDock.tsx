@@ -13,9 +13,10 @@ interface FloatingWidgetDockProps {
   onAddWidget: (type: string) => void;
   onOpenChatSidebar: () => void;
   fileName: string;
+  chatSidebarOpen?: boolean;
 }
 
-export function FloatingWidgetDock({ onAddWidget, onOpenChatSidebar, fileName }: FloatingWidgetDockProps) {
+export function FloatingWidgetDock({ onAddWidget, onOpenChatSidebar, fileName, chatSidebarOpen = false }: FloatingWidgetDockProps) {
 
   const widgetItems: WidgetTypeConfig[] = [
     {
@@ -81,7 +82,13 @@ export function FloatingWidgetDock({ onAddWidget, onOpenChatSidebar, fileName }:
   }));
 
   return (
-    <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+    <div 
+      className="absolute bottom-6 z-50 transition-all duration-300"
+      style={{
+        left: chatSidebarOpen ? 'calc(50% - 200px)' : '50%',
+        transform: 'translateX(-50%)'
+      }}
+    >
       <FloatingDock items={dockItems} />
     </div>
   );

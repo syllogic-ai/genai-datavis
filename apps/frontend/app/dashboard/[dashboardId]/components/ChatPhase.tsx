@@ -1,14 +1,15 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { FileRecord } from "../hooks/useSetupState";
 import { ChatInput } from "@/components/dashboard/ChatInput";
-
+import { useDashboardChat } from "../hooks/useDashboardChat";
+import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 
 interface ChatPhaseProps {
   dashboardId: string;
@@ -20,30 +21,294 @@ interface ChatPhaseProps {
 export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPhaseProps) {
   const [hasTyped, setHasTyped] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState<'idle' | 'submitting' | 'processing' | 'completed'>('idle');
+  const [processingMessage, setProcessingMessage] = useState('');
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
+  const [completionTimer, setCompletionTimer] = useState<NodeJS.Timeout | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastSubmittedData, setLastSubmittedData] = useState<any>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  
+  // Get or create chat for this dashboard
+  const { chatId, isLoading: isChatLoading } = useDashboardChat(dashboardId);
+  
+  // Subscribe to real-time chat updates to detect completion
+  const { conversation, isLoading: isConversationLoading } = useChatRealtime(
+    chatId || '',
+    {
+      onUpdate: (messages) => {
+        console.log('Chat messages updated:', messages.length, 'processing status:', processingStatus);
+        
+        // Only check for completion if we're currently processing
+        if (processingStatus === 'processing' && pendingTaskId) {
+          // Look for system messages that indicate completion
+          const completionMessages = messages.filter(msg => 
+            msg.role === 'system' &&
+            msg.timestamp && // Ensure it's a recent message
+            (msg.chart_id || msg.widget_ids) // Has associated widgets
+          );
+          
+          // Also check for recent system messages with completion indicators in content
+          const recentMessages = messages.filter(msg => 
+            msg.role === 'system' &&
+            msg.timestamp &&
+            new Date(msg.timestamp).getTime() > Date.now() - 300000 // Within last 5 minutes
+          );
+          
+          const hasCompletionMessage = completionMessages.length > 0;
+          const hasRecentResponse = recentMessages.length > 0;
+          
+          if (hasCompletionMessage || hasRecentResponse) {
+            const relevantMessage = completionMessages[0] || recentMessages[recentMessages.length - 1];
+            
+            // Check if the message content suggests completion (ChatMessage uses 'content' property)
+            const messageContent = (relevantMessage as any).content?.toLowerCase() || '';
+            const indicatesCompletion = (
+              hasCompletionMessage || // Has widget IDs, definitely completed
+              messageContent.includes('widget') ||
+              messageContent.includes('chart') ||
+              messageContent.includes('visualization') ||
+              messageContent.includes('dashboard') ||
+              messageContent.includes('analysis') ||
+              messageContent.includes('created') ||
+              messageContent.includes('generated') ||
+              messageContent.includes('complete')
+            );
+            
+            if (indicatesCompletion) {
+              console.log('AI processing completed, transitioning to dashboard. Message:', relevantMessage);
+              setProcessingStatus('completed');
+              setProcessingMessage('Dashboard ready!');
+              setPendingTaskId(null);
+              setErrorMessage(null); // Clear any existing errors
+              
+              // Clear any existing timer
+              if (completionTimer) {
+                clearTimeout(completionTimer);
+                setCompletionTimer(null);
+              }
+              
+              // Small delay to show completion message, then transition
+              const timer = setTimeout(() => {
+                onFirstMessage();
+              }, 1500);
+              setCompletionTimer(timer);
+            }
+          }
+        }
+      }
+    }
+  );
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (completionTimer) {
+        clearTimeout(completionTimer);
+      }
+    };
+  }, [completionTimer]);
+  
+  // Add fallback timeout for completion detection
+  useEffect(() => {
+    if (processingStatus === 'processing' && pendingTaskId) {
+      // Set a fallback timeout (60 seconds) in case real-time detection fails
+      const fallbackTimer = setTimeout(() => {
+        console.log('Fallback timeout reached, checking for completion');
+        // Check if we have any system messages (completion indicators)
+        if (conversation.some(msg => msg.role === 'system')) {
+          setProcessingStatus('completed');
+          setProcessingMessage('Dashboard ready!');
+          setPendingTaskId(null);
+          
+          setTimeout(() => {
+            onFirstMessage();
+          }, 1500);
+        } else {
+          // If no response after timeout, show error
+          setProcessingStatus('idle');
+          setProcessingMessage('');
+          setPendingTaskId(null);
+          setErrorMessage('Processing is taking longer than expected. The AI might be experiencing high load.');
+          
+          // Clear error after 15 seconds
+          setTimeout(() => {
+            setErrorMessage(null);
+          }, 15000);
+        }
+      }, 60000); // 60 second fallback
+      
+      return () => clearTimeout(fallbackTimer);
+    }
+  }, [processingStatus, pendingTaskId, conversation, onFirstMessage]);
 
   const handleSubmit = async (data: {
     selectedItems: any[];
     message: string;
     widgetType: string;
   }) => {
-    if (!data.message.trim() || isSubmitting) return;
+    if (!data.message.trim() || isSubmitting || !chatId) return;
+    
+    // Store data for potential retry
+    setLastSubmittedData(data);
 
     setIsSubmitting(true);
     setHasTyped(true);
+    setProcessingStatus('submitting');
+    setProcessingMessage('Sending your request...');
     
     try {
-      // For the progressive flow, we'll simulate processing the message
-      // In a real implementation, this would call the analyze API
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
+      // Real API call to analyze endpoint
+      const analyzeRequest = {
+        message: data.message,
+        dashboardId,
+        contextWidgetIds: data.selectedItems?.length ? data.selectedItems.map(item => item.id) : undefined,
+        targetWidgetType: data.widgetType || undefined,
+        chatId
+      };
+
+      console.log('Sending analyze request:', analyzeRequest);
+
+      const response = await fetch('/api/chat/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(analyzeRequest),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+        
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: `HTTP ${response.status}: ${errorText}` };
+        }
+        
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Analyze response:', result);
       
-      // Mark as having sent first message to transition to full dashboard
-      onFirstMessage();
+      if (result.success) {
+        console.log(`Message sent successfully. Task ID: ${result.taskId}`);
+        
+        // Move to processing state - we'll wait for real-time updates to detect completion
+        setProcessingStatus('processing');
+        setProcessingMessage('Creating your dashboard...');
+        
+        // Store the task ID for tracking
+        setPendingTaskId(result.taskId || result.requestId);
+        
+      } else {
+        throw new Error(result.error || 'Unknown error occurred');
+      }
+      
     } catch (error) {
-      console.error('Error processing message:', error);
+      console.error("Failed to analyze message:", error);
+      setProcessingStatus('idle');
+      setProcessingMessage('');
+      setPendingTaskId(null);
+      
+      // Set user-friendly error message with retry option
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error occurred';
+      setErrorMessage(`Failed to process your request: ${errorMsg}`);
+      setRetryCount(prev => prev + 1);
+      
+      // Clear error after 15 seconds
+      setTimeout(() => {
+        setErrorMessage(null);
+      }, 15000);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Show loading state while chat is being set up
+  if (isChatLoading || isConversationLoading) {
+    return (
+      <div className="min-h-[calc(100vh-1rem)] flex items-center justify-center p-6 bg-transparent">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <div className="w-12 h-12 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
+          </div>
+          <h3 className="text-lg font-medium text-foreground mb-2">Setting up your workspace</h3>
+          <p className="text-sm text-muted-foreground">Preparing the chat interface...</p>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Show processing state
+  if (processingStatus === 'processing' || processingStatus === 'completed') {
+    return (
+      <div className="min-h-[calc(100vh-1rem)] flex items-center justify-center p-6 bg-transparent">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center"
+          >
+            {processingStatus === 'completed' ? (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center"
+              >
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </motion.div>
+            ) : (
+              <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+            )}
+          </motion.div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            {processingStatus === 'completed' ? 'Dashboard Ready!' : 'Creating Dashboard...'}
+          </h2>
+          <p className="text-muted-foreground mb-4">
+            {processingMessage}
+          </p>
+          {processingStatus === 'processing' && (
+            <div className="text-center">
+              <p className="text-sm text-muted-foreground mb-3">
+                This may take a few moments while we analyze your data and create visualizations.
+              </p>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <span>Analyzing data patterns</span>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-1 opacity-70">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '0.5s'}} />
+                <span>Generating SQL queries</span>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-1 opacity-50">
+                <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" style={{animationDelay: '1s'}} />
+                <span>Creating visualizations</span>
+              </div>
+            </div>
+          )}
+          {processingStatus === 'completed' && (
+            <p className="text-sm text-green-600 mt-2">
+              ✓ Analysis complete! Redirecting to your dashboard...
+            </p>
+          )}
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-1rem)] flex items-center justify-center p-6 bg-transparent">
@@ -98,55 +363,64 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
           transition={{ delay: 0.4 }}
           className="relative bg-sidebar w-fit rounded-2xl"
         >
-          {/* <form onSubmit={handleSubmit} className="bg-card rounded-2xl shadow-sm p-8 border">
-            <div className="space-y-4">
-              <Textarea
-                value={message}
-                onChange={(e) => {
-                  setMessage(e.target.value);
-                  if (!hasTyped && e.target.value.length > 0) {
-                    setHasTyped(true);
-                  }
-                }}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask me anything about your data..."
-                className="border-none shadow-none bg-transparent text-lg placeholder:text-gray-400 resize-none min-h-[120px] focus:ring-0"
-                autoFocus
-                disabled={isSubmitting}
-              />
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={!message.trim() || isSubmitting}
-                  size="lg"
-                  className="px-8 py-3 text-base font-medium"
-                >
-                  {isSubmitting ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                      Analyzing...
-                    </div>
-                  ) : (
-                    'Send Message'
-                  )}
-                </Button>
-              </div>
-            </div>
-          </form> */}
-
           <ChatInput 
             availableItems={[]}
             onSubmit={handleSubmit}
             messagePlaceholder="Ask me anything about your data..."
             className="border-none shadow-none bg-transparent text-lg placeholder:text-gray-400 resize-none min-h-[120px] focus:ring-0"
-            isLoading={isSubmitting}
-            isDisabled={isSubmitting}
+            isLoading={isSubmitting || processingStatus === 'submitting'}
+            isDisabled={isSubmitting || processingStatus === 'submitting'}
             showTagSelector={false}
             showWidgetDropdown={false}
           />
 
+          {/* Status indicator */}
+          {processingStatus === 'submitting' && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute -bottom-16 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-md px-4 py-2 border"
+            >
+              <div className="flex items-center gap-2 text-blue-600 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>{processingMessage}</span>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Error Message with Retry */}
+          {errorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute -bottom-24 left-1/2 transform -translate-x-1/2 max-w-md"
+            >
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-center">
+                <p className="text-red-700 text-sm mb-2">{errorMessage}</p>
+                {lastSubmittedData && retryCount < 3 && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      handleSubmit(lastSubmittedData);
+                    }}
+                    className="text-xs border-red-300 text-red-700 hover:bg-red-100"
+                  >
+                    Try Again
+                  </Button>
+                )}
+                {retryCount >= 3 && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Multiple attempts failed. Please refresh the page or contact support.
+                  </p>
+                )}
+              </div>
+            </motion.div>
+          )}
+          
           {/* Subtle animation hint */}
-          {!hasTyped && (
+          {!hasTyped && processingStatus === 'idle' && !errorMessage && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

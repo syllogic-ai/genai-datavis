@@ -13,6 +13,7 @@ import {
   SidebarTrigger,
   SidebarInset,
 } from "../../components/ui/sidebar";
+import { TooltipProvider } from "../../components/ui/tooltip";
 import { SiteHeader } from "@/components/dashboard/SiteHeader";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
 import { getDashboards } from "@/app/lib/actions";
@@ -51,16 +52,18 @@ export default async function DashboardLayout({
   
   return (
     <DashboardProvider initialDashboards={dashboards}>
-      <SidebarProvider className="">
-        <AppSidebar variant="inset" />
-        <SidebarInset>
-          <div className="flex flex-1 flex-col relative">
-            <div className="@container/main flex flex-1 flex-col gap-2">
-             {children}
+      <TooltipProvider delayDuration={0}>
+        <SidebarProvider className="">
+          <AppSidebar variant="inset" />
+          <SidebarInset>
+            <div className="flex flex-1 flex-col relative">
+              <div className="@container/main flex flex-1 flex-col gap-2">
+               {children}
+              </div>
             </div>
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
+          </SidebarInset>
+        </SidebarProvider>
+      </TooltipProvider>
     </DashboardProvider>
   );
 } 

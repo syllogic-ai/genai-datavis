@@ -1,12 +1,14 @@
 import { createClient } from '@/lib/supabase/client'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { type FileError, type FileRejection, useDropzone } from 'react-dropzone'
+import { generateSanitizedFilename } from '@/app/lib/utils'
 
 const supabase = createClient()
 
 interface FileWithPreview extends File {
   preview?: string
   errors: readonly FileError[]
+  sanitizedName?: string
 }
 
 type UseSupabaseUploadOptions = {
@@ -83,15 +85,33 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
       const validFiles = acceptedFiles
         .filter((file) => !files.find((x) => x.name === file.name))
         .map((file) => {
-          ;(file as FileWithPreview).preview = URL.createObjectURL(file)
-          ;(file as FileWithPreview).errors = []
-          return file as FileWithPreview
+          try {
+            ;(file as FileWithPreview).preview = URL.createObjectURL(file)
+            ;(file as FileWithPreview).errors = []
+            ;(file as FileWithPreview).sanitizedName = generateSanitizedFilename(file.name)
+            return file as FileWithPreview
+          } catch (error) {
+            console.error('Error generating sanitized filename:', error)
+            ;(file as FileWithPreview).preview = URL.createObjectURL(file)
+            ;(file as FileWithPreview).errors = [{ code: 'invalid-filename', message: error instanceof Error ? error.message : 'Invalid filename' }]
+            ;(file as FileWithPreview).sanitizedName = undefined
+            return file as FileWithPreview
+          }
         })
 
       const invalidFiles = fileRejections.map(({ file, errors }) => {
-        ;(file as FileWithPreview).preview = URL.createObjectURL(file)
-        ;(file as FileWithPreview).errors = errors
-        return file as FileWithPreview
+        try {
+          ;(file as FileWithPreview).preview = URL.createObjectURL(file)
+          ;(file as FileWithPreview).errors = errors
+          ;(file as FileWithPreview).sanitizedName = generateSanitizedFilename(file.name)
+          return file as FileWithPreview
+        } catch (error) {
+          console.error('Error generating sanitized filename for rejected file:', error)
+          ;(file as FileWithPreview).preview = URL.createObjectURL(file)
+          ;(file as FileWithPreview).errors = [...errors, { code: 'invalid-filename', message: error instanceof Error ? error.message : 'Invalid filename' }]
+          ;(file as FileWithPreview).sanitizedName = undefined
+          return file as FileWithPreview
+        }
       })
 
       const newFiles = [...files, ...validFiles, ...invalidFiles]
@@ -126,16 +146,27 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
 
     const responses = await Promise.all(
       filesToUpload.map(async (file) => {
-        const { error } = await supabase.storage
-          .from(bucketName)
-          .upload(!!path ? `${path}/${file.name}` : file.name, file, {
-            cacheControl: cacheControl.toString(),
-            upsert,
-          })
-        if (error) {
-          return { name: file.name, message: error.message }
-        } else {
-          return { name: file.name, message: undefined }
+        try {
+          // Skip files without sanitized names (they have errors)
+          if (!file.sanitizedName) {
+            return { name: file.name, message: 'Filename could not be sanitized', sanitizedName: undefined }
+          }
+          
+          const uploadPath = !!path ? `${path}/${file.sanitizedName}` : file.sanitizedName
+          const { error } = await supabase.storage
+            .from(bucketName)
+            .upload(uploadPath, file, {
+              cacheControl: cacheControl.toString(),
+              upsert,
+            })
+          if (error) {
+            return { name: file.name, message: error.message, sanitizedName: file.sanitizedName }
+          } else {
+            return { name: file.name, message: undefined, sanitizedName: file.sanitizedName }
+          }
+        } catch (error) {
+          console.error('Error uploading file:', error)
+          return { name: file.name, message: error instanceof Error ? error.message : 'Upload failed', sanitizedName: file.sanitizedName }
         }
       })
     )
@@ -192,6 +223,7 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
     maxFileSize: maxFileSize,
     maxFiles: maxFiles,
     allowedMimeTypes,
+    generateSanitizedFilename,
     ...dropzoneProps,
   }
 }

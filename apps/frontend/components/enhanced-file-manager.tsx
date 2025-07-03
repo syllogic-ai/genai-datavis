@@ -25,6 +25,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dropzone, DropzoneEmptyState, DropzoneContent } from "@/components/dropzone";
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { formatBytes } from "@/components/dropzone";
+import { generateSanitizedFilename } from "@/app/lib/utils";
 import toast from "react-hot-toast";
 
 export interface ExistingFile {
@@ -98,9 +99,12 @@ export function EnhancedFileManager({
         // Check for duplicates and warn user (but don't block upload since we use upsert=true)
         const duplicates = checkForDuplicates(uploadHook.files);
         if (duplicates.length > 0) {
-          toast.warning(
+          toast(
             `File${duplicates.length > 1 ? 's' : ''} ${duplicates.map(f => f.name).join(', ')} already exist${duplicates.length > 1 ? '' : 's'} and will be replaced.`,
-            { duration: 4000 }
+            { 
+              duration: 4000,
+              icon: '⚠️'
+            }
           );
           console.log(`[EnhancedFileManager] Replacing existing files: ${duplicates.map(f => f.name).join(', ')}`);
         }
@@ -133,12 +137,13 @@ export function EnhancedFileManager({
         for (const file of uploadHook.files) {
           if (uploadHook.successes.includes(file.name)) {
             try {
+              const sanitizedName = file.sanitizedName || generateSanitizedFilename(file.name);
               const response = await fetch(`/api/dashboards/${dashboardId}/files`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   fileName: file.name,
-                  storagePath: `test-bucket/dashboards/${dashboardId}/${file.name}`,
+                  storagePath: `test-bucket/dashboards/${dashboardId}/${sanitizedName}`,
                   fileType: 'original',
                 }),
               });
@@ -150,7 +155,7 @@ export function EnhancedFileManager({
                   name: file.name,
                   size: file.size,
                   type: file.type,
-                  storagePath: `test-bucket/dashboards/${dashboardId}/${file.name}`,
+                  storagePath: `test-bucket/dashboards/${dashboardId}/${sanitizedName}`,
                   uploadedAt: new Date(),
                 };
                 
@@ -410,7 +415,7 @@ export function EnhancedFileManager({
         <Alert className="mt-4 border-amber-200 bg-amber-50">
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-800">
-            You've reached the maximum of {maxFiles} files. Remove existing files to add new ones.
+            You&apos;ve reached the maximum of {maxFiles} files. Remove existing files to add new ones.
           </AlertDescription>
         </Alert>
       )}

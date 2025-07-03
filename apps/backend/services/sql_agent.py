@@ -46,7 +46,7 @@ class SQLOutput(BaseModel):
 
 # Declare the SQL agent
 sql_agent = Agent(
-    "openai:gpt-4.1",
+    "openai:gpt-4o-mini",
     deps_type=Deps,
     output_type=SQLOutput,
 )

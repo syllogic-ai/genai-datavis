@@ -24,6 +24,7 @@ interface EnhancedDashboardGridProps {
   widgets: Widget[];
   onUpdateWidgets: (widgets: Widget[]) => void;
   onAddWidget?: (addWidgetFn: (type: string) => void) => void;
+  chatSidebarOpen?: boolean;
 }
 
 const defaultLayouts = {
@@ -62,6 +63,7 @@ export function EnhancedDashboardGrid({
   widgets, 
   onUpdateWidgets,
   onAddWidget,
+  chatSidebarOpen = false,
 }: EnhancedDashboardGridProps) {
   const [hoveredItems, setHoveredItems] = useState<Record<string, boolean>>({});
   const [activePopup, setActivePopup] = useState<{
@@ -78,6 +80,17 @@ export function EnhancedDashboardGrid({
   const [isPopupHovered, setIsPopupHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Force grid recalculation when chat sidebar state changes
+  useEffect(() => {
+    // Small delay to ensure the parent container has adjusted its width
+    const timeoutId = setTimeout(() => {
+      // Trigger a window resize event to force react-grid-layout to recalculate
+      window.dispatchEvent(new Event('resize'));
+    }, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [chatSidebarOpen]);
   
   const calculateGridHeight = useCallback((layouts: Layout[]) => {
     if (layouts.length === 0) return 400; // Minimum height when empty
@@ -395,6 +408,7 @@ export function EnhancedDashboardGrid({
 
         {widgets.length > 0 && (
           <ResponsiveGridLayout
+            key={`grid-${chatSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}
             {...GRID_PROPS}
             layouts={currentLayouts}
             breakpoints={{ lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 }}

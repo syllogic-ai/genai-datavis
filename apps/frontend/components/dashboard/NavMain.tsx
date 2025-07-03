@@ -6,6 +6,11 @@ import {
   LayoutDashboard,
   type LucideIcon,
   PlusIcon,
+  MoreHorizontal,
+  Copy,
+  Edit,
+  Trash2,
+  Loader2,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, useMemo, useCallback } from "react";
@@ -16,6 +21,24 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -47,6 +70,7 @@ export function NavMain({
   currentDashboardId,
   currentDashboardWidgets = [],
   onDashboardCreated,
+  onDashboardUpdated,
   onWidgetUpdate,
 }: {
   items?: {
@@ -57,12 +81,15 @@ export function NavMain({
   currentDashboardId?: string;
   currentDashboardWidgets?: Widget[];
   onDashboardCreated?: (dashboard: Dashboard) => void;
+  onDashboardUpdated?: (dashboard: Dashboard) => void;
   onWidgetUpdate?: (dashboardId: string, widgets: Widget[]) => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const [dashboardsWithWidgets, setDashboardsWithWidgets] = useState<DashboardWithWidgets[]>([]);
   const [hoveredDashboard, setHoveredDashboard] = useState<string | null>(null);
+  const [operationLoading, setOperationLoading] = useState<{ [key: string]: boolean }>({});
+  const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
 
   // Memoize the active dashboard ID to prevent unnecessary re-renders
   const activeDashboardId = useMemo(() => {
@@ -168,6 +195,53 @@ export function NavMain({
     }
   }, [activeDashboardId, loadedDashboardIds, loadWidgetCountForDashboard]);
 
+  // Dashboard operations
+  const handleDuplicateDashboard = useCallback(async (dashboard: Dashboard) => {
+    setOperationLoading(prev => ({ ...prev, [dashboard.id]: true }));
+    try {
+      const response = await fetch(`/api/dashboards/${dashboard.id}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      if (response.ok) {
+        const newDashboard = await response.json();
+        onDashboardCreated?.(newDashboard);
+        router.push(`/dashboard/${newDashboard.id}`);
+      }
+    } catch (error) {
+      console.error('Error duplicating dashboard:', error);
+    } finally {
+      setOperationLoading(prev => ({ ...prev, [dashboard.id]: false }));
+    }
+  }, [onDashboardCreated, router]);
+
+  const handleDeleteDashboard = useCallback(async (dashboardId: string) => {
+    setOperationLoading(prev => ({ ...prev, [dashboardId]: true }));
+    try {
+      const response = await fetch(`/api/dashboards/${dashboardId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // If we're deleting the current dashboard, navigate away
+        if (dashboardId === activeDashboardId) {
+          router.push('/dashboard');
+        }
+        
+        // Update the dashboard list by removing the deleted dashboard
+        setDashboardsWithWidgets(prev => 
+          prev.filter(d => d.id !== dashboardId)
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting dashboard:', error);
+    } finally {
+      setOperationLoading(prev => ({ ...prev, [dashboardId]: false }));
+      setShowDeleteDialog(null);
+    }
+  }, [activeDashboardId, router]);
+
   // Chat loading moved to chat sidebar
 
   // Keyboard shortcuts
@@ -204,11 +278,9 @@ export function NavMain({
             {dashboardsWithWidgets.map((dashboard) => (
               <Collapsible key={dashboard.id} asChild defaultOpen={dashboard.isActive}>
                 <SidebarMenuItem>
-                  <SidebarMenuButton 
-                    asChild 
-                    tooltip={dashboard.name} 
-                    className={`${
-                      dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/25' : ''
+                  <div 
+                    className={`relative group rounded-md transition-all duration-200 ${
+                      dashboard.isActive ? 'bg-sidebar-foreground/5' : ''
                     }`}
                     onMouseEnter={() => {
                       setHoveredDashboard(dashboard.id);
@@ -219,47 +291,136 @@ export function NavMain({
                     }}
                     onMouseLeave={() => setHoveredDashboard(null)}
                   >
-                    <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2">
-                      <IconRenderer
-                        className="size-4 text-sidebar-foreground"
-                        icon={dashboard.icon}
-                      />
-                      <span className="truncate">{dashboard.name}</span>
-                      {dashboard.widgetCount > 0 && (
-                        <span className="ml-auto text-xs bg-sidebar-accent text-sidebar-accent-foreground px-2 py-0.5 rounded-full">
-                          {dashboard.widgetCount}
-                        </span>
+                    {/* Main Dashboard Button */}
+                    <SidebarMenuButton 
+                      asChild 
+                      tooltip={dashboard.name}
+                      className={`pr-0 ${
+                        dashboard.isActive ? 'hover:bg-sidebar-foreground/25' : ''
+                      }`}
+                    >
+                      <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2 pr-2">
+                        {/* Chevron button - appears on hover, positioned on left */}
+                        {hoveredDashboard === dashboard.id && dashboard.widgets.length > 0 ? (
+                          <CollapsibleTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 data-[state=open]:rotate-90"
+                              onClick={(e) => e.preventDefault()}
+                            >
+                              <ChevronRight className="h-3 w-3" />
+                              <span className="sr-only">Toggle widgets</span>
+                            </Button>
+                          </CollapsibleTrigger>
+                        ) : (
+                          /* Dashboard Icon - hidden when chevron appears */
+                          <div className={`transition-opacity duration-200 ${
+                            hoveredDashboard === dashboard.id && dashboard.widgets.length > 0 
+                              ? 'opacity-0' 
+                              : 'opacity-100'
+                          }`}>
+                            <IconRenderer
+                              className="size-4 text-sidebar-foreground"
+                              icon={dashboard.icon}
+                            />
+                          </div>
+                        )}
+                        
+                        <span className="truncate flex-1">{dashboard.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+
+                    {/* Menu Actions - Loading indicator or Ellipsis Menu */}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      {operationLoading[dashboard.id] ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-sidebar-foreground" />
+                      ) : (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-sidebar-accent"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                              }}
+                            >
+                              <MoreHorizontal className="h-3 w-3" />
+                              <span className="sr-only">Dashboard options</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem
+                            onClick={() => handleDuplicateDashboard(dashboard)}
+                            disabled={operationLoading[dashboard.id]}
+                            className="focus:bg-blue-50 focus:text-blue-700"
+                          >
+                            {operationLoading[dashboard.id] ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Copy className="mr-2 h-4 w-4" />
+                            )}
+                            {operationLoading[dashboard.id] ? 'Duplicating...' : 'Duplicate'}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                          >
+                            <DashboardCreateEditPopover
+                              dashboard={dashboard}
+                              onDashboardUpdated={onDashboardUpdated}
+                              asDropdownItem={true}
+                              trigger={
+                                <div className="flex items-center w-full">
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Rename
+                                </div>
+                              }
+                            />
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => setShowDeleteDialog(dashboard.id)}
+                            disabled={operationLoading[dashboard.id]}
+                            className="text-red-600 focus:text-red-700 focus:bg-red-50 hover:bg-red-50 hover:text-red-700 transition-colors"
+                          >
+                            {operationLoading[dashboard.id] ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="mr-2 h-4 w-4" />
+                            )}
+                            {operationLoading[dashboard.id] ? 'Deleting...' : 'Delete'}
+                          </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
-                    </Link>
-                  </SidebarMenuButton>
+                    </div>
+                  </div>
                   
+                  {/* Collapsible Widget List */}
                   {dashboard.widgets.length > 0 && (
-                    <>
-                      <CollapsibleTrigger asChild>
-                        <SidebarMenuAction className="data-[state=open]:rotate-90">
-                          <ChevronRight />
-                          <span className="sr-only">Toggle widgets</span>
-                        </SidebarMenuAction>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <SidebarMenuSub>
-                          {dashboard.widgets.map((widget) => (
-                            <SidebarMenuSubItem key={widget.id}>
-                              <SidebarMenuSubButton asChild>
-                                <Link href={`/dashboard/${dashboard.id}#widget-${widget.id}`}>
-                                  <span className="text-xs text-muted-foreground capitalize">
-                                    {widget.type}
-                                  </span>
-                                  <span className="truncate text-sm">
-                                    {widget.config?.title || `${widget.type} widget`}
-                                  </span>
-                                </Link>
-                              </SidebarMenuSubButton>
-                            </SidebarMenuSubItem>
-                          ))}
-                        </SidebarMenuSub>
-                      </CollapsibleContent>
-                    </>
+                    <CollapsibleContent>
+                      <SidebarMenuSub>
+                        {dashboard.widgets.map((widget) => (
+                          <SidebarMenuSubItem key={widget.id}>
+                            <SidebarMenuSubButton asChild>
+                              <Link href={`/dashboard/${dashboard.id}#widget-${widget.id}`}>
+                                <span className="text-xs text-muted-foreground capitalize">
+                                  {widget.type}
+                                </span>
+                                <span className="truncate text-sm">
+                                  {widget.config?.title || `${widget.type} widget`}
+                                </span>
+                              </Link>
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    </CollapsibleContent>
                   )}
                 </SidebarMenuItem>
               </Collapsible>
@@ -278,6 +439,56 @@ export function NavMain({
           </SidebarMenuItem>
         )}
       </SidebarMenu>
+      
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!showDeleteDialog} onOpenChange={() => setShowDeleteDialog(null)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-lg font-semibold">Delete Dashboard</AlertDialogTitle>
+              </div>
+            </div>
+            <AlertDialogDescription className="mt-4 text-sm text-gray-600">
+              Are you sure you want to delete this dashboard? This action will permanently delete:
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>The dashboard and all its widgets</li>
+                <li>All associated data files</li>
+                <li>Chat history and conversations</li>
+              </ul>
+              <p className="mt-3 font-medium text-red-600">This action cannot be undone.</p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel 
+              disabled={showDeleteDialog ? operationLoading[showDeleteDialog] : false}
+              className="w-full"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => showDeleteDialog && handleDeleteDashboard(showDeleteDialog)}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 w-full"
+              disabled={showDeleteDialog ? operationLoading[showDeleteDialog] : false}
+            >
+              {showDeleteDialog && operationLoading[showDeleteDialog] ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Dashboard
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarGroup>
   );
 }

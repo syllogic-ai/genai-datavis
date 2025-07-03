@@ -25,7 +25,7 @@ export async function GET(
       // Try cache first
       async () => {
         const cached = await dashboardCache.getDashboardWidgets(dashboardId, userId);
-        if (cached) {
+        if (cached && Array.isArray(cached)) {
           console.log(`[API] Cache HIT - Loaded ${cached.length} widgets for dashboard ${dashboardId}`);
           return { widgets: cached, fromCache: true };
         }

@@ -615,13 +615,25 @@ async def process_analysis_task(
         # If we have a chat_id, send an error message
         if chat_id:
             try:
-                error_content = f"Sorry, an unexpected error occurred while processing your request (ID: {request_id}). Please try again later."
+                # Provide more specific error messages based on error type
+                if "file" in error_message.lower() and "not found" in error_message.lower():
+                    error_content = "I couldn't find the data file for this request. Please make sure you've uploaded a CSV file to this dashboard."
+                elif "encoding" in error_message.lower() or "utf-8" in error_message.lower():
+                    error_content = "I encountered an encoding issue with your data file. Please ensure your CSV file is saved with UTF-8 encoding, or try re-uploading the file."
+                elif "timeout" in error_message.lower() or "rate" in error_message.lower():
+                    error_content = "The AI service is experiencing high load. Please try again in a few moments."
+                elif "sql" in error_message.lower() or "query" in error_message.lower():
+                    error_content = "I had trouble understanding your request in the context of your data. Could you please rephrase your question or be more specific about what you'd like to see?"
+                else:
+                    error_content = f"I encountered an unexpected error while processing your request. The technical details: {error_message[:100]}... Please try again or contact support if the issue persists."
+                
                 await append_chat_message(chat_id, {
-                    "role": "system", 
+                    "role": "assistant", 
                     "content": error_content,
                     "created_at": datetime.now().isoformat(), 
                     "request_id": request_id, 
-                    "error": True
+                    "error": True,
+                    "timestamp": datetime.now().isoformat()
                 })
             except Exception as notify_err:
                 logfire.error(f"Failed to send error notification: {notify_err}")

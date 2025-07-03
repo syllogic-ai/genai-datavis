@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get current chat conversation history
-    let conversationHistory = [];
+    let conversationHistory: any[] = [];
     try {
       const currentChat = await db.select()
         .from(chats)

@@ -275,14 +275,21 @@ export function ChatSidebar({
         width: isOpen ? "400px" : 0, 
         opacity: isOpen ? 1 : 0 
       }}
-      transition={{ type: "spring", damping: 30, stiffness: 300 }}
+      transition={{ 
+        type: "tween", 
+        duration: 0.3, 
+        ease: [0.4, 0.0, 0.2, 1] // Custom cubic-bezier for smooth animation
+      }}
       className={cn(
         "bg-transparent border-l overflow-hidden rounded-br-lg",
         "flex flex-col relative",
-        "h-full", // Full height to match parent container
+        "h-full flex-shrink-0", // Prevent shrinking and maintain height
         className
       )}
-      style={{ minWidth: isOpen ? "400px" : "0px" }}
+      style={{ 
+        minWidth: isOpen ? "400px" : "0px",
+        maxWidth: isOpen ? "400px" : "0px"
+      }}
     >
         {/* Header */}
         <div className="border-b shrink-0 relative z-10 bg-background">
@@ -396,7 +403,7 @@ export function ChatSidebar({
               ) : (
                 chatHistory.map((msg, index) => (
                   <div
-                    key={msg.tempId || index}
+                    key={(msg as any).tempId || index}
                     className={cn(
                       "p-3 rounded-lg max-w-[85%] break-words transition-opacity",
                       msg.role === 'user'

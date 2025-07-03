@@ -45,6 +45,7 @@ interface DashboardContextType {
   updateDashboards: (dashboards: Dashboard[]) => void;
   updateCurrentDashboard: (dashboard: Dashboard, widgets: Widget[]) => void;
   addDashboard: (dashboard: Dashboard) => void;
+  updateDashboard: (dashboard: Dashboard) => void;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -79,6 +80,21 @@ export function DashboardProvider({
     setDashboards(prev => [...prev, dashboard]);
   }, []);
 
+  // Update an existing dashboard
+  const updateDashboard = useCallback((updatedDashboard: Dashboard) => {
+    console.log(`[DashboardContext] Updating dashboard: ${updatedDashboard.name}`);
+    setDashboards(prev => 
+      prev.map(dashboard => 
+        dashboard.id === updatedDashboard.id ? updatedDashboard : dashboard
+      )
+    );
+    
+    // If this is the current dashboard, update it too
+    if (currentDashboard && currentDashboard.id === updatedDashboard.id) {
+      setCurrentDashboard(updatedDashboard);
+    }
+  }, [currentDashboard]);
+
   // Update initial dashboards when prop changes
   useEffect(() => {
     if (initialDashboards.length > 0) {
@@ -93,6 +109,7 @@ export function DashboardProvider({
     updateDashboards,
     updateCurrentDashboard,
     addDashboard,
+    updateDashboard,
   };
 
   return (

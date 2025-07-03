@@ -213,12 +213,19 @@ export default function EnhancedDashboardPage() {
         transition={{ delay: 0.1 }}
         className="flex-1 flex overflow-hidden"
       >
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div 
+          className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
+          style={{ 
+            width: isChatSidebarOpen ? 'calc(100% - 400px)' : '100%',
+            minWidth: '320px' // Ensure minimum usable width
+          }}
+        >
           <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'none' }}>
             <EnhancedDashboardGrid
               widgets={widgets}
               onUpdateWidgets={handleUpdateWidgets}
               onAddWidget={(fn) => { addWidgetRef.current = fn; }}
+              chatSidebarOpen={isChatSidebarOpen}
             />
           </div>
 
@@ -228,6 +235,7 @@ export default function EnhancedDashboardPage() {
             onAddWidget={handleAddWidget} 
             onOpenChatSidebar={handleChatSidebarToggle}
             fileName="sample-data.csv" // This can be replaced with actual file name when available
+            chatSidebarOpen={isChatSidebarOpen}
           />
         </div>
 

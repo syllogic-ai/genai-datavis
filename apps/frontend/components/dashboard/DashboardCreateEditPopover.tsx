@@ -26,6 +26,7 @@ interface DashboardCreateEditPopoverProps {
   trigger?: React.ReactNode;
   onDashboardCreated?: (dashboard: Dashboard) => void;
   onDashboardUpdated?: (dashboard: Dashboard) => void;
+  asDropdownItem?: boolean;
 }
 
 interface FormData {
@@ -37,6 +38,7 @@ export function DashboardCreateEditPopover({
   trigger,
   onDashboardCreated,
   onDashboardUpdated,
+  asDropdownItem = false,
 }: DashboardCreateEditPopoverProps) {
   const [open, setOpen] = useState(false);
   const [selectedIcon, setSelectedIcon] = useState(dashboard?.icon || "DocumentTextIcon");
@@ -138,6 +140,109 @@ export function DashboardCreateEditPopover({
       New Dashboard
     </Button>
   );
+
+  // For dropdown menu integration
+  if (asDropdownItem) {
+    return (
+      <>
+        <div 
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(true);
+          }}
+          className="cursor-pointer"
+        >
+          {trigger}
+        </div>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverContent className="w-80">
+            <div className="grid gap-4">
+              <div className="space-y-2">
+                <h4 className="font-medium leading-none">
+                  {dashboard ? "Edit Dashboard" : "Create New Dashboard"}
+                </h4>
+                <p className="text-sm text-muted-foreground">
+                  {dashboard ? "Update your dashboard details." : "Set up a new dashboard for your data."}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-1">
+                <div className="flex-shrink-0">
+                  <IconPickerDialog
+                    selectedIcon={selectedIcon}
+                    onIconChange={handleIconChange}
+                    trigger={
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 rounded-sm"
+                      >
+                        <IconRenderer
+                          icon={selectedIcon}
+                          className="h-8 w-8"
+                        />
+                      </Button>
+                    }
+                  />
+                </div>
+                
+                <div className="flex-1 h-full">
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-2">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        rules={{
+                          required: "Dashboard name is required",
+                          minLength: {
+                            value: 1,
+                            message: "Name must be at least 1 character",
+                          },
+                        }}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormControl>
+                              <Input
+                                placeholder="Dashboard name"
+                                className="h-10"
+                                {...field}
+                                onKeyDown={handleKeyDown}
+                                disabled={isLoading}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </form>
+                  </Form>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setOpen(false)}
+                  disabled={isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={form.handleSubmit(onSubmit)}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Saving..." : dashboard ? "Update" : "Create"}
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

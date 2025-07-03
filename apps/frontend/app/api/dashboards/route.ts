@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
       // Try cache first
       async () => {
         const cached = await dashboardCache.getDashboardList(userId);
-        if (cached) {
+        if (cached && Array.isArray(cached)) {
           console.log(`[API] Cache HIT - Loaded ${cached.length} dashboards for user ${userId}`);
           return cached;
         }

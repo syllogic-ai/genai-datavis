@@ -13,7 +13,8 @@ export const files = pgTable("files", {
   userId: text("user_id").notNull().references(() => users.id),
   dashboardId: text("dashboard_id").references(() => dashboards.id, { onDelete: "cascade" }), // Link files to dashboard
   fileType: text("file_type").notNull(), // 'original' | 'cleaned' | 'meta'
-  originalFilename: text("original_filename"),
+  originalFilename: text("original_filename").notNull(), // User-visible filename
+  sanitizedFilename: text("sanitized_filename"), // UUID-based filename for storage
   storagePath: text("storage_path").notNull(),
   status: text("status").default("ready"), // 'processing' | 'ready' | 'failed'
   createdAt: timestamp("created_at").defaultNow(),
