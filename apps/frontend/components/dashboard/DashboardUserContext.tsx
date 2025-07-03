@@ -46,6 +46,7 @@ interface DashboardContextType {
   updateCurrentDashboard: (dashboard: Dashboard, widgets: Widget[]) => void;
   addDashboard: (dashboard: Dashboard) => void;
   updateDashboard: (dashboard: Dashboard) => void;
+  deleteDashboard: (dashboardId: string) => void;
 }
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
@@ -95,6 +96,18 @@ export function DashboardProvider({
     }
   }, [currentDashboard]);
 
+  // Delete a dashboard
+  const deleteDashboard = useCallback((dashboardId: string) => {
+    console.log(`[DashboardContext] Deleting dashboard: ${dashboardId}`);
+    setDashboards(prev => prev.filter(dashboard => dashboard.id !== dashboardId));
+    
+    // If this is the current dashboard, clear it
+    if (currentDashboard && currentDashboard.id === dashboardId) {
+      setCurrentDashboard(null);
+      setCurrentDashboardWidgets([]);
+    }
+  }, [currentDashboard]);
+
   // Update initial dashboards when prop changes
   useEffect(() => {
     if (initialDashboards.length > 0) {
@@ -110,6 +123,7 @@ export function DashboardProvider({
     updateCurrentDashboard,
     addDashboard,
     updateDashboard,
+    deleteDashboard,
   };
 
   return (

@@ -32,6 +32,7 @@ interface DashboardCreateEditPopoverProps {
   trigger?: React.ReactNode;
   onDashboardCreated?: (dashboard: Dashboard) => void;
   onDashboardUpdated?: (dashboard: Dashboard) => void;
+  onDialogClose?: () => void;
   asDropdownItem?: boolean;
 }
 
@@ -44,15 +45,26 @@ export function DashboardCreateEditPopover({
   trigger,
   onDashboardCreated,
   onDashboardUpdated,
+  onDialogClose,
   asDropdownItem = false,
 }: DashboardCreateEditPopoverProps) {
-  const [open, setOpen] = useState(trigger === null); // Auto open if no trigger
+  const [open, setOpen] = useState(false); // Always start closed
   console.log('[DashboardCreateEditPopover] Component initialized:', { 
     dashboard: dashboard?.id, 
     trigger: trigger === null ? 'null' : 'exists', 
     asDropdownItem, 
-    initialOpen: trigger === null 
+    initialOpen: trigger === null,
+    open
   });
+  
+  // Add effect to track state changes
+  React.useEffect(() => {
+    console.log('[DashboardCreateEditPopover] State changed:', {
+      open,
+      dashboard: dashboard?.id,
+      trigger: trigger === null ? 'null' : 'exists'
+    });
+  }, [open, dashboard?.id, trigger]);
   const [selectedIcon, setSelectedIcon] = useState(dashboard?.icon || "DocumentTextIcon");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -62,16 +74,36 @@ export function DashboardCreateEditPopover({
     },
   });
 
-  // Reset form when dashboard changes
+  // Reset form when dashboard changes and auto-open for direct dialogs
   useEffect(() => {
     if (dashboard) {
       form.reset({ name: dashboard.name });
       setSelectedIcon(dashboard.icon);
+      // If this is a direct dialog (no trigger), open it when dashboard is set
+      if (trigger === null) {
+        console.log('[DashboardCreateEditPopover] Dashboard set, opening dialog for editing');
+        setOpen(true);
+      }
     } else {
       form.reset({ name: "New Dashboard" });
       setSelectedIcon("DocumentTextIcon");
+      // If this is a direct dialog (no trigger), open it for new dashboard
+      if (trigger === null) {
+        console.log('[DashboardCreateEditPopover] No dashboard, opening dialog for creation');
+        setOpen(true);
+      }
     }
-  }, [dashboard, form]);
+  }, [dashboard, form, trigger]);
+
+  // Cleanup effect for dialog state
+  useEffect(() => {
+    return () => {
+      if (trigger === null && open) {
+        console.log('[DashboardCreateEditPopover] Component unmounting, ensuring dialog is closed');
+        setOpen(false);
+      }
+    };
+  }, [trigger, open]);
 
   const handleIconChange = async (iconName: string) => {
     setSelectedIcon(iconName);
@@ -110,6 +142,7 @@ export function DashboardCreateEditPopover({
         
         if (response.ok) {
           const updatedDashboard = await response.json();
+          console.log('[DashboardCreateEditPopover] Dashboard updated successfully, closing dialog');
           onDashboardUpdated?.(updatedDashboard);
           setOpen(false);
         }
@@ -261,7 +294,28 @@ export function DashboardCreateEditPopover({
   if (trigger === null) {
     console.log('[DashboardCreateEditPopover] Rendering direct dialog mode, open state:', open);
     return (
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog 
+        open={open} 
+        onOpenChange={(newOpen) => {
+          console.log('[DashboardCreateEditPopover] Dialog open state changing:', open, '->', newOpen);
+          setOpen(newOpen);
+          
+          // If dialog is closing and we're in direct popup mode, reset state properly
+          if (!newOpen && trigger === null) {
+            console.log('[DashboardCreateEditPopover] Dialog closing in direct mode, resetting state');
+            // Reset form state
+            if (dashboard) {
+              form.reset({ name: dashboard.name });
+              setSelectedIcon(dashboard.icon);
+            } else {
+              form.reset({ name: "New Dashboard" });
+              setSelectedIcon("DocumentTextIcon");
+            }
+            // Notify parent component that dialog was closed
+            onDialogClose?.();
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
@@ -328,7 +382,14 @@ export function DashboardCreateEditPopover({
             <div className="flex justify-end gap-2 pt-4">
               <Button
                 variant="outline"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  console.log('[DashboardCreateEditPopover] Cancel button clicked, closing dialog');
+                  setOpen(false);
+                  // In direct dialog mode, also notify parent
+                  if (trigger === null) {
+                    onDialogClose?.();
+                  }
+                }}
                 disabled={isLoading}
               >
                 Cancel

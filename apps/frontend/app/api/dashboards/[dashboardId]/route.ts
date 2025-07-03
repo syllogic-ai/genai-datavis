@@ -82,16 +82,21 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ dashboardId: string }> }
 ) {
+  console.log('[DELETE API] Starting delete request');
   try {
     const { userId } = await auth();
+    console.log('[DELETE API] Auth successful, userId:', userId);
     
     if (!userId) {
+      console.log('[DELETE API] No userId found, returning 401');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { dashboardId } = await context.params;
+    console.log('[DELETE API] Dashboard ID:', dashboardId);
     
     // Verify dashboard ownership
+    console.log('[DELETE API] Checking dashboard ownership');
     const dashboard = await db.select()
       .from(dashboards)
       .where(and(
@@ -100,71 +105,107 @@ export async function DELETE(
       ))
       .limit(1);
 
+    console.log('[DELETE API] Dashboard query result:', dashboard);
     if (!dashboard.length) {
+      console.log('[DELETE API] Dashboard not found or not owned by user');
       return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
     }
 
     // Perform cascading delete in transaction
+    console.log('[DELETE API] Starting database transaction');
     await db.transaction(async (tx) => {
       // 1. Delete all widgets associated with the dashboard
+      console.log('[DELETE API] Deleting widgets');
       await tx.delete(widgets)
         .where(eq(widgets.dashboardId, dashboardId));
+      console.log('[DELETE API] Widgets deleted successfully');
 
       // 2. Preserve LLM usage records by nullifying chat references before deleting chats
       // First get all chat IDs for this dashboard
+      console.log('[DELETE API] Getting chat IDs for dashboard');
       const dashboardChats = await tx.select({ id: chats.id })
         .from(chats)
         .where(eq(chats.dashboardId, dashboardId));
       
       const chatIds = dashboardChats.map(chat => chat.id);
+      console.log('[DELETE API] Found chat IDs:', chatIds);
       
-      // Update LLM usage records to null the chatId reference (preserve the records)
+      // Delete LLM usage records for chats that will be deleted
       if (chatIds.length > 0) {
-        await tx.update(llmUsage)
-          .set({ chatId: null })
+        console.log('[DELETE API] Checking if LLM usage records exist for these chats');
+        const existingLlmUsage = await tx.select()
+          .from(llmUsage)
           .where(inArray(llmUsage.chatId, chatIds));
-        console.log(`[API] Preserved LLM usage records by nullifying chat references for ${chatIds.length} chats`);
+        
+        console.log('[DELETE API] Found LLM usage records:', existingLlmUsage.length);
+        
+        if (existingLlmUsage.length > 0) {
+          console.log('[DELETE API] Deleting LLM usage records for chats');
+          await tx.delete(llmUsage)
+            .where(inArray(llmUsage.chatId, chatIds));
+          console.log(`[DELETE API] Deleted ${existingLlmUsage.length} LLM usage records`);
+        }
       }
 
       // Now delete all chats associated with the dashboard
+      console.log('[DELETE API] Deleting chats');
       await tx.delete(chats)
         .where(eq(chats.dashboardId, dashboardId));
+      console.log('[DELETE API] Chats deleted successfully');
 
       // 3. Delete all files associated with the dashboard
       // Note: In a real implementation, you would also delete the actual files from storage
+      console.log('[DELETE API] Getting files for dashboard');
       const dashboardFiles = await tx.select()
         .from(files)
         .where(eq(files.dashboardId, dashboardId));
       
+      console.log('[DELETE API] Found files:', dashboardFiles.length);
       for (const file of dashboardFiles) {
         // TODO: Delete actual file from storage system
         if (file.storagePath) {
-          console.log(`Would delete file from storage: ${file.storagePath}`);
+          console.log(`[DELETE API] Would delete file from storage: ${file.storagePath}`);
         }
       }
       
+      console.log('[DELETE API] Deleting file records');
       await tx.delete(files)
         .where(eq(files.dashboardId, dashboardId));
+      console.log('[DELETE API] File records deleted successfully');
 
       // 4. Finally delete the dashboard itself
+      console.log('[DELETE API] Deleting dashboard');
       await tx.delete(dashboards)
         .where(eq(dashboards.id, dashboardId));
+      console.log('[DELETE API] Dashboard deleted successfully');
     });
+    console.log('[DELETE API] Transaction completed successfully');
 
-    // Invalidate dashboard list cache
+    // Invalidate all related cache entries
     try {
+      console.log('[DELETE API] Invalidating cache entries');
       await dashboardCache.invalidateDashboardList(userId);
-      console.log(`[API] Dashboard list cache invalidated after deletion for user ${userId}`);
+      await dashboardCache.invalidateAllDashboardData(dashboardId, userId);
+      console.log(`[DELETE API] Dashboard cache invalidated after deletion for user ${userId}`);
     } catch (cacheError) {
-      console.warn('Failed to invalidate dashboard list cache:', cacheError);
+      console.warn('[DELETE API] Failed to invalidate dashboard cache:', cacheError);
     }
 
     return NextResponse.json({ success: true });
 
   } catch (error) {
-    console.error('Error deleting dashboard:', error);
+    console.error('[DELETE API] Error deleting dashboard:', error);
+    console.error('[DELETE API] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    console.error('[DELETE API] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      name: error instanceof Error ? error.name : 'Unknown',
+      cause: error instanceof Error ? error.cause : undefined
+    });
     return NextResponse.json(
-      { error: 'Failed to delete dashboard' }, 
+      { 
+        error: 'Failed to delete dashboard',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, 
       { status: 500 }
     );
   }

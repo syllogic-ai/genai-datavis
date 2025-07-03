@@ -29,7 +29,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const { user } = useUser();
-  const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard } = useDashboardContext();
+  const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
   
   // Extract active dashboard ID from pathname
   const activeChatId =
@@ -44,6 +44,10 @@ export function AppSidebar({
 
   const handleDashboardUpdated = (dashboard: Dashboard) => {
     updateDashboard(dashboard);
+  };
+
+  const handleDashboardDeleted = (dashboardId: string) => {
+    deleteDashboard(dashboardId);
   };
 
   return (
@@ -73,6 +77,7 @@ export function AppSidebar({
           currentDashboardWidgets={currentDashboardWidgets}
           onDashboardCreated={handleDashboardCreated}
           onDashboardUpdated={handleDashboardUpdated}
+          onDashboardDeleted={handleDashboardDeleted}
         />
       </SidebarContent>
       

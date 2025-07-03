@@ -11,55 +11,33 @@ import { DashboardCreateEditPopover } from "@/components/dashboard/DashboardCrea
 import { Dashboard } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import { PlusIcon, FolderIcon } from "lucide-react";
+import { useDashboardContext } from "@/components/dashboard/DashboardUserContext";
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoaded, isSignedIn } = useUser();
   const { warmCache } = useCacheWarming();
-  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { dashboards, addDashboard, updateDashboard } = useDashboardContext();
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch dashboards on component mount and warm cache
+  // Warm cache on component mount
   useEffect(() => {
     if (isLoaded && isSignedIn && user?.id) {
-      fetchDashboards();
       // Warm cache in the background for better performance
       warmCache(user.id).catch(console.warn);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn, user?.id]); // Removed warmCache from deps to prevent infinite loop
 
-  const fetchDashboards = async () => {
-    try {
-      setIsLoading(true);
-      const response = await fetch('/api/dashboards');
-      if (response.ok) {
-        const data = await response.json();
-        setDashboards(data);
-      } else {
-        setError('Failed to fetch dashboards');
-      }
-    } catch (err) {
-      setError('Error fetching dashboards');
-      console.error('Error fetching dashboards:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleDashboardCreated = (newDashboard: Dashboard) => {
-    setDashboards(prev => [newDashboard, ...prev]);
+    addDashboard(newDashboard);
     // Navigate to the new dashboard
     router.push(`/dashboard/${newDashboard.id}`);
   };
 
   const handleDashboardUpdated = (updatedDashboard: Dashboard) => {
-    setDashboards(prev => 
-      prev.map(dashboard => 
-        dashboard.id === updatedDashboard.id ? updatedDashboard : dashboard
-      )
-    );
+    updateDashboard(updatedDashboard);
   };
 
   // Show loading state
@@ -98,7 +76,7 @@ export default function DashboardPage() {
         <div className="flex-1 overflow-auto">
           <div className="flex flex-col justify-center items-center h-full px-4">
             <div className="text-center p-4 text-red-600">{error}</div>
-            <Button onClick={fetchDashboards} variant="outline">
+            <Button onClick={() => window.location.reload()} variant="outline">
               Retry
             </Button>
           </div>
