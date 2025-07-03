@@ -84,7 +84,11 @@ export function EnhancedDashboardGrid({
   // Use responsive grid hook instead of manual chat sidebar tracking
   const { gridProps, isTransitioning, effectiveBreakpoint, availableWidth } = useResponsiveGrid();
   
-  // Update grid when layout changes
+  // Store previous grid columns for layout recovery
+  const prevColsRef = useRef<number>(gridProps.cols.lg || 12);
+  const [isRecovering, setIsRecovering] = useState(false);
+  
+  // Update grid when layout changes with recovery logic
   useEffect(() => {
     if (isTransitioning) {
       // Add transitioning class for smooth animations
@@ -92,13 +96,23 @@ export function EnhancedDashboardGrid({
       if (gridElement) {
         gridElement.classList.add('layout-transitioning');
         
-        // Remove class after transition
+        // Check if columns changed for recovery
+        const currentCols = gridProps.cols.lg || 12;
+        if (currentCols !== prevColsRef.current) {
+          setIsRecovering(true);
+          gridElement.classList.add('layout-recovery');
+        }
+        
+        // Remove classes after transition
         setTimeout(() => {
           gridElement.classList.remove('layout-transitioning');
-        }, 350);
+          gridElement.classList.remove('layout-recovery');
+          setIsRecovering(false);
+          prevColsRef.current = currentCols;
+        }, 400);
       }
     }
-  }, [isTransitioning]);
+  }, [isTransitioning, gridProps.cols.lg]);
   
   // Force grid recalculation when layout context changes
   useEffect(() => {
@@ -126,12 +140,24 @@ export function EnhancedDashboardGrid({
 
   const currentLayouts = useMemo(() => {
     const layouts: Layouts = {};
+    
     Object.keys(gridProps.cols).forEach(breakpoint => {
-      layouts[breakpoint] = widgets.map(widget => {
+      const colsForBreakpoint = gridProps.cols[breakpoint as keyof typeof gridProps.cols];
+      
+      // Sort widgets to maintain consistent order during recovery
+      const sortedWidgets = [...widgets].sort((a, b) => {
+        // First by y position, then by x position
+        if (a.layout.y !== b.layout.y) return a.layout.y - b.layout.y;
+        return a.layout.x - b.layout.x;
+      });
+      
+      // Track occupied positions for collision avoidance
+      const occupiedPositions: Array<{ x: number; y: number; w: number; h: number }> = [];
+      
+      layouts[breakpoint] = sortedWidgets.map(widget => {
         const layout = { ...widget.layout };
         
         // Get the widget's size from layout dimensions
-        const currentSize = `${layout.w}x${layout.h}`;
         let widgetSize = "chart-s"; // default
         
         // Determine the widget size based on dimensions and type
@@ -147,11 +173,10 @@ export function EnhancedDashboardGrid({
           else if (layout.w === 8 && layout.h === 4) widgetSize = "chart-xl";
         }
         
-        // Get responsive dimensions for this breakpoint using grid props
-        const responsiveDimensions = getResponsiveDimensions(widgetSize, breakpoint);
+        // Get responsive dimensions for this breakpoint
+        const responsiveDimensions = getResponsiveDimensions(widgetSize, breakpoint, colsForBreakpoint);
         
         // Apply responsive sizing with bounds checking
-        const colsForBreakpoint = gridProps.cols[breakpoint as keyof typeof gridProps.cols];
         layout.w = Math.min(responsiveDimensions.w, colsForBreakpoint);
         layout.h = responsiveDimensions.h;
         
@@ -159,16 +184,29 @@ export function EnhancedDashboardGrid({
         if (widget.type === 'text') {
           layout.x = 0;
           layout.w = colsForBreakpoint;
+        } else {
+          // Scale x position proportionally to new column count
+          const scaleFactor = colsForBreakpoint / 12;
+          layout.x = Math.round(layout.x * scaleFactor);
+          
+          // Ensure the widget doesn't exceed column boundaries
+          if (layout.x + layout.w > colsForBreakpoint) {
+            layout.x = Math.max(0, colsForBreakpoint - layout.w);
+          }
         }
         
-        // Ensure the widget doesn't exceed column boundaries
-        if (layout.x + layout.w > colsForBreakpoint) {
-          layout.x = Math.max(0, colsForBreakpoint - layout.w);
-        }
+        // Find available position if there's a collision
+        const position = findAvailablePosition(occupiedPositions, layout, colsForBreakpoint, layout.y);
+        layout.x = position.x;
+        layout.y = position.y;
+        
+        // Track this position as occupied
+        occupiedPositions.push({ x: layout.x, y: layout.y, w: layout.w, h: layout.h });
         
         return layout;
       });
     });
+    
     return layouts;
   }, [widgets, gridProps.cols]);
 

@@ -78,15 +78,30 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Manage transition state
+  // Manage transition state with enhanced grid recovery
   const triggerLayoutUpdate = useCallback(() => {
     setIsTransitioning(true);
     
-    // Trigger grid recalculation after transition
-    setTimeout(() => {
+    // Add transitioning class to document body for global CSS coordination
+    document.body.classList.add('layout-transitioning');
+    
+    // Trigger grid recalculation after DOM updates
+    requestAnimationFrame(() => {
+      // First update to start transition
       window.dispatchEvent(new Event('resize'));
-      setIsTransitioning(false);
-    }, 350); // Slightly longer than CSS transition
+      
+      // Second update after transition completes
+      setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+        setIsTransitioning(false);
+        document.body.classList.remove('layout-transitioning');
+        
+        // Final update to ensure proper layout recovery
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event('resize'));
+        });
+      }, 350); // Slightly longer than CSS transition
+    });
   }, []);
 
   // Handle sidebar state changes with transitions
@@ -132,28 +147,48 @@ export function useLayout() {
 export function useResponsiveGrid() {
   const layout = useLayout();
   
-  const gridProps = useMemo(() => ({
-    cols: { 
-      xl: layout.effectiveBreakpoint === 'xl' ? 12 : BASE_BREAKPOINTS[layout.effectiveBreakpoint as keyof typeof BASE_BREAKPOINTS].cols,
-      lg: Math.min(12, layout.getGridCols()),
-      md: Math.min(8, layout.getGridCols()),
-      sm: Math.min(4, layout.getGridCols()),
-      xs: Math.min(2, layout.getGridCols()),
-      xxs: 1
-    },
-    breakpoints: {
-      xl: 1536,
-      lg: 1200,
-      md: 1024,
-      sm: 768,
-      xs: 480,
-      xxs: 0
-    },
-    rowHeight: layout.availableWidth < 768 ? 80 : 100,
-    margin: layout.availableWidth < 768 ? [8, 8] : [16, 16] as [number, number],
-    containerPadding: layout.availableWidth < 768 ? [8, 8] : [16, 16] as [number, number],
-    width: layout.getContainerWidth(),
-  }), [layout]);
+  const gridProps = useMemo(() => {
+    // Calculate adaptive columns based on available width
+    const minWidgetWidth = 300; // Minimum widget width in pixels
+    const maxColumns = 12;
+    
+    // Dynamic column calculation based on available width
+    const calculateColumns = (width: number) => {
+      const effectiveWidth = width - 32; // Account for padding
+      const possibleColumns = Math.floor(effectiveWidth / minWidgetWidth);
+      return Math.min(maxColumns, Math.max(1, possibleColumns));
+    };
+    
+    // Get dynamic columns for current available width
+    const dynamicCols = calculateColumns(layout.availableWidth);
+    
+    return {
+      cols: { 
+        xl: layout.availableWidth >= 1536 ? 12 : dynamicCols,
+        lg: layout.availableWidth >= 1200 ? Math.min(12, dynamicCols) : dynamicCols,
+        md: layout.availableWidth >= 1024 ? Math.min(8, dynamicCols) : dynamicCols,
+        sm: layout.availableWidth >= 768 ? Math.min(4, dynamicCols) : dynamicCols,
+        xs: layout.availableWidth >= 480 ? Math.min(2, dynamicCols) : dynamicCols,
+        xxs: 1
+      },
+      breakpoints: {
+        xl: 1536,
+        lg: 1200,
+        md: 1024,
+        sm: 768,
+        xs: 480,
+        xxs: 0
+      },
+      rowHeight: layout.availableWidth < 768 ? 80 : 100,
+      margin: layout.availableWidth < 768 ? [8, 8] : [16, 16] as [number, number],
+      containerPadding: layout.availableWidth < 768 ? [8, 8] : [16, 16] as [number, number],
+      width: layout.getContainerWidth(),
+      isDraggable: !layout.isTransitioning,
+      isResizable: !layout.isTransitioning,
+      compactType: 'vertical' as const,
+      preventCollision: false,
+    };
+  }, [layout]);
 
   return {
     ...layout,

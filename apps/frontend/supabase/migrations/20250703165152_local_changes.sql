@@ -58,90 +58,260 @@ drop index if exists "public"."charts_pkey";
 -- Drop table if it exists
 drop table if exists "public"."charts";
 
-create table "public"."dashboards" (
-    "id" text not null,
-    "user_id" text not null,
-    "name" text not null default 'New Dashboard'::text,
-    "description" text,
-    "created_at" timestamp without time zone default now(),
-    "updated_at" timestamp without time zone default now(),
-    "icon" text not null default 'document-text'::text
-);
+-- Create dashboards table only if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'dashboards' AND table_schema = 'public') THEN
+        CREATE TABLE "public"."dashboards" (
+            "id" text not null,
+            "user_id" text not null,
+            "name" text not null default 'New Dashboard'::text,
+            "description" text,
+            "created_at" timestamp without time zone default now(),
+            "updated_at" timestamp without time zone default now(),
+            "icon" text not null default 'document-text'::text
+        );
+    END IF;
+END
+$$;
 
+-- Create widgets table only if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'widgets' AND table_schema = 'public') THEN
+        CREATE TABLE "public"."widgets" (
+            "id" text not null,
+            "dashboard_id" text not null,
+            "type" text not null,
+            "config" jsonb not null,
+            "created_at" timestamp without time zone default now(),
+            "data" jsonb,
+            "layout" jsonb not null,
+            "chat_id" text,
+            "is_configured" boolean default false,
+            "updated_at" timestamp without time zone default now(),
+            "title" text not null,
+            "sql" text,
+            "cache_key" text,
+            "last_data_fetch" timestamp without time zone
+        );
+    END IF;
+END
+$$;
 
-create table "public"."widgets" (
-    "id" text not null,
-    "dashboard_id" text not null,
-    "type" text not null,
-    "config" jsonb not null,
-    "created_at" timestamp without time zone default now(),
-    "data" jsonb,
-    "layout" jsonb not null,
-    "chat_id" text,
-    "is_configured" boolean default false,
-    "updated_at" timestamp without time zone default now(),
-    "title" text not null,
-    "sql" text,
-    "cache_key" text,
-    "last_data_fetch" timestamp without time zone
-);
+-- Drop column if it exists
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'file_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."chats" DROP COLUMN "file_id";
+    END IF;
+END
+$$;
 
-
-alter table "public"."chats" drop column "file_id";
-
-alter table "public"."chats" add column "dashboard_id" text not null;
+-- Add dashboard_id column if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'chats' AND column_name = 'dashboard_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."chats" ADD COLUMN "dashboard_id" text not null;
+    END IF;
+END
+$$;
 
 alter table "public"."chats" alter column "title" set default 'Dashboard Chat'::text;
 
 alter table "public"."chats" alter column "user_id" set not null;
 
-alter table "public"."files" add column "dashboard_id" text;
+-- Add dashboard_id column to files if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'files' AND column_name = 'dashboard_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."files" ADD COLUMN "dashboard_id" text;
+    END IF;
+END
+$$;
 
-alter table "public"."files" add column "sanitized_filename" text;
+-- Add sanitized_filename column if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'files' AND column_name = 'sanitized_filename' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."files" ADD COLUMN "sanitized_filename" text;
+    END IF;
+END
+$$;
 
 alter table "public"."files" alter column "original_filename" set not null;
 
-alter table "public"."llm_usage" drop column "api_request";
+-- Drop columns if they exist
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'llm_usage' AND column_name = 'api_request' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."llm_usage" DROP COLUMN "api_request";
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'llm_usage' AND column_name = 'compute_time' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."llm_usage" DROP COLUMN "compute_time";
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'llm_usage' AND column_name = 'provider' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."llm_usage" DROP COLUMN "provider";
+    END IF;
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'llm_usage' AND column_name = 'request_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."llm_usage" DROP COLUMN "request_id";
+    END IF;
+END
+$$;
 
-alter table "public"."llm_usage" drop column "compute_time";
+-- Add user_id column if it doesn't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'llm_usage' AND column_name = 'user_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."llm_usage" ADD COLUMN "user_id" text;
+    END IF;
+END
+$$;
 
-alter table "public"."llm_usage" drop column "provider";
+-- Add missing columns to widgets table if they don't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'dashboard_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "dashboard_id" text not null;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'type' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "type" text not null;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'config' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "config" jsonb not null;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'data' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "data" jsonb;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'layout' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "layout" jsonb not null;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'chat_id' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "chat_id" text;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'is_configured' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "is_configured" boolean default false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'title' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "title" text not null;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'sql' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "sql" text;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'cache_key' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "cache_key" text;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'last_data_fetch' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "last_data_fetch" timestamp without time zone;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'created_at' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "created_at" timestamp without time zone default now();
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'widgets' AND column_name = 'updated_at' AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD COLUMN "updated_at" timestamp without time zone default now();
+    END IF;
+END
+$$;
 
-alter table "public"."llm_usage" drop column "request_id";
+CREATE UNIQUE INDEX IF NOT EXISTS dashboards_pkey ON public.dashboards USING btree (id);
 
-alter table "public"."llm_usage" add column "user_id" text;
+CREATE UNIQUE INDEX IF NOT EXISTS widgets_pkey ON public.widgets USING btree (id);
 
-CREATE UNIQUE INDEX dashboards_pkey ON public.dashboards USING btree (id);
+-- Add constraints only if they don't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'dashboards_pkey' 
+                   AND table_name = 'dashboards' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."dashboards" ADD CONSTRAINT "dashboards_pkey" PRIMARY KEY USING INDEX "dashboards_pkey";
+    END IF;
+END
+$$;
 
-CREATE UNIQUE INDEX widgets_pkey ON public.widgets USING btree (id);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'widgets_pkey' 
+                   AND table_name = 'widgets' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD CONSTRAINT "widgets_pkey" PRIMARY KEY USING INDEX "widgets_pkey";
+    END IF;
+END
+$$;
 
-alter table "public"."dashboards" add constraint "dashboards_pkey" PRIMARY KEY using index "dashboards_pkey";
+-- Add foreign key constraints only if they don't exist
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'chats_dashboard_id_dashboards_id_fk' 
+                   AND table_name = 'chats' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."chats" ADD CONSTRAINT "chats_dashboard_id_dashboards_id_fk" FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE not valid;
+        ALTER TABLE "public"."chats" VALIDATE CONSTRAINT "chats_dashboard_id_dashboards_id_fk";
+    END IF;
+END
+$$;
 
-alter table "public"."widgets" add constraint "widgets_pkey" PRIMARY KEY using index "widgets_pkey";
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'dashboards_user_id_users_id_fk' 
+                   AND table_name = 'dashboards' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."dashboards" ADD CONSTRAINT "dashboards_user_id_users_id_fk" FOREIGN KEY (user_id) REFERENCES users(id) not valid;
+        ALTER TABLE "public"."dashboards" VALIDATE CONSTRAINT "dashboards_user_id_users_id_fk";
+    END IF;
+END
+$$;
 
-alter table "public"."chats" add constraint "chats_dashboard_id_dashboards_id_fk" FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE not valid;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'files_dashboard_id_dashboards_id_fk' 
+                   AND table_name = 'files' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."files" ADD CONSTRAINT "files_dashboard_id_dashboards_id_fk" FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE not valid;
+        ALTER TABLE "public"."files" VALIDATE CONSTRAINT "files_dashboard_id_dashboards_id_fk";
+    END IF;
+END
+$$;
 
-alter table "public"."chats" validate constraint "chats_dashboard_id_dashboards_id_fk";
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'llm_usage_user_id_users_id_fk' 
+                   AND table_name = 'llm_usage' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."llm_usage" ADD CONSTRAINT "llm_usage_user_id_users_id_fk" FOREIGN KEY (user_id) REFERENCES users(id) not valid;
+        ALTER TABLE "public"."llm_usage" VALIDATE CONSTRAINT "llm_usage_user_id_users_id_fk";
+    END IF;
+END
+$$;
 
-alter table "public"."dashboards" add constraint "dashboards_user_id_users_id_fk" FOREIGN KEY (user_id) REFERENCES users(id) not valid;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'widgets_chat_id_chats_id_fk' 
+                   AND table_name = 'widgets' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD CONSTRAINT "widgets_chat_id_chats_id_fk" FOREIGN KEY (chat_id) REFERENCES chats(id) not valid;
+        ALTER TABLE "public"."widgets" VALIDATE CONSTRAINT "widgets_chat_id_chats_id_fk";
+    END IF;
+END
+$$;
 
-alter table "public"."dashboards" validate constraint "dashboards_user_id_users_id_fk";
-
-alter table "public"."files" add constraint "files_dashboard_id_dashboards_id_fk" FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE not valid;
-
-alter table "public"."files" validate constraint "files_dashboard_id_dashboards_id_fk";
-
-alter table "public"."llm_usage" add constraint "llm_usage_user_id_users_id_fk" FOREIGN KEY (user_id) REFERENCES users(id) not valid;
-
-alter table "public"."llm_usage" validate constraint "llm_usage_user_id_users_id_fk";
-
-alter table "public"."widgets" add constraint "widgets_chat_id_chats_id_fk" FOREIGN KEY (chat_id) REFERENCES chats(id) not valid;
-
-alter table "public"."widgets" validate constraint "widgets_chat_id_chats_id_fk";
-
-alter table "public"."widgets" add constraint "widgets_dashboard_id_dashboards_id_fk" FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE not valid;
-
-alter table "public"."widgets" validate constraint "widgets_dashboard_id_dashboards_id_fk";
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints 
+                   WHERE constraint_name = 'widgets_dashboard_id_dashboards_id_fk' 
+                   AND table_name = 'widgets' 
+                   AND table_schema = 'public') THEN
+        ALTER TABLE "public"."widgets" ADD CONSTRAINT "widgets_dashboard_id_dashboards_id_fk" FOREIGN KEY (dashboard_id) REFERENCES dashboards(id) ON DELETE CASCADE not valid;
+        ALTER TABLE "public"."widgets" VALIDATE CONSTRAINT "widgets_dashboard_id_dashboards_id_fk";
+    END IF;
+END
+$$;
 
 grant delete on table "public"."dashboards" to "anon";
 

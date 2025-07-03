@@ -7,6 +7,7 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useLayout } from "@/components/dashboard/LayoutContext";
 import { cn } from "@/lib/utils";
+import "../layout-transitions.css";
 
 interface DashboardLayoutProps {
   dashboardName: string;
