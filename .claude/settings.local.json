@@ -16,7 +16,9 @@
       "Bash(npm run type-check:*)",
       "Bash(true)",
       "Bash(npx tsc:*)",
-      "Bash(npm run lint)"
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run:*)"
     ],
     "deny": []
   }

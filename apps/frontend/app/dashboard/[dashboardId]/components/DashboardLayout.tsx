@@ -45,7 +45,13 @@ export const DashboardLayout = memo(function DashboardLayout({
   const useOverlay = isMobile && isChatOpen;
 
   return (
-    <div className="min-h-screen">
+    <div className={cn(
+      "min-h-screen dashboard-layout-container",
+      isTransitioning && "layout-transitioning",
+      // Add sidebar state classes for CSS targeting
+      !isChatOpen && "sidebar-state-closed",
+      isChatOpen && "sidebar-state-chat-open"
+    )}>
       {/* Header */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -86,7 +92,7 @@ export const DashboardLayout = memo(function DashboardLayout({
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ type: "tween", duration: 0.3, ease: [0.4, 0.0, 0.2, 1] }}
-                className="absolute inset-0 z-50 bg-background border-l"
+                className="mobile-chat-overlay absolute inset-0 z-50 bg-background border-l"
               >
                 {chatPanel}
               </motion.div>
@@ -97,7 +103,8 @@ export const DashboardLayout = memo(function DashboardLayout({
           <ResizablePanelGroup 
             direction="horizontal" 
             className={cn(
-              "h-full transition-all duration-300 ease-out",
+              "h-full resize-panel-group",
+              "transition-all duration-300 ease-out",
               isTransitioning && "transition-transform"
             )}
           >
@@ -106,7 +113,7 @@ export const DashboardLayout = memo(function DashboardLayout({
               defaultSize={mainPanelSize} 
               minSize={isChatOpen ? 30 : 100}
               maxSize={isChatOpen ? 80 : 100}
-              className="transition-all duration-300 ease-out"
+              className="resize-panel transition-all duration-300 ease-out"
             >
               <motion.div 
                 className="h-full overflow-auto"
@@ -125,13 +132,13 @@ export const DashboardLayout = memo(function DashboardLayout({
               <>
                 <ResizableHandle 
                   withHandle 
-                  className="transition-colors duration-300 hover:bg-border/60"
+                  className="resize-handle transition-colors duration-300 hover:bg-border/60"
                 />
                 <ResizablePanel 
                   defaultSize={chatPanelSize} 
                   minSize={20} 
                   maxSize={50}
-                  className="transition-all duration-300 ease-out"
+                  className="resize-panel chat-sidebar transition-all duration-300 ease-out"
                 >
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}

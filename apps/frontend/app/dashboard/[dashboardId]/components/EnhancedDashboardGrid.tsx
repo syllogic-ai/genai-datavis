@@ -17,8 +17,7 @@ import { TextBlock } from "./widgets/TextBlock";
 import { ChartWidget } from "./widgets/ChartWidget";
 import { KPICard } from "./widgets/KPICard";
 import { TableWidget } from "./widgets/TableWidget";
-import { findAvailablePosition, getDimensionsFromSize, getResponsiveDimensions } from "../utils/gridUtils";
-import { ResizePopup } from "./ResizePopup";
+import { findAvailablePosition, getDimensionsFromSize, getResponsiveDimensions, getOptimalWidgetSize, recoverLayoutPositions } from "../utils/gridUtils";
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -30,9 +29,9 @@ interface EnhancedDashboardGridProps {
 
 const defaultLayouts = {
   text: { w: 12, h: 1 },  // Default to text-xs size (12×1)
-  chart: { w: 4, h: 2 },  // Default to chart-s size (4×2)
-  kpi: { w: 4, h: 2 },    // Only size available for KPI (4×2)
-  table: { w: 4, h: 2 },  // Default to chart-s size (4×2)
+  chart: { w: 3, h: 2 },  // Default to chart-s size (3×2)
+  kpi: { w: 3, h: 2 },    // Default KPI size (3×2)
+  table: { w: 3, h: 2 },  // Default to chart-s size (3×2)
 };
 
 const defaultConfigs = {
@@ -66,20 +65,7 @@ export function EnhancedDashboardGrid({
   onAddWidget,
 }: EnhancedDashboardGridProps) {
   const [hoveredItems, setHoveredItems] = useState<Record<string, boolean>>({});
-  const [activePopup, setActivePopup] = useState<{
-    widgetId: string | null;
-    position: { x: number; y: number };
-    currentSize: string;
-    widgetType: string;
-  }>({
-    widgetId: null,
-    position: { x: 0, y: 0 },
-    currentSize: 'm',
-    widgetType: '',
-  });
-  const [isPopupHovered, setIsPopupHovered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Use responsive grid hook instead of manual chat sidebar tracking
   const { gridProps, isTransitioning, effectiveBreakpoint, availableWidth } = useResponsiveGrid();
@@ -157,24 +143,9 @@ export function EnhancedDashboardGrid({
       layouts[breakpoint] = sortedWidgets.map(widget => {
         const layout = { ...widget.layout };
         
-        // Get the widget's size from layout dimensions
-        let widgetSize = "chart-s"; // default
-        
-        // Determine the widget size based on dimensions and type
-        if (widget.type === 'text') {
-          widgetSize = layout.h === 1 ? "text-xs" : "text-s";
-        } else if (widget.type === 'kpi') {
-          widgetSize = "kpi";
-        } else {
-          // For charts and tables, determine size from dimensions
-          if (layout.w === 4 && layout.h === 2) widgetSize = "chart-s";
-          else if (layout.w === 4 && layout.h === 4) widgetSize = "chart-m";
-          else if (layout.w === 6 && layout.h === 4) widgetSize = "chart-l";
-          else if (layout.w === 8 && layout.h === 4) widgetSize = "chart-xl";
-        }
-        
-        // Get responsive dimensions for this breakpoint
-        const responsiveDimensions = getResponsiveDimensions(widgetSize, breakpoint, colsForBreakpoint);
+        // Use intelligent adaptive sizing based on widget type and available space
+        const optimalSize = getOptimalWidgetSize(widget.type, colsForBreakpoint, breakpoint);
+        const responsiveDimensions = getResponsiveDimensions(optimalSize, breakpoint, colsForBreakpoint);
         
         // Apply responsive sizing with bounds checking
         layout.w = Math.min(responsiveDimensions.w, colsForBreakpoint);
@@ -208,7 +179,7 @@ export function EnhancedDashboardGrid({
     });
     
     return layouts;
-  }, [widgets, gridProps.cols]);
+  }, [widgets, gridProps]);
 
   const findNextAvailablePosition = useCallback((newWidget: { w: number; h: number }, widgetType: string) => {
     const existingLayouts = widgets.map(w => ({ 
@@ -245,7 +216,12 @@ export function EnhancedDashboardGrid({
       return;
     }
     
-    const position = findNextAvailablePosition(layoutConfig, type);
+    // Use adaptive sizing for new widgets
+    const currentCols = gridProps.cols.lg || 12;
+    const optimalSize = getOptimalWidgetSize(type, currentCols, effectiveBreakpoint);
+    const adaptiveDimensions = getResponsiveDimensions(optimalSize, effectiveBreakpoint, currentCols);
+    
+    const position = findNextAvailablePosition(adaptiveDimensions, type);
     const widgetId = uuidv4();
     const layoutId = uuidv4();
 
@@ -254,7 +230,7 @@ export function EnhancedDashboardGrid({
       widgetId,
       layoutId,
       position,
-      layoutConfig,
+      adaptiveDimensions,
       config
     });
 
@@ -265,13 +241,13 @@ export function EnhancedDashboardGrid({
         i: layoutId, // Use separate UUID for layout
         x: type === 'text' ? 0 : position.x, // Always start at x=0 for text widgets
         y: position.y,
-        w: type === 'text' ? 12 : layoutConfig.w, // Always full width for text widgets
-        h: layoutConfig.h,
-        minW: type === 'text' ? 12 : undefined, // Minimum width for text widgets
-        maxW: type === 'text' ? 12 : undefined, // Maximum width for text widgets
+        w: type === 'text' ? currentCols : adaptiveDimensions.w, // Use adaptive width
+        h: adaptiveDimensions.h, // Use adaptive height
+        minW: type === 'text' ? currentCols : undefined, // Minimum width for text widgets
+        maxW: type === 'text' ? currentCols : undefined, // Maximum width for text widgets
         minH: type === 'text' ? 1 : undefined, // Minimum height for text widgets
         maxH: type === 'text' ? undefined : undefined, // Remove max height restriction for text widgets
-        isResizable: false, // Disable built-in resizing for all widgets (we handle via popup)
+        isResizable: false, // Disable manual resizing - use predetermined sizes only
       },
       config,
       data: null,
@@ -281,7 +257,7 @@ export function EnhancedDashboardGrid({
     console.log(`[EnhancedDashboardGrid] Updated widget array will have ${widgets.length + 1} widgets`);
 
     onUpdateWidgets([...widgets, newWidget]);
-  }, [widgets, onUpdateWidgets, findNextAvailablePosition]);
+  }, [widgets, onUpdateWidgets, findNextAvailablePosition, effectiveBreakpoint, gridProps.cols.lg]);
 
   const handleDeleteWidget = useCallback((id: string) => {
     onUpdateWidgets(widgets.filter(widget => widget.id !== id));
@@ -289,47 +265,46 @@ export function EnhancedDashboardGrid({
 
   const handleDragStart = useCallback(() => {
     setIsDragging(true);
-    // Hide popup immediately when dragging starts
-    setActivePopup({
-      widgetId: null,
-      position: { x: 0, y: 0 },
-      currentSize: 'm',
-      widgetType: '',
-    });
   }, []);
 
   const handleDragStop = useCallback(() => {
     setIsDragging(false);
   }, []);
-
+  
+  // Handle layout changes with recovery logic
   const handleLayoutChange = useCallback((currentLayout: Layout[], allLayouts: Layouts) => {
-    // For responsive grids, we get the current layout and all layouts
-    // Use the current layout to update widget positions
-    const validatedLayout = currentLayout.map(layoutItem => {
-      const originalWidget = widgets.find(w => w.layout.i === layoutItem.i);
+    // Skip updates during transitions to prevent layout jumps
+    if (isTransitioning || isRecovering) return;
+    
+    // Update widget layouts only if they've actually changed
+    const updatedWidgets = widgets.map((widget, index) => {
+      const layoutItem = currentLayout.find((item) => item.i === widget.layout.i);
+      if (!layoutItem) return widget;
       
-      if (!originalWidget) return layoutItem;
+      // Check if layout actually changed
+      const hasChanged = 
+        layoutItem.x !== widget.layout.x ||
+        layoutItem.y !== widget.layout.y ||
+        layoutItem.w !== widget.layout.w ||
+        layoutItem.h !== widget.layout.h;
       
-      // For text widgets, ensure they stay at full width
-      if (originalWidget.type === 'text') {
-        return {
+      if (!hasChanged) return widget;
+      
+      return {
+        ...widget,
+        layout: {
           ...layoutItem,
-          x: 0, // Always start at x=0 for text widgets
-          w: layoutItem.w, // Keep responsive width
-        };
-      }
-      
-      return layoutItem;
+          i: widget.layout.i, // Preserve the ID
+        },
+      };
     });
     
-    // Update widgets with new layouts
-    const updatedWidgets = widgets.map(widget => {
-      const newLayout = validatedLayout.find(l => l.i === widget.layout.i);
-      return newLayout ? { ...widget, layout: newLayout } : widget;
-    });
-    
-    onUpdateWidgets(updatedWidgets);
-  }, [widgets, onUpdateWidgets]);
+    // Only update if there were actual changes
+    const hasChanges = updatedWidgets.some((w, i) => w !== widgets[i]);
+    if (hasChanges) {
+      onUpdateWidgets(updatedWidgets);
+    }
+  }, [widgets, onUpdateWidgets, isTransitioning, isRecovering]);
 
   const handleUpdateWidget = useCallback((widgetId: string, updates: Partial<Widget>) => {
     onUpdateWidgets(widgets.map(widget =>
@@ -337,77 +312,7 @@ export function EnhancedDashboardGrid({
     ));
   }, [widgets, onUpdateWidgets]);
 
-  const handleResizeWidget = useCallback((widgetId: string, newSize: { w: number; h: number }) => {
-    const updatedWidgets = widgets.map(widget => {
-      if (widget.id === widgetId) {
-        return { ...widget, layout: { ...widget.layout, ...newSize } };
-      }
-      return widget;
-    });
-    
-    onUpdateWidgets(updatedWidgets);
-  }, [widgets, onUpdateWidgets]);
 
-  const handleShowPopup = useCallback((widgetId: string, position: { x: number; y: number }, currentSize: string, widgetType: string) => {
-    // Clear any pending hide timeout
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-    
-    setActivePopup({
-      widgetId,
-      position,
-      currentSize,
-      widgetType,
-    });
-  }, []);
-
-  const handleHidePopup = useCallback(() => {
-    // Only hide if popup is not being hovered
-    if (!isPopupHovered) {
-      hideTimeoutRef.current = setTimeout(() => {
-        setActivePopup({
-          widgetId: null,
-          position: { x: 0, y: 0 },
-          currentSize: 'm',
-          widgetType: '',
-        });
-      }, 300); // 300ms delay
-    }
-  }, [isPopupHovered]);
-
-  const handlePopupMouseEnter = useCallback(() => {
-    // Clear any pending hide timeout
-    if (hideTimeoutRef.current) {
-      clearTimeout(hideTimeoutRef.current);
-      hideTimeoutRef.current = null;
-    }
-    setIsPopupHovered(true);
-  }, []);
-
-  const handlePopupMouseLeave = useCallback(() => {
-    setIsPopupHovered(false);
-    
-    // Hide popup after a delay
-    hideTimeoutRef.current = setTimeout(() => {
-      setActivePopup({
-        widgetId: null,
-        position: { x: 0, y: 0 },
-        currentSize: 'm',
-        widgetType: '',
-      });
-    }, 300); // 300ms delay
-  }, []);
-
-  // Clear timeout on cleanup
-  useEffect(() => {
-    return () => {
-      if (hideTimeoutRef.current) {
-        clearTimeout(hideTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const renderWidget = useCallback((widget: Widget) => {
     const props = {
@@ -464,7 +369,7 @@ export function EnhancedDashboardGrid({
                 </h3>
                 <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
                   Use the floating dock below to add widgets to your dashboard.
-                  Drag, resize, and configure each widget to fit your needs.
+                  Widgets will automatically adapt to your available space and screen size.
                 </p>
               </div>
             </div>
@@ -488,23 +393,17 @@ export function EnhancedDashboardGrid({
             onLayoutChange={handleLayoutChange}
             onDragStart={handleDragStart}
             onDragStop={handleDragStop}
-            preventCollision={false}
-            compactType="vertical"
+            preventCollision={gridProps.preventCollision}
+            compactType={gridProps.compactType}
             allowOverlap={false}
             useCSSTransforms={true}
             transformScale={1}
             autoSize={true}
             measureBeforeMount={false}
+            isDraggable={gridProps.isDraggable}
             isResizable={false}
           >
             {widgets.map((widget, index) => {
-              // Create a wrapper function to match the expected signature
-              const handleWidgetResize = (id: string, size: string) => {
-                // Convert string size to dimensions object if needed
-                // For now, since onResize isn't used in WidgetWrapper, we'll pass a placeholder
-                handleResizeWidget(id, { w: 1, h: 1 });
-              };
-              
               return (
                 <div 
                   key={widget.layout.i} // Use only layout.i as key to prevent duplicates
@@ -518,10 +417,6 @@ export function EnhancedDashboardGrid({
                     id={widget.id} 
                     widgetType={widget.type}
                     layout={widget.layout}
-                    onResize={handleWidgetResize}
-                    onShowPopup={handleShowPopup}
-                    onHidePopup={handleHidePopup}
-                    isPopupActive={activePopup.widgetId === widget.id}
                     isDragging={isDragging}
                   >
                     {renderWidget(widget)}
@@ -533,29 +428,6 @@ export function EnhancedDashboardGrid({
         )}
       </div>
 
-      {/* Global resize popup */}
-      {activePopup.widgetId && (
-        <ResizePopup
-          isVisible={true}
-          position={activePopup.position}
-          currentSize={activePopup.currentSize}
-          onSizeSelect={(size) => {
-            if (activePopup.widgetId) {
-              const newDimensions = getDimensionsFromSize(size);
-              handleResizeWidget(activePopup.widgetId, newDimensions);
-            }
-            setActivePopup({
-              widgetId: null,
-              position: { x: 0, y: 0 },
-              currentSize: 'm',
-              widgetType: '',
-            });
-          }}
-          widgetType={activePopup.widgetType}
-          onMouseEnter={handlePopupMouseEnter}
-          onMouseLeave={handlePopupMouseLeave}
-        />
-      )}
 
 
     </>

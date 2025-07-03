@@ -152,10 +152,17 @@ export function useResponsiveGrid() {
     const minWidgetWidth = 300; // Minimum widget width in pixels
     const maxColumns = 12;
     
-    // Dynamic column calculation based on available width
+    // Enhanced dynamic column calculation
     const calculateColumns = (width: number) => {
       const effectiveWidth = width - 32; // Account for padding
       const possibleColumns = Math.floor(effectiveWidth / minWidgetWidth);
+      
+      // Apply breakpoint-specific constraints
+      if (width < 480) return 1;  // xxs
+      if (width < 768) return Math.min(2, possibleColumns);  // xs
+      if (width < 1024) return Math.min(4, possibleColumns); // sm
+      if (width < 1200) return Math.min(8, possibleColumns); // md
+      
       return Math.min(maxColumns, Math.max(1, possibleColumns));
     };
     
@@ -164,11 +171,11 @@ export function useResponsiveGrid() {
     
     return {
       cols: { 
-        xl: layout.availableWidth >= 1536 ? 12 : dynamicCols,
-        lg: layout.availableWidth >= 1200 ? Math.min(12, dynamicCols) : dynamicCols,
-        md: layout.availableWidth >= 1024 ? Math.min(8, dynamicCols) : dynamicCols,
-        sm: layout.availableWidth >= 768 ? Math.min(4, dynamicCols) : dynamicCols,
-        xs: layout.availableWidth >= 480 ? Math.min(2, dynamicCols) : dynamicCols,
+        xl: Math.min(12, dynamicCols),
+        lg: Math.min(12, dynamicCols),
+        md: Math.min(8, dynamicCols),
+        sm: Math.min(4, dynamicCols),
+        xs: Math.min(2, dynamicCols),
         xxs: 1
       },
       breakpoints: {
@@ -180,8 +187,8 @@ export function useResponsiveGrid() {
         xxs: 0
       },
       rowHeight: layout.availableWidth < 768 ? 80 : 100,
-      margin: layout.availableWidth < 768 ? [8, 8] : [16, 16] as [number, number],
-      containerPadding: layout.availableWidth < 768 ? [8, 8] : [16, 16] as [number, number],
+      margin: (layout.availableWidth < 768 ? [8, 8] : [16, 16]) as [number, number],
+      containerPadding: (layout.availableWidth < 768 ? [8, 8] : [16, 16]) as [number, number],
       width: layout.getContainerWidth(),
       isDraggable: !layout.isTransitioning,
       isResizable: !layout.isTransitioning,

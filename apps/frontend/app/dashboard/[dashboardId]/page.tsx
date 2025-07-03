@@ -225,7 +225,6 @@ export default function EnhancedDashboardPage() {
               widgets={widgets}
               onUpdateWidgets={handleUpdateWidgets}
               onAddWidget={(fn) => { addWidgetRef.current = fn; }}
-              chatSidebarOpen={isChatSidebarOpen}
             />
           </div>
 

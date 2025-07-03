@@ -12,7 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { getGridSizeFromDimensions } from "../utils/gridUtils";
 
 interface WidgetWrapperProps {
   children: React.ReactNode;
@@ -20,10 +19,6 @@ interface WidgetWrapperProps {
   id: string;
   widgetType: string;
   layout: any;
-  onResize: (id: string, size: string) => void;
-  onShowPopup: (id: string, position: { x: number; y: number }, currentSize: string, widgetType: string) => void;
-  onHidePopup: () => void;
-  isPopupActive: boolean;
   isDragging: boolean;
 }
 
@@ -33,10 +28,6 @@ export function WidgetWrapper({
   id, 
   widgetType, 
   layout, 
-  onResize,
-  onShowPopup,
-  onHidePopup,
-  isPopupActive,
   isDragging
 }: WidgetWrapperProps) {
   const [isHovered, setIsHovered] = useState(false);
@@ -65,25 +56,15 @@ export function WidgetWrapper({
     }
   };
 
-  const currentSize = layout ? getGridSizeFromDimensions(layout.w, layout.h, widgetType) : 'chart-s';
-
   const handleMouseEnter = () => {
     if (!isDragging && !showDeleteDialog) {
       setIsHovered(true);
-      if (containerRef.current && widgetType) {
-        const rect = containerRef.current.getBoundingClientRect();
-        onShowPopup(id, {
-          x: rect.left + rect.width / 2,
-          y: rect.bottom // Use bottom instead of top for below positioning
-        }, currentSize, widgetType);
-      }
     }
   };
 
   const handleMouseLeave = () => {
     if (!showDeleteDialog) {
       setIsHovered(false);
-      onHidePopup();
     }
   };
 
