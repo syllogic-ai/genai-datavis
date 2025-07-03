@@ -46,15 +46,30 @@ async def execute_sql_and_get_data(ctx: RunContext[Deps]) -> list:
             return []
         
         df = pd.read_csv(io.StringIO(response.text))
+        
+        # Log CSV structure for debugging
+        logfire.info("CSV data loaded", 
+                    columns=df.columns.tolist(),
+                    shape=df.shape,
+                    sample_data=df.head(2).to_dict('records'))
+        
         ctx.deps.duck.register("csv_data", df)
         
         # Execute SQL query
-        result_df = ctx.deps.duck.execute(sql_query).fetchdf()
-        chart_data = result_df.to_dict('records') if not result_df.empty else []
-        
-        logfire.info("SQL executed successfully in viz_agent", 
-                    widget_id=ctx.deps.widget_id,
-                    rows_returned=len(chart_data))
+        try:
+            result_df = ctx.deps.duck.execute(sql_query).fetchdf()
+            chart_data = result_df.to_dict('records') if not result_df.empty else []
+            
+            logfire.info("SQL executed successfully in viz_agent", 
+                        widget_id=ctx.deps.widget_id,
+                        rows_returned=len(chart_data),
+                        sql_query=sql_query)
+        except Exception as sql_error:
+            logfire.error("SQL execution failed in viz_agent", 
+                         error=str(sql_error),
+                         sql_query=sql_query,
+                         widget_id=ctx.deps.widget_id)
+            chart_data = []
         
         return chart_data
         
@@ -533,10 +548,13 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
 
     try:
         widget_id = ctx.deps.widget_id
-        await update_widget_specs(widget_id, response.model_dump())
+        # Execute SQL and get chart data
+        chart_data = await execute_sql_and_get_data(ctx)
+        # Update widget with both config and data
+        await update_widget_specs(widget_id, response.model_dump(), chart_data)
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
-    except:
-        print(f"No chat ID in context! Supabase entry not updated.")
+    except Exception as e:
+        print(f"Error in visualize_area: {str(e)}")
 
     return response
 
@@ -567,10 +585,13 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
 
     try:
         widget_id = ctx.deps.widget_id
-        await update_widget_specs(widget_id, response.model_dump())
+        # Execute SQL and get chart data
+        chart_data = await execute_sql_and_get_data(ctx)
+        # Update widget with both config and data
+        await update_widget_specs(widget_id, response.model_dump(), chart_data)
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
-    except:
-        print(f"No chat ID in context! Supabase entry not updated.")
+    except Exception as e:
+        print(f"Error in visualize_line: {str(e)}")
 
     return response
 
@@ -601,10 +622,13 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
 
     try:
         widget_id = ctx.deps.widget_id
-        await update_widget_specs(widget_id, response.model_dump())
+        # Execute SQL and get chart data
+        chart_data = await execute_sql_and_get_data(ctx)
+        # Update widget with both config and data
+        await update_widget_specs(widget_id, response.model_dump(), chart_data)
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
-    except:
-        print(f"No chat ID in context! Supabase entry not updated.")
+    except Exception as e:
+        print(f"Error in visualize_kpi: {str(e)}")
 
     return response 
 
@@ -633,10 +657,13 @@ async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChart
 
     try:
         widget_id = ctx.deps.widget_id
-        await update_widget_specs(widget_id, response.model_dump())
+        # Execute SQL and get chart data
+        chart_data = await execute_sql_and_get_data(ctx)
+        # Update widget with both config and data
+        await update_widget_specs(widget_id, response.model_dump(), chart_data)
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
-    except:
-        print(f"No chat ID in context! Supabase entry not updated.")
+    except Exception as e:
+        print(f"Error in visualize_pie: {str(e)}")
         
     return response
 
@@ -681,10 +708,13 @@ async def visualize_table(ctx: RunContext[Deps], input: TableInput) -> TableOutp
 
     try:
         widget_id = ctx.deps.widget_id
-        await update_widget_specs(widget_id, response.model_dump())
+        # Execute SQL and get chart data
+        chart_data = await execute_sql_and_get_data(ctx)
+        # Update widget with both config and data
+        await update_widget_specs(widget_id, response.model_dump(), chart_data)
         await append_chat_message(ctx.deps.chat_id, response.model_dump())
-    except:
-        print(f"No chat ID in context! Supabase entry not updated.")
+    except Exception as e:
+        print(f"Error in visualize_table: {str(e)}")
 
     return response
 

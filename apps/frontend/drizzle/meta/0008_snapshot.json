@@ -1,73 +1,9 @@
 {
-  "id": "47984ce9-5cdb-43f4-bd2f-c93282df1383",
-  "prevId": "9a92174e-1fca-428c-8413-3aa5ce77570a",
+  "id": "27ace485-64eb-44bd-98fb-0e59ce711635",
+  "prevId": "5ce91490-a8bb-4f3a-b53b-cc366e900815",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.charts": {
-      "name": "charts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "chat_id": {
-          "name": "chat_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "chart_type": {
-          "name": "chart_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "chart_specs": {
-          "name": "chart_specs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sql": {
-          "name": "sql",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "charts_chat_id_chats_id_fk": {
-          "name": "charts_chat_id_chats_id_fk",
-          "tableFrom": "charts",
-          "tableTo": "chats",
-          "columnsFrom": [
-            "chat_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.chats": {
       "name": "chats",
       "schema": "",
@@ -82,20 +18,20 @@
           "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
-        "file_id": {
-          "name": "file_id",
+        "dashboard_id": {
+          "name": "dashboard_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "title": {
           "name": "title",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'New Chat'"
+          "default": "'Dashboard Chat'"
         },
         "conversation": {
           "name": "conversation",
@@ -133,12 +69,85 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "chats_file_id_files_id_fk": {
-          "name": "chats_file_id_files_id_fk",
+        "chats_dashboard_id_dashboards_id_fk": {
+          "name": "chats_dashboard_id_dashboards_id_fk",
           "tableFrom": "chats",
-          "tableTo": "files",
+          "tableTo": "dashboards",
           "columnsFrom": [
-            "file_id"
+            "dashboard_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.dashboards": {
+      "name": "dashboards",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'New Dashboard'"
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "icon": {
+          "name": "icon",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'document-text'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "dashboards_user_id_users_id_fk": {
+          "name": "dashboards_user_id_users_id_fk",
+          "tableFrom": "dashboards",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
           ],
           "columnsTo": [
             "id"
@@ -169,6 +178,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "dashboard_id": {
+          "name": "dashboard_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "file_type": {
           "name": "file_type",
           "type": "text",
@@ -177,6 +192,12 @@
         },
         "original_filename": {
           "name": "original_filename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sanitized_filename": {
+          "name": "sanitized_filename",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -216,6 +237,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "files_dashboard_id_dashboards_id_fk": {
+          "name": "files_dashboard_id_dashboards_id_fk",
+          "tableFrom": "files",
+          "tableTo": "dashboards",
+          "columnsFrom": [
+            "dashboard_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -234,11 +268,11 @@
           "primaryKey": true,
           "notNull": true
         },
-        "request_id": {
-          "name": "request_id",
+        "user_id": {
+          "name": "user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "chat_id": {
           "name": "chat_id",
@@ -252,18 +286,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "api_request": {
-          "name": "api_request",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "input_tokens": {
           "name": "input_tokens",
           "type": "integer",
@@ -273,12 +295,6 @@
         "output_tokens": {
           "name": "output_tokens",
           "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "compute_time": {
-          "name": "compute_time",
-          "type": "real",
           "primaryKey": false,
           "notNull": true
         },
@@ -298,6 +314,19 @@
       },
       "indexes": {},
       "foreignKeys": {
+        "llm_usage_user_id_users_id_fk": {
+          "name": "llm_usage_user_id_users_id_fk",
+          "tableFrom": "llm_usage",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "llm_usage_chat_id_chats_id_fk": {
           "name": "llm_usage_chat_id_chats_id_fk",
           "tableFrom": "llm_usage",
@@ -344,6 +373,133 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.widgets": {
+      "name": "widgets",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "dashboard_id": {
+          "name": "dashboard_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config": {
+          "name": "config",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "data": {
+          "name": "data",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "sql": {
+          "name": "sql",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "layout": {
+          "name": "layout",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_configured": {
+          "name": "is_configured",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "cache_key": {
+          "name": "cache_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_data_fetch": {
+          "name": "last_data_fetch",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "widgets_dashboard_id_dashboards_id_fk": {
+          "name": "widgets_dashboard_id_dashboards_id_fk",
+          "tableFrom": "widgets",
+          "tableTo": "dashboards",
+          "columnsFrom": [
+            "dashboard_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "widgets_chat_id_chats_id_fk": {
+          "name": "widgets_chat_id_chats_id_fk",
+          "tableFrom": "widgets",
+          "tableTo": "chats",
+          "columnsFrom": [
+            "chat_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

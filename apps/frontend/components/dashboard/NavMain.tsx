@@ -109,6 +109,27 @@ export function NavMain({
   // Cache widget counts to avoid repeated API calls
   const [widgetCounts, setWidgetCounts] = useState<Record<string, number>>({});
   const [loadedDashboardIds, setLoadedDashboardIds] = useState<Set<string>>(new Set());
+  
+  // Track which dashboards are expanded
+  const [expandedDashboards, setExpandedDashboards] = useState<Set<string>>(new Set());
+
+  // Function to toggle dashboard expansion
+  const toggleDashboardExpansion = useCallback((dashboardId: string) => {
+    console.log('[NavMain] Toggling dashboard expansion for:', dashboardId);
+    setExpandedDashboards(prev => {
+      const newSet = new Set(prev);
+      const wasExpanded = newSet.has(dashboardId);
+      if (wasExpanded) {
+        newSet.delete(dashboardId);
+        console.log('[NavMain] Collapsing dashboard:', dashboardId);
+      } else {
+        newSet.add(dashboardId);
+        console.log('[NavMain] Expanding dashboard:', dashboardId);
+      }
+      console.log('[NavMain] New expanded dashboards:', Array.from(newSet));
+      return newSet;
+    });
+  }, []);
 
   // Chat functionality moved to chat sidebar
 
@@ -330,6 +351,19 @@ export function NavMain({
     }
   }, [renamingDashboard]);
 
+  // Initialize active dashboard as expanded
+  useEffect(() => {
+    if (activeDashboardId) {
+      console.log('[NavMain] Initializing active dashboard as expanded:', activeDashboardId);
+      setExpandedDashboards(prev => {
+        const newSet = new Set(prev);
+        newSet.add(activeDashboardId);
+        console.log('[NavMain] Initial expanded dashboards:', Array.from(newSet));
+        return newSet;
+      });
+    }
+  }, [activeDashboardId]);
+
   return (
     <>
       <SidebarGroup>
@@ -350,8 +384,14 @@ export function NavMain({
           {dashboardsWithWidgets.length > 0 && (
             <SidebarMenu className="text-muted font-semibold">
               {dashboardsWithWidgets.map((dashboard) => (
-                <Collapsible key={dashboard.id} asChild defaultOpen={dashboard.isActive}>
-                  <SidebarMenuItem>
+                <SidebarMenuItem key={dashboard.id}>
+                  <Collapsible 
+                    open={expandedDashboards.has(dashboard.id)}
+                    onOpenChange={(open) => {
+                      console.log('[NavMain] Collapsible onOpenChange called for dashboard:', dashboard.id, 'open:', open);
+                      toggleDashboardExpansion(dashboard.id);
+                    }}
+                  >
                     <div 
                       className={`relative group rounded-md transition-all duration-200 ${
                         dashboard.isActive ? 'bg-sidebar-foreground/5' : ''
@@ -366,47 +406,53 @@ export function NavMain({
                       onMouseLeave={() => setHoveredDashboard(null)}
                     >
                       {/* Main Dashboard Button */}
-                      <SidebarMenuButton 
-                        asChild 
-                        tooltip={dashboard.name}
-                        className={`pr-0 ${
-                          dashboard.isActive ? 'hover:bg-sidebar-foreground/25' : ''
-                        }`}
-                      >
-                        <Link href={`/dashboard/${dashboard.id}`} className="flex items-center gap-2 pr-2">
-                          {/* Always show chevron if dashboard has widgets */}
-                          {dashboard.widgets.length > 0 ? (
-                            <CollapsibleTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-4 w-4 p-0 transition-transform duration-200 data-[state=open]:rotate-90 hover:bg-sidebar-accent"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  console.log('[NavMain] Chevron clicked for dashboard:', dashboard.id);
-                                }}
-                              >
-                                <ChevronRight className="h-3 w-3" />
-                                <span className="sr-only">Toggle widgets</span>
-                              </Button>
-                            </CollapsibleTrigger>
-                          ) : (
-                            /* Dashboard Icon when no widgets */
-                            <div className="transition-opacity duration-200">
+                      <div className={`flex items-center gap-2 pr-2 w-full h-8 px-2 rounded-md transition-colors ${
+                        dashboard.isActive ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/10' : 'hover:bg-secondary/40'
+                      }`}>
+                        {/* Always show chevron on hover, functional only for dashboards with widgets */}
+                        {dashboard.widgets.length > 0 ? (
+                          <CollapsibleTrigger
+                            className="h-4 w-4 p-0 transition-all duration-200 data-[state=open]:rotate-90 hover:bg-secondary/40 relative z-10 flex items-center justify-center rounded-sm"
+                            onClick={() => {
+                              console.log('[NavMain] Chevron clicked for dashboard:', dashboard.id);
+                              // Let the CollapsibleTrigger handle the toggle naturally
+                            }}
+                          >
+                            <ChevronRight className={`h-3 w-3 transition-opacity duration-200 ${
+                              hoveredDashboard === dashboard.id 
+                                ? 'opacity-100' 
+                                : 'opacity-0'
+                            }`} />
+                            <span className="sr-only">Toggle widgets</span>
+                          </CollapsibleTrigger>
+                        ) : (
+                          /* Show chevron on hover for consistency, but not functional */
+                          <div className="relative h-4 w-4 flex items-center justify-center">
+                            {/* Dashboard Icon - visible when not hovered */}
+                            <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                              hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
+                            }`}>
                               <IconRenderer
                                 className="size-4 text-sidebar-foreground"
                                 icon={dashboard.icon}
                               />
                             </div>
-                          )}
-                          
-                          <span className="truncate flex-1">{dashboard.name}</span>
+                            {/* Chevron - visible on hover */}
+                            <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                              hoveredDashboard === dashboard.id ? 'opacity-100' : 'opacity-0'
+                            }`}>
+                              <ChevronRight className="h-3 w-3 text-sidebar-foreground/50" />
+                            </div>
+                          </div>
+                        )}
+                        
+                        <Link href={`/dashboard/${dashboard.id}`} className="truncate flex-1 py-1">
+                          <span className="truncate text-sm">{dashboard.name}</span>
                         </Link>
-                      </SidebarMenuButton>
+                      </div>
 
                       {/* Menu Actions - Loading indicator or Ellipsis Menu */}
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20">
                         {operationLoading[dashboard.id] ? (
                           <Loader2 className="h-4 w-4 animate-spin text-sidebar-foreground" />
                         ) : (
@@ -421,7 +467,11 @@ export function NavMain({
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-6 w-6 p-0 opacity-100 transition-opacity duration-200 hover:bg-sidebar-accent"
+                                className={`h-6 w-6 p-0 transition-opacity duration-200 ${
+                                  hoveredDashboard === dashboard.id 
+                                    ? 'opacity-100' 
+                                    : 'opacity-0'
+                                }`}
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -524,8 +574,8 @@ export function NavMain({
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     )}
-                  </SidebarMenuItem>
-                </Collapsible>
+                  </Collapsible>
+                </SidebarMenuItem>
               ))}
             </SidebarMenu>
           )}
