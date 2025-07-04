@@ -32,6 +32,10 @@ load_dotenv()
 # Import QStash utilities (replacing Redis)
 from apps.backend.utils.qstash_queue import enqueue_task, verify_qstash_signature, qstash_client
 
+# Import hybrid job tracking utilities (Redis + Supabase)
+from apps.backend.utils.job_persistence import create_job, update_job_status, complete_job, fail_job
+from apps.backend.utils.job_tracking import get_job_status  # Keep Redis-only for real-time reads
+
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -144,6 +148,7 @@ class ChatAnalysisRequest(BaseModel):
     targetWidgetType: Optional[str] = None
     chat_id: str
     request_id: str
+    user_id: Optional[str] = None  # Clerk user ID for job ownership
 
 # Request model for the chart spec data endpoint
 class ChartSpecRequest(BaseModel):
@@ -239,26 +244,44 @@ async def analyze_chat_message(
         target_widget_type=request.targetWidgetType
     )
     
+    # Generate task ID upfront so it's consistent everywhere
+    task_id = request.request_id  # Use request_id as task_id for consistency
+    
     # Prepare task data with new structure
     task_data = {
+        "task_id": task_id,  # Include task_id in the payload
         "chat_id": request.chat_id,
         "request_id": request.request_id,
         "dashboard_id": request.dashboardId,
         "user_prompt": request.message,
         "context_widget_ids": request.contextWidgetIds,
         "target_widget_type": request.targetWidgetType,
+        "user_id": request.user_id,  # Include user_id for job tracking
         "received_at": datetime.now().isoformat()
     }
 
     try:
         # Use QStash to enqueue the task
-        task_id = enqueue_task(ANALYSIS_QUEUE_NAME, task_data)
+        enqueued_task_id = enqueue_task(ANALYSIS_QUEUE_NAME, task_data)
         
-        if not task_id:
+        if not enqueued_task_id:
             raise HTTPException(
                 status_code=503,
                 detail="Failed to enqueue task to QStash"
             )
+        
+        # Create job tracking record with hybrid Redis + Supabase persistence
+        try:
+            user_id = request.user_id or request.chat_id  # Fallback to chat_id if no user_id
+            create_job(
+                job_id=task_id,
+                user_id=user_id,
+                dashboard_id=request.dashboardId
+            )
+            logfire.info(f"Job {task_id} created for user {user_id} with hybrid tracking")
+        except Exception as job_error:
+            logfire.warn(f"Failed to create job tracking: {job_error}")
+            # Continue without job tracking - SSE will gracefully degrade
         
         processing_time = time.time() - start_time
         logfire.info(
@@ -480,10 +503,35 @@ async def process_analysis_task(
             file_id=file_id
         )
         
+        # Update job status to processing (if Redis is available)
+        task_id = task_data.get("task_id", request_id)
+        user_id_from_task = task_data.get("user_id")
+        
+        try:
+            # Create job if it doesn't exist (for backward compatibility)
+            if user_id_from_task and dashboard_id:
+                create_job(
+                    job_id=task_id,
+                    user_id=user_id_from_task,
+                    dashboard_id=dashboard_id
+                )
+            
+            update_job_status(task_id, "processing", progress=10)
+            logfire.info(f"Job {task_id} status updated to processing")
+        except Exception as job_error:
+            logfire.warn(f"Failed to update job status: {job_error}")
+            # Continue without job tracking
+        
         # Call the appropriate analysis function based on message type
         if dashboard_id:
             # Dashboard-centric processing using existing agentic flow
             logfire.info(f"Processing dashboard chat request for dashboard {dashboard_id}")
+            
+            # Update progress: Starting analysis
+            try:
+                update_job_status(task_id, "processing", progress=20)
+            except Exception as e:
+                logfire.warn(f"Failed to update job progress: {e}")
             
             # Get files associated with this dashboard to use existing agentic flow
             try:
@@ -493,6 +541,12 @@ async def process_analysis_task(
                     # Use the first file associated with the dashboard
                     dashboard_file_id = dashboard_files_result.data[0]["id"]
                     logfire.info(f"Using file {dashboard_file_id} from dashboard {dashboard_id} for agentic processing")
+                    
+                    # Update progress: Processing request
+                    try:
+                        update_job_status(task_id, "processing", progress=40)
+                    except Exception as e:
+                        logfire.warn(f"Failed to update job progress: {e}")
                     
                     # Use existing agentic flow with dashboard context
                     result = await process_user_request(
@@ -584,6 +638,12 @@ async def process_analysis_task(
             chat_message_payload["chart_id"] = result.get("widget_ids")[0]
             chat_message_payload["widget_ids"] = result.get("widget_ids")
         
+        # Update progress: Saving results
+        try:
+            update_job_status(task_id, "processing", progress=90)
+        except Exception as e:
+            logfire.warn(f"Failed to update job progress: {e}")
+        
         # Send message to the chat
         await append_chat_message(chat_id, chat_message_payload)
         
@@ -592,6 +652,21 @@ async def process_analysis_task(
         if dashboard_id and (widget_created or result.get("widget_operations")):
             operation_type = "widgets_created" if widget_created else "widget_operations"
             await trigger_dashboard_refresh(dashboard_id, supabase, operation_type)
+        
+        # Mark job as completed - this triggers Supabase Realtime event
+        try:
+            complete_job(task_id, {
+                "widget_id": result.get("widget_id"),
+                "widget_ids": result.get("widget_ids"),
+                "answer": result.get("answer"),
+                "request_id": request_id,
+                "chat_id": chat_id,
+                "dashboard_id": dashboard_id
+            })
+            logfire.info(f"Job {task_id} marked as completed - Realtime event triggered")
+        except Exception as job_error:
+            logfire.warn(f"Failed to mark job as completed: {job_error}")
+            # Continue without job tracking
         
         return Response(
             content=json.dumps({"success": True, "request_id": request_id}),
@@ -603,6 +678,15 @@ async def process_analysis_task(
         error_message = str(e)
         request_id = task_data.get("request_id", "unknown")
         chat_id = task_data.get("chat_id")
+        task_id = task_data.get("task_id", request_id)
+        
+        # Mark job as failed (if Redis is available)
+        try:
+            fail_job(task_id, error_message)
+            logfire.info(f"Job {task_id} marked as failed")
+        except Exception as job_error:
+            logfire.warn(f"Failed to mark job as failed: {job_error}")
+            # Continue without job tracking
         
         logfire.error(
             "Error processing task from QStash",

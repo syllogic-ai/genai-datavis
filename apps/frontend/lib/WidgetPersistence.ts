@@ -71,10 +71,21 @@ export class WidgetPersistence {
     console.log(`[WidgetPersistence] Initialized for dashboard ${dashboardId} (simplified mode - no real-time updates)`);
   }
 
-  async loadWidgets(): Promise<Widget[]> {
+  async loadWidgets(bustCache: boolean = false): Promise<Widget[]> {
     try {
-      console.log(`[WidgetPersistence] Loading widgets for dashboard ${this.dashboardId}`);
-      const response = await fetch(`/api/dashboards/${this.dashboardId}/widgets`);
+      console.log(`[WidgetPersistence] Loading widgets for dashboard ${this.dashboardId}${bustCache ? ' (cache busting)' : ''}`);
+      
+      // Build URL with cache busting parameter if requested
+      let url = `/api/dashboards/${this.dashboardId}/widgets`;
+      if (bustCache) {
+        url += `?bustCache=true&t=${Date.now()}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: {
+          'Cache-Control': bustCache ? 'no-cache, no-store, must-revalidate' : 'max-age=0'
+        }
+      });
       
       if (!response.ok) {
         throw new Error(`Failed to load widgets: ${response.statusText}`);

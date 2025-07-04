@@ -19,10 +19,12 @@ export async function GET(
     }
 
     const { dashboardId } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const bustCache = searchParams.get('bustCache') === 'true';
 
-    // Cache-first approach with fallback to database
-    const cachedWidgets = await withRedisCache(
-      // Try cache first
+    // Cache-first approach with fallback to database (skip cache if bust requested)
+    const cachedWidgets = bustCache ? null : await withRedisCache(
+      // Try cache first (unless cache busting)
       async () => {
         const cached = await dashboardCache.getDashboardWidgets(dashboardId, userId);
         if (cached && Array.isArray(cached)) {
@@ -33,7 +35,17 @@ export async function GET(
       },
       // Fallback to database
       async () => {
-        console.log(`[API] Cache MISS - Loading widgets from database for dashboard ${dashboardId}`);
+        console.log(`[API] ${bustCache ? 'Cache BUST' : 'Cache MISS'} - Loading widgets from database for dashboard ${dashboardId}`);
+        
+        // If cache busting, invalidate cache first
+        if (bustCache) {
+          try {
+            await dashboardCache.invalidateDashboardWidgets(dashboardId, userId);
+            console.log(`[API] Cache invalidated for dashboard ${dashboardId}`);
+          } catch (cacheError) {
+            console.warn('Failed to invalidate cache during bust:', cacheError);
+          }
+        }
         
         // Verify dashboard belongs to user
         const dashboard = await db
@@ -66,10 +78,12 @@ export async function GET(
           lastDataFetch: dbWidget.lastDataFetch,
         }));
 
-        // Cache the results for future requests
-        await dashboardCache.setDashboardWidgets(dashboardId, userId, frontendWidgets);
+        // Cache the results for future requests (unless this was a cache bust)
+        if (!bustCache) {
+          await dashboardCache.setDashboardWidgets(dashboardId, userId, frontendWidgets);
+        }
         
-        console.log(`[API] Loaded and cached ${frontendWidgets.length} widgets for dashboard ${dashboardId}`);
+        console.log(`[API] Loaded ${bustCache ? '(no cache)' : 'and cached'} ${frontendWidgets.length} widgets for dashboard ${dashboardId}`);
         return { widgets: frontendWidgets, fromCache: false };
       }
     );

@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
       targetChartSubType: targetChartSubType || undefined,
       chat_id: chatId,
       request_id: requestId,
+      user_id: userId, // Include the Clerk user ID for job ownership
       conversation_history: [...conversationHistory, newUserMessage] // Include full conversation
     };
 

@@ -45,6 +45,7 @@ export default function EnhancedDashboardPage() {
     handleUpdateWidgets,
     handleAddWidget,
     saveWidgets,
+    loadWidgets,
     addWidgetRef,
   } = useDashboardState(dashboardId);
 
@@ -182,6 +183,7 @@ export default function EnhancedDashboardPage() {
         files={files}
         onFirstMessage={handleFirstMessage}
         onBack={handleBackToSetup}
+        onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
       />
     );
   }
@@ -246,6 +248,7 @@ export default function EnhancedDashboardPage() {
             isOpen={isChatSidebarOpen}
             onToggle={handleChatSidebarToggle}
             dashboardWidgets={widgets}
+            onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
           />
         )}
       </motion.div>

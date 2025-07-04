@@ -112,6 +112,29 @@ export const llmUsage = pgTable('llm_usage', {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// JOBS (for tracking async analysis tasks)
+export const jobs = pgTable('jobs', {
+  id: text("id").primaryKey(), // UUID job ID (same as Redis key)
+  userId: text("user_id").notNull().references(() => users.id),
+  dashboardId: text("dashboard_id").notNull().references(() => dashboards.id),
+  
+  // Job metadata
+  status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'failed'
+  progress: integer("progress").default(0), // 0-100
+  
+  // Error tracking
+  error: text("error"),
+  
+  // Timing information
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  
+  // Performance metrics
+  processingTimeMs: integer("processing_time_ms"),
+  queueTimeMs: integer("queue_time_ms"),
+});
+
 // Type definitions
 export type User = typeof users.$inferSelect;
 export type File = typeof files.$inferSelect;
@@ -119,3 +142,4 @@ export type Dashboard = typeof dashboards.$inferSelect;
 export type Widget = typeof widgets.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type LLMUsage = typeof llmUsage.$inferSelect;
+export type Job = typeof jobs.$inferSelect;

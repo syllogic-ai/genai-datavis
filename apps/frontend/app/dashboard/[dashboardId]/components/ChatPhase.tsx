@@ -10,15 +10,17 @@ import { FileRecord } from "../hooks/useSetupState";
 import { ChatInput } from "@/components/dashboard/ChatInput";
 import { useDashboardChat } from "../hooks/useDashboardChat";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
+import { useJobStatusRealtime } from "@/app/lib/hooks/useJobStatusRealtime";
 
 interface ChatPhaseProps {
   dashboardId: string;
   files: FileRecord[];
   onFirstMessage: () => void;
   onBack: () => void;
+  onWidgetsRefresh?: () => Promise<void>;
 }
 
-export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPhaseProps) {
+export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidgetsRefresh }: ChatPhaseProps) {
   const [hasTyped, setHasTyped] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [processingStatus, setProcessingStatus] = useState<'idle' | 'submitting' | 'processing' | 'completed'>('idle');
@@ -28,9 +30,62 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastSubmittedData, setLastSubmittedData] = useState<any>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [hasNavigated, setHasNavigated] = useState(false);
   
   // Get or create chat for this dashboard
   const { chatId, isLoading: isChatLoading } = useDashboardChat(dashboardId);
+  
+  // Job status monitoring with Supabase Realtime
+  const {
+    status: jobStatus,
+    progress: jobProgress,
+    error: jobError,
+    job: jobData,
+    isCompleted: jobCompleted,
+    isFailed: jobFailed,
+    disconnect: disconnectJob
+  } = useJobStatusRealtime(pendingTaskId, {
+    onComplete: async (job) => {
+      console.log('Job completed via Realtime:', job);
+      if (!hasNavigated) {
+        setProcessingStatus('completed');
+        setProcessingMessage('Dashboard ready!');
+        setHasNavigated(true);
+        
+        // Clear any existing timer
+        if (completionTimer) {
+          clearTimeout(completionTimer);
+          setCompletionTimer(null);
+        }
+        
+        // Refresh widgets to load the newly created ones with cache busting
+        if (onWidgetsRefresh) {
+          try {
+            console.log('Refreshing dashboard widgets after job completion (with cache bust)');
+            // Add small delay to ensure backend has completed all operations
+            setTimeout(async () => {
+              await onWidgetsRefresh();
+            }, 1500);
+          } catch (error) {
+            console.error('Failed to refresh widgets:', error);
+          }
+        }
+        
+        // Small delay to show completion message, then transition
+        const timer = setTimeout(() => {
+          onFirstMessage();
+        }, 1500);
+        setCompletionTimer(timer);
+      }
+    },
+    onError: (error) => {
+      console.error('Job error via Realtime:', error);
+      setProcessingStatus('idle');
+      setProcessingMessage('');
+      setPendingTaskId(null);
+      setErrorMessage(error);
+    }
+  });
   
   // Subscribe to real-time chat updates to detect completion
   const { conversation, isLoading: isConversationLoading } = useChatRealtime(
@@ -75,12 +130,13 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
               messageContent.includes('complete')
             );
             
-            if (indicatesCompletion) {
+            if (indicatesCompletion && !hasNavigated) {
               console.log('AI processing completed, transitioning to dashboard. Message:', relevantMessage);
               setProcessingStatus('completed');
               setProcessingMessage('Dashboard ready!');
               setPendingTaskId(null);
               setErrorMessage(null); // Clear any existing errors
+              setHasNavigated(true); // Prevent multiple navigation calls
               
               // Clear any existing timer
               if (completionTimer) {
@@ -111,20 +167,21 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
   
   // Add fallback timeout for completion detection
   useEffect(() => {
-    if (processingStatus === 'processing' && pendingTaskId) {
+    if (processingStatus === 'processing' && pendingTaskId && !hasNavigated) {
       // Set a fallback timeout (60 seconds) in case real-time detection fails
       const fallbackTimer = setTimeout(() => {
         console.log('Fallback timeout reached, checking for completion');
         // Check if we have any system messages (completion indicators)
-        if (conversation.some(msg => msg.role === 'system')) {
+        if (conversation.some(msg => msg.role === 'system') && !hasNavigated) {
           setProcessingStatus('completed');
           setProcessingMessage('Dashboard ready!');
           setPendingTaskId(null);
+          setHasNavigated(true); // Prevent duplicate navigation
           
           setTimeout(() => {
             onFirstMessage();
           }, 1500);
-        } else {
+        } else if (!hasNavigated) {
           // If no response after timeout, show error
           setProcessingStatus('idle');
           setProcessingMessage('');
@@ -140,7 +197,7 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
       
       return () => clearTimeout(fallbackTimer);
     }
-  }, [processingStatus, pendingTaskId, conversation, onFirstMessage]);
+  }, [processingStatus, pendingTaskId, conversation, onFirstMessage, hasNavigated]);
 
   const handleSubmit = async (data: {
     selectedItems: any[];
@@ -156,6 +213,7 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
     setHasTyped(true);
     setProcessingStatus('submitting');
     setProcessingMessage('Sending your request...');
+    setHasNavigated(false); // Reset navigation flag for new submission
     
     try {
       // Real API call to analyze endpoint
@@ -204,7 +262,13 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
         setProcessingMessage('Creating your dashboard...');
         
         // Store the task ID for tracking
-        setPendingTaskId(result.taskId || result.requestId);
+        const taskId = result.taskId || result.requestId;
+        console.log('Setting pending task ID:', taskId);
+        
+        // Add a small delay to allow backend to create the job record
+        setTimeout(() => {
+          setPendingTaskId(taskId);
+        }, 1000);
         
       } else {
         throw new Error(result.error || 'Unknown error occurred');
@@ -286,6 +350,23 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
               <p className="text-sm text-muted-foreground mb-3">
                 This may take a few moments while we analyze your data and create visualizations.
               </p>
+              
+              {/* Progress indicator if we have job progress */}
+              {jobProgress > 0 && (
+                <div className="w-full max-w-md mx-auto mb-4">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Progress</span>
+                    <span>{jobProgress}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{ width: `${jobProgress}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
                 <span>Analyzing data patterns</span>
@@ -398,17 +479,19 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack }: ChatPh
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-center">
                 <p className="text-red-700 text-sm mb-2">{errorMessage}</p>
                 {lastSubmittedData && retryCount < 3 && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setErrorMessage(null);
-                      handleSubmit(lastSubmittedData);
-                    }}
-                    className="text-xs border-red-300 text-red-700 hover:bg-red-100"
-                  >
-                    Try Again
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setErrorMessage(null);
+                        handleSubmit(lastSubmittedData);
+                      }}
+                      className="text-xs border-red-300 text-red-700 hover:bg-red-100"
+                    >
+                      Try Again
+                    </Button>
+                  </div>
                 )}
                 {retryCount >= 3 && (
                   <p className="text-xs text-red-600 mt-1">

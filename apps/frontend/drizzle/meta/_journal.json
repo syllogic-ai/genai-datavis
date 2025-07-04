@@ -64,6 +64,20 @@
       "when": 1751554247757,
       "tag": "0008_cloudy_gateway",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1751624055691,
+      "tag": "0009_slim_doorman",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1751624715518,
+      "tag": "0010_brief_wasp",
+      "breakpoints": true
     }
   ]
 }

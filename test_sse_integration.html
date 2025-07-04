@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Job Status Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { margin: 10px 0; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        .connected { background-color: #d4edda; }
+        .processing { background-color: #fff3cd; }
+        .completed { background-color: #cce5ff; }
+        .error { background-color: #f8d7da; }
+        button { margin: 5px; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>SSE Job Status Test</h1>
+    
+    <div>
+        <label for="jobId">Job ID:</label>
+        <input type="text" id="jobId" value="test-job-123" />
+        <button onclick="startMonitoring()">Start Monitoring</button>
+        <button onclick="stopMonitoring()">Stop Monitoring</button>
+    </div>
+    
+    <div id="status"></div>
+    <div id="log"></div>
+
+    <script>
+        let eventSource = null;
+        
+        function startMonitoring() {
+            const jobId = document.getElementById('jobId').value;
+            if (!jobId) {
+                alert('Please enter a job ID');
+                return;
+            }
+            
+            if (eventSource) {
+                eventSource.close();
+            }
+            
+            const url = `/api/job-status/${jobId}`;
+            eventSource = new EventSource(url, { withCredentials: true });
+            
+            eventSource.onopen = function(event) {
+                log('SSE connection opened', 'connected');
+                updateStatus('Connected', 'connected');
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    log(`Received: ${JSON.stringify(data)}`, data.type);
+                    
+                    switch(data.type) {
+                        case 'connected':
+                            updateStatus('Connected to job monitoring', 'connected');
+                            break;
+                        case 'status':
+                            updateStatus(`Status: ${data.status}, Progress: ${data.progress}%`, data.status);
+                            if (data.error) {
+                                log(`Job error: ${data.error}`, 'error');
+                            }
+                            break;
+                        case 'error':
+                            updateStatus(`Error: ${data.message}`, 'error');
+                            break;
+                    }
+                } catch (e) {
+                    log(`Error parsing message: ${e.message}`, 'error');
+                }
+            };
+            
+            eventSource.onerror = function(event) {
+                log('SSE connection error', 'error');
+                updateStatus('Connection error', 'error');
+            };
+        }
+        
+        function stopMonitoring() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+                updateStatus('Disconnected', '');
+                log('SSE connection closed', '');
+            }
+        }
+        
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function log(message, type) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `<div class="status ${type}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        // Clean up on page unload
+        window.addEventListener('beforeunload', function() {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>

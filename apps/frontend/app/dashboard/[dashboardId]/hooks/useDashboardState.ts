@@ -13,6 +13,7 @@ export function useDashboardState(dashboardId: string) {
   const [dashboardName, setDashboardName] = useState("My Dashboard");
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSilentRefresh, setIsSilentRefresh] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -56,35 +57,78 @@ export function useDashboardState(dashboardId: string) {
     };
   }, [dashboardId, userId]);
 
-  // Load widgets from database
-  const loadWidgets = useCallback(async () => {
+  // Load widgets from database with cache busting
+  const loadWidgets = useCallback(async (options: { bustCache?: boolean; retryCount?: number; silent?: boolean } = {}) => {
     if (!widgetPersistenceRef.current) return;
     
-    setIsLoading(true);
+    const { bustCache = false, retryCount = 0, silent = false } = options;
+    
+    // Only show loading state if this isn't a silent refresh
+    if (!silent) {
+      setIsLoading(true);
+      setIsSilentRefresh(false);
+    } else {
+      setIsSilentRefresh(true);
+    }
     setError(null);
     
     try {
-      const loadedWidgets = await widgetPersistenceRef.current.loadWidgets();
+      // If cache busting is requested, add cache-busting parameter
+      let loadedWidgets;
+      if (bustCache) {
+        console.log(`[useDashboardState] Loading widgets with cache bust (attempt ${retryCount + 1})`);
+        loadedWidgets = await widgetPersistenceRef.current.loadWidgets(true);
+      } else {
+        loadedWidgets = await widgetPersistenceRef.current.loadWidgets();
+      }
+      
+      console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets`);
       setWidgets(loadedWidgets);
       setIsPublished(loadedWidgets.length > 0);
       
-      // Show success toast only if widgets were loaded
+      // Show success toast based on context
       if (loadedWidgets.length > 0) {
-        toast.success(`Loaded ${loadedWidgets.length} widget${loadedWidgets.length === 1 ? '' : 's'}`, {
-          duration: 2000,
-          position: 'top-right',
-        });
+        if (bustCache && silent) {
+          // Silent refresh with cache bust - show dashboard updated message
+          toast.success('Dashboard updated! 🎉', {
+            duration: 2000,
+            position: 'top-right',
+          });
+        } else if (!bustCache) {
+          // Regular load - show loaded message
+          toast.success(`Loaded ${loadedWidgets.length} widget${loadedWidgets.length === 1 ? '' : 's'}`, {
+            duration: 2000,
+            position: 'top-right',
+          });
+        }
       }
+      
+      // If we got empty results and this is a cache-busted call, retry with delay
+      if (bustCache && loadedWidgets.length === 0 && retryCount < 2) {
+        console.log(`[useDashboardState] Got empty results, retrying in ${(retryCount + 1) * 1000}ms...`);
+        setTimeout(() => {
+          loadWidgets({ bustCache: true, retryCount: retryCount + 1, silent });
+        }, (retryCount + 1) * 1000);
+        return;
+      }
+      
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load widgets';
       setError(errorMessage);
-      toast.error(errorMessage, {
-        duration: 4000,
-        position: 'top-right',
-      });
+      if (!bustCache) { // Only show error toast for user-initiated loads
+        toast.error(errorMessage, {
+          duration: 4000,
+          position: 'top-right',
+        });
+      }
       console.error('Error loading widgets:', err);
     } finally {
-      setIsLoading(false);
+      // Only clear loading state if this wasn't a silent refresh
+      if (!silent) {
+        setIsLoading(false);
+      } else {
+        setIsSilentRefresh(false);
+      }
     }
   }, []);
 
@@ -190,7 +234,7 @@ export function useDashboardState(dashboardId: string) {
     widgets,
     dashboardName,
     isChatOpen,
-    isLoading,
+    isLoading: isLoading && !isSilentRefresh,
     isSaving: saveStatus === 'saving',
     saveStatus,
     error,

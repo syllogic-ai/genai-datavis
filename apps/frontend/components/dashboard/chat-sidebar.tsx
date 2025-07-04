@@ -19,6 +19,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
+import { useJobStatusRealtime } from "@/app/lib/hooks/useJobStatusRealtime";
 
 export interface ChatSidebarProps {
   dashboardId: string;
@@ -27,6 +28,7 @@ export interface ChatSidebarProps {
   onToggle: () => void;
   className?: string;
   dashboardWidgets?: Widget[]; // Add dashboard widgets prop
+  onWidgetsRefresh?: () => Promise<void>; // Add widget refresh callback
 }
 
 interface ChatMessage {
@@ -48,13 +50,43 @@ export function ChatSidebar({
   onToggle,
   className,
   dashboardWidgets = [],
+  onWidgetsRefresh,
 }: ChatSidebarProps) {
   // State management
   const [isLoading, setIsLoading] = React.useState(false);
   const [pendingMessages, setPendingMessages] = React.useState<ChatMessage[]>([]);
+  const [currentJobId, setCurrentJobId] = React.useState<string | null>(null);
   const [dashboardChats, setDashboardChats] = React.useState<Chat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = React.useState(false);
   const [showChatList, setShowChatList] = React.useState(false);
+  
+  // Job monitoring
+  const { status: jobStatus } = useJobStatusRealtime(currentJobId, {
+    onComplete: async (job) => {
+      console.log('Job completed in ChatSidebar:', job);
+      setCurrentJobId(null); // Clear job ID
+      
+      // Show immediate success toast
+      console.log('Job completed successfully, showing success toast');
+      
+      // Refresh widgets to show newly created ones with cache busting
+      if (onWidgetsRefresh) {
+        try {
+          console.log('Refreshing dashboard widgets after job completion (silent refresh)');
+          // Add small delay to ensure backend has completed all operations
+          setTimeout(async () => {
+            await onWidgetsRefresh();
+          }, 1500);
+        } catch (error) {
+          console.error('Failed to refresh widgets:', error);
+        }
+      }
+    },
+    onError: (error) => {
+      console.error('Job error in ChatSidebar:', error);
+      setCurrentJobId(null); // Clear job ID
+    }
+  });
   
   // Hooks
   const { user } = useUser();
@@ -245,6 +277,12 @@ export function ChatSidebar({
       
       if (result.success) {
         console.log(`Message sent successfully. Task ID: ${result.taskId}`);
+        
+        // Track the job for monitoring
+        if (result.taskId) {
+          setCurrentJobId(result.taskId);
+        }
+        
         // Remove the pending message since it's now being processed
         // Real-time subscriptions will handle the confirmed message
         setTimeout(() => {
