@@ -46,13 +46,17 @@ class AnalysisOutput(BaseModel):
 # Declare the coordinator agent
 coordinator_agent = Agent(
     "openai:gpt-4o-mini",
+    # 'openai:o3',
     deps_type=Deps,
     output_type=AnalysisOutput,
 )
 
 @coordinator_agent.system_prompt
 async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
-    """Generate system prompt for intent analysis."""
+
+    logfire.info(f"Coordinator agent context: {ctx.deps}")
+
+    """Generate system prompt for coordination agent."""
 
     # Get the dataset profile using extract_schema_sample
     profile = extract_schema_sample(ctx.deps.file_id)
@@ -65,7 +69,7 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     You are an coordinator for a data platform. Given a series of user messages, your job in each message is to:
     
     1. Understand user requests
-    2. Delegate tasks to specialized agents
+    2. Delegate tasks to specialized agent tools
     3. Combine their outputs into a cohesive response
     
     The available columns in the dataset are:
@@ -74,23 +78,32 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     The column types are:
     {json.dumps(column_types, indent=2)}
     
-    You have three tools available:
-    1. `generate_sql`: Generates SQL queries to extract data from the dataset. Use for single widget creation.
-    2. `visualize_chart`: Visualizing the generated SQL query using a variety of visualization tools.
-    3. `create_specific_widget`: Create a specific, targeted widget with a clear purpose and distinct configuration.
+    You have the following tools available:
+    1. `get_widgets_types`: Get the types of the widgets in the user context, so that the agent can later decide whether to update them or not
+    2. `create_specific_widget`: Create a specific, targeted widget with a clear purpose and distinct configuration.
+    3. `update_widget_formatting`: Update an existing widget with a new formatting request (f.i. color, size, width, labels, etc.).
+    4. `update_widget_data`: Update an existing widget with new data (f.i. axis sorting, new columns, new filters, new time period, etc.).
+
+    What you need to do if to strictly follow the below steps:
+    1. Get the types of the widgets in the user context
+    2. For each widget, check if a formatting update is needed, or a data update is needed.
+    3. If a formatting update is needed, run the update_widget_formatting tool.
+    4. If a data update is needed, run the update_widget_data tool.
+    5. If no update is needed, return the widget_id and don't run any other tool.
+    6. If the user asks for a new widget, run the create_specific_widget tool.
        
-    CONFIDENCE SCORING HANDLING:
-    - The SQL agent will always return a confidence score (0-100) indicating how well the generated query matches the user's request
-    - If the confidence score is below 50, DO NOT proceed with visualization
-    - Instead, inform the user that you don't have enough information to produce the requested query
-    - Focus on clarifying ambiguous terms, specifying time periods, identifying specific columns, or defining business logic
+    # CONFIDENCE SCORING HANDLING:
+    # - The SQL agent will always return a confidence score (0-100) indicating how well the generated query matches the user's request
+    # - If the confidence score is below 50, DO NOT proceed with visualization
+    # - Instead, inform the user that you don't have enough information to produce the requested query
+    # - Focus on clarifying ambiguous terms, specifying time periods, identifying specific columns, or defining business logic
     
-    Your workflow should follow these rules:
-    - Always provide a clear, direct answer to the user's question
-    - If the user is asking for specific data, visualizations, or statistics, run the generate_sql tool first, if new data points are needed
-    - Check the confidence score from the SQL generation
-    - If confidence score >= 50: proceed with visualize_chart tool to produce a visualization
-    - When a user only asks for a formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again
+    # Your workflow should follow these rules:
+    # - Always provide a clear, direct answer to the user's question
+    # - If the user is asking for specific data, visualizations, or statistics, run the generate_sql tool first, if new data points are needed
+    # - Check the confidence score from the SQL generation
+    # - If confidence score >= 50: proceed with visualize_chart tool to produce a visualization
+    # - When a user only asks for a formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the visualize_chart tool, without generating SQL again
     
     MULTI-WIDGET GENERATION:
     When the user requests multiple visualizations or a comprehensive analysis, create multiple distinct widgets by:
@@ -109,6 +122,10 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     
     4. COLLECT all widget IDs and return them in widget_ids (not widget_id)
     
+    WIDGET UPDATES:
+    When a user only asks for a formatting update in an already generated chart (f.i. change the color or the font) you ALWAYS run the update_widget_formatting tool, without generating SQL again
+    When a user only asks for a data related update in an already generated chart (f.i. change the data, add a new column, change the time period, etc.) you ALWAYS run the update_widget_data tool, without generating SQL again
+
     IMPORTANT FOR RATE LIMITING: 
     - Create widgets ONE BY ONE, not all at once
     - Wait for each widget to complete before creating the next
@@ -124,20 +141,40 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     Context:
     - Is this a follow-up question: {ctx.deps.is_follow_up}
     - User prompt: {ctx.deps.user_prompt}
+    - Widget in the current context: {ctx.deps.widget_id if ctx.deps.widget_id else "None"}
     - Message history: {json.dumps(ctx.deps.message_history, indent=2)}
     """
 
     return prompt
     
 @coordinator_agent.tool
-async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
+async def get_widgets_types(ctx: RunContext[Deps]) -> List[str]:
+    """Tool to get the types of the widgets in the user context, so that the agent can later decide whether to update them or not
+    """
+    widget_types = {}
+    widgets_list = ctx.deps.contextWidgetIds
+
+    for widget_id in widgets_list:        
+        widget_type = ctx.deps.supabase.table("widgets").select("config").eq("id", widget_id).execute()
+        widget_type = widget_type.data[0]["config"]["chartType"]
+        widget_types[widget_id] = widget_type
+    
+    logfire.info(f"Widget types: {widget_types}")
+
+    return widget_types
+
+
+# @coordinator_agent.tool
+async def generate_sql(ctx: Deps) -> SQLOutput:
     """Generate and execute SQL to retrieve data."""
     start_time = time.time()
     
+    logfire.info(f"SQL Agent Dependencies: {ctx}")
+
     try:
         result = await sql_agent.run(
-            ctx.deps.user_prompt,
-            deps=ctx.deps,
+            ctx.user_prompt,
+            deps=ctx,
         )
         
         end_time = time.time()
@@ -146,16 +183,16 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         created_widget_id = result.output.widget_id
         
         # Always calculate confidence score for the generated SQL
-        profile = extract_schema_sample(ctx.deps.file_id)
+        profile = extract_schema_sample(ctx.file_id)
         confidence_input = ConfidenceInput(
-            user_prompt=ctx.deps.user_prompt,
+            user_prompt=ctx.user_prompt,
             generated_sql=result.output.sql,
             dataset_schema=profile.columns
         )
         
         # Calculate confidence using a direct function call
         confidence_score, confidence_reasoning = await calculate_confidence_direct(
-            ctx.deps, confidence_input
+            ctx, confidence_input
         )
         
         # Generate follow-up questions if confidence is low
@@ -175,11 +212,11 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         # Log confidence information
         logfire.info("SQL generation completed with confidence score", 
                      confidence_score=confidence_score,
-                     user_prompt=ctx.deps.user_prompt,
-                     chat_id=ctx.deps.chat_id, 
-                     request_id=ctx.deps.request_id)
+                     user_prompt=ctx.user_prompt,
+                     chat_id=ctx.chat_id, 
+                     request_id=ctx.request_id)
  
-        await _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), sql_agent, end_time - start_time, ctx.chat_id, ctx.request_id)  
         
         return result.output
     
@@ -187,8 +224,8 @@ async def generate_sql(ctx: RunContext[Deps]) -> SQLOutput:
         end_time = time.time()
         logfire.error("SQL generation failed", 
                      error=str(e), 
-                     chat_id=ctx.deps.chat_id, 
-                     request_id=ctx.deps.request_id)
+                     chat_id=ctx.chat_id, 
+                     request_id=ctx.request_id)
         raise
 
 class ConfidenceOutput(BaseModel):
@@ -302,8 +339,8 @@ async def calculate_confidence_direct(deps: Deps, confidence_input: ConfidenceIn
     return confidence_score, reasoning
 
 
-@coordinator_agent.tool
-async def visualize_chart(ctx: RunContext[Deps], widget_id: str) -> dict:
+# @coordinator_agent.tool
+async def visualize_chart(ctx: Deps, widget_id: str) -> dict:
     """
     Run the viz_agent with the provided visualization input and current data context.
     This tool allows the intent_analysis_agent to delegate chart spec generation to the viz_agent.
@@ -311,22 +348,24 @@ async def visualize_chart(ctx: RunContext[Deps], widget_id: str) -> dict:
     start_time = time.time()
     
     logfire.info("Visualizing widget: ", widget_id=widget_id)
+
+    logfire.info(f"Visualize chart dependencies: {ctx}")
     
     newDeps = Deps(
-        chat_id=ctx.deps.chat_id,
-        request_id=ctx.deps.request_id,
-        file_id=ctx.deps.file_id,
-        user_prompt=ctx.deps.user_prompt,
+        chat_id=ctx.chat_id,
+        request_id=ctx.request_id,
+        file_id=ctx.file_id,
+        user_prompt=ctx.user_prompt,
         widget_id=widget_id,  # Pass the widget_id to viz_agent
-        is_follow_up=ctx.deps.is_follow_up,
-        duck=ctx.deps.duck,
-        supabase=ctx.deps.supabase,
-        message_history=ctx.deps.message_history
+        is_follow_up=ctx.is_follow_up,
+        duck=ctx.duck,
+        supabase=ctx.supabase,
+        message_history=ctx.message_history
     )
 
     try:
         result = await viz_agent.run(
-            ctx.deps.user_prompt,
+            ctx.user_prompt,
             deps=newDeps,
         )
         
@@ -336,10 +375,10 @@ async def visualize_chart(ctx: RunContext[Deps], widget_id: str) -> dict:
             "content": widget_id,
         }
         
-        await append_chat_message(ctx.deps.chat_id, message=message)
+        await append_chat_message(ctx.chat_id, message=message)
         
         end_time = time.time()
-        await _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
+        await _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.chat_id, ctx.request_id)  
         
         return result.output
     
@@ -365,6 +404,84 @@ async def create_specific_widget(ctx: RunContext[Deps], widget_description: str,
     focused_prompt = f"Create a {chart_type} chart that shows {widget_description}. Focus specifically on {focus_area}. Make sure this visualization is distinct and provides unique insights."
     
     logfire.info(f"Creating specific widget: {chart_type} - {widget_description}")
+    logfire.info(f"Dependencies: {ctx.deps}")
+    
+    # Add a small delay to prevent API rate limiting
+    await asyncio.sleep(1.0)  # 1 second delay between widget creations
+    
+    # try:
+    # Update the deps with the focused prompt
+    focused_deps = Deps(
+        chat_id=ctx.deps.chat_id,
+        request_id=ctx.deps.request_id,
+        file_id=ctx.deps.file_id,
+        user_prompt=focused_prompt,
+        widget_id=None,
+        is_follow_up=False,  # Treat each widget creation as independent
+        duck=ctx.deps.duck,
+        supabase=ctx.deps.supabase,
+        message_history=ctx.deps.message_history
+    )
+    
+    # Generate SQL for this specific visualization with rate limiting
+    # sql_result = await with_rate_limit_retry(
+    #     lambda: sql_agent.run(focused_prompt, deps=focused_deps)
+    # )
+
+
+    logfire.info(f"Generating SQL for widget: {widget_description},  focus_deps={focused_deps}")
+    
+    sql_result = await generate_sql(ctx.deps)
+    focused_deps.widget_id = sql_result.widget_id
+
+    logfire.info(f"SQL generated for widget: {widget_description}")
+
+    
+    if focused_deps.widget_id:
+        # Now create the visualization with rate limiting
+        viz_result = await with_rate_limit_retry(
+            lambda: visualize_chart(focused_deps, sql_result.widget_id)
+        )
+        
+        logfire.info(f"Successfully created {chart_type} widget", 
+                    widget_id=sql_result.widget_id,
+                    description=widget_description,
+                    confidence_score=sql_result.confidence_score,
+                    confidence_reasoning=sql_result.confidence_reasoning,
+                    follow_up_questions=sql_result.follow_up_questions
+                    )
+        
+        return sql_result.widget_id
+    else:
+        raise Exception("SQL generation did not create a widget")
+    
+    # except Exception as e:
+    #     logfire.error(f"Failed to create {chart_type} widget: {widget_description}", error=str(e))
+    #     raise
+
+@coordinator_agent.tool
+async def update_widget_formatting(ctx: RunContext[Deps], widget_id: str, widget_description: str, chart_type: str, focus_area: str) -> str:
+    """
+    Update an existing widget with a new configuration.
+    
+    Args:
+        widget_id: ID of the widget to update
+        widget_description: Detailed description of what this widget update
+        chart_type: Type of chart (bar, line, pie, table, kpi)
+        focus_area: What specific aspect of the data this widget focuses on
+    
+    Returns:
+        Widget ID of the updated widget
+    """
+    
+    # Create a very specific prompt for this widget
+    if widget_id not in ctx.deps.contextWidgetIds:
+        logfire.warn(f"Widget {widget_id} not found in user context. Skipping formatting")
+        return widget_id
+    
+    focused_prompt = f"Update the widget {widget_id} with the following configuration: {widget_description}. Focus specifically on {focus_area}. Make sure this visualization is distinct and provides unique insights."
+    
+    logfire.info(f"Updating widget: {widget_id} - {widget_description}")
     
     # Add a small delay to prevent API rate limiting
     await asyncio.sleep(1.0)  # 1 second delay between widget creations
@@ -376,36 +493,78 @@ async def create_specific_widget(ctx: RunContext[Deps], widget_description: str,
             request_id=ctx.deps.request_id,
             file_id=ctx.deps.file_id,
             user_prompt=focused_prompt,
-            widget_id=None,
+            widget_id=widget_id,
             is_follow_up=False,  # Treat each widget creation as independent
             duck=ctx.deps.duck,
             supabase=ctx.deps.supabase,
             message_history=ctx.deps.message_history
         )
         
-        # Generate SQL for this specific visualization with rate limiting
-        sql_result = await with_rate_limit_retry(
-            lambda: sql_agent.run(focused_prompt, deps=focused_deps)
+        # Update the visualization with rate limiting
+        viz_result = await with_rate_limit_retry(
+            lambda: visualize_chart(focused_deps, widget_id)
         )
-        
-        if sql_result.output.widget_id:
-            # Now create the visualization with rate limiting
-            viz_result = await with_rate_limit_retry(
-                lambda: visualize_chart(ctx, sql_result.output.widget_id)
-            )
             
-            logfire.info(f"Successfully created {chart_type} widget", 
-                       widget_id=sql_result.output.widget_id,
-                       description=widget_description)
+        logfire.info(f"Successfully updated widget", 
+                    widget_id=widget_id,
+                    description=widget_description)
             
-            return sql_result.output.widget_id
-        else:
-            raise Exception("SQL generation did not create a widget")
+        return widget_id
     
     except Exception as e:
-        logfire.error(f"Failed to create {chart_type} widget: {widget_description}", error=str(e))
+        logfire.error(f"Failed to update widget {widget_id}", error=str(e))
         raise
+    
+@coordinator_agent.tool
+async def update_widget_data(ctx: RunContext[Deps], widget_description: str, focus_area: str) -> str:
+    """
+    Update an existing widget with new data.
+    Args:
+        widget_description: Detailed description of what this widget update
+        focus_area: What specific aspect of the data this widget focuses on
+    Returns:
+        Widget ID of the updated widget
+    """
+    
+    # Create a very specific prompt for this widget
+    if widget_id not in ctx.deps.contextWidgetIds:
+        logfire.warn(f"Widget {widget_id} not found in user context. Skipping data update")
+        return widget_id
 
+    focused_prompt = f"Update the widget {widget_id} with the following configuration: {widget_description}. Focus specifically on {focus_area}. Make sure this visualization is distinct and provides unique insights."
+    
+    logfire.info(f"Updating widget: {widget_id} - {widget_description}")
+    logfire.info(f"Dependencies: {ctx.deps}")
+    
+    # Add a small delay to prevent API rate limiting
+    await asyncio.sleep(1.0)  # 1 second delay between widget creations
+    
+    # try:
+    # Update the deps with the focused prompt
+    focused_deps = Deps(
+        chat_id=ctx.deps.chat_id,
+        request_id=ctx.deps.request_id,
+        file_id=ctx.deps.file_id,
+        user_prompt=focused_prompt,
+        widget_id=widget_id,
+        is_follow_up=False,  # Treat each widget creation as independent
+        duck=ctx.deps.duck,
+        supabase=ctx.deps.supabase,
+        message_history=ctx.deps.message_history
+    )
+    
+    # Generate SQL for this specific visualization with rate limiting
+    # sql_result = await with_rate_limit_retry(
+    #     lambda: sql_agent.run(focused_prompt, deps=focused_deps)
+    # )
+
+
+    logfire.info(f"Generating SQL for widget: {widget_description},  focus_deps={focused_deps}")
+    
+    sql_result = await generate_sql(focused_deps)
+    
+    return widget_id
+    
 
 @coordinator_agent.output_validator
 async def validate_coordinator_output(

@@ -22,6 +22,7 @@ async def execute_sql_and_get_data(ctx: RunContext[Deps]) -> list:
     """
     try:
         # Get widget SQL
+        logfire.info(f"Executing SQL for widget: {ctx.deps.widget_id}")
         widget_result = ctx.deps.supabase.table("widgets").select("sql").eq("id", ctx.deps.widget_id).execute()
         if not widget_result.data or not widget_result.data[0].get("sql"):
             logfire.warn("No SQL found for widget", widget_id=ctx.deps.widget_id)
@@ -375,6 +376,8 @@ viz_agent = Agent(
 @viz_agent.system_prompt
 async def system_prompt(ctx: RunContext[Deps]) -> str:
     
+    logfire.info(f"Viz agent context: {ctx.deps}")
+
     data_cur = get_data(ctx.deps.file_id, ctx.deps.widget_id, ctx.deps.supabase, ctx.deps.duck)
     data_cols = data_cur.columns.tolist()
     
