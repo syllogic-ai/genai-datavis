@@ -85,6 +85,11 @@ export class DashboardCache {
     }
   }
 
+  // Check cache status for cache warming optimization
+  async checkCacheStatus(key: string): Promise<boolean> {
+    return this.exists(key)
+  }
+
   // Dashboard-specific cache operations
   async getDashboardList(userId: string) {
     return this.get(CACHE_KEYS.dashboardList(userId))

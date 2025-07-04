@@ -82,8 +82,8 @@ export function AppSidebar({
       </SidebarContent>
       
       <SidebarFooter>
-        {user && (
-          <SidebarMenu>
+        <SidebarMenu>
+          {user && (
             <SidebarMenuItem>
               <SidebarMenuButton size="lg">
                 <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
@@ -101,8 +101,8 @@ export function AppSidebar({
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          </SidebarMenu>
-        )}
+          )}
+        </SidebarMenu>
       </SidebarFooter>
     </Sidebar>
   );

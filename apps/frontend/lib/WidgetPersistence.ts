@@ -52,7 +52,7 @@ export class WidgetPersistence {
     userId,
     onStatusChange,
     onError,
-    debounceMs = 1000,
+    debounceMs = 2000, // Increased debounce to reduce Redis calls
   }: WidgetPersistenceOptions) {
     this.dashboardId = dashboardId;
     this.userId = userId;
@@ -68,12 +68,16 @@ export class WidgetPersistence {
     // Create debounced save function
     this.debouncedSave = debounce(this.flushOperations.bind(this), debounceMs);
     
-    console.log(`[WidgetPersistence] Initialized for dashboard ${dashboardId} (simplified mode - no real-time updates)`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[WidgetPersistence] Initialized for dashboard ${dashboardId} (simplified mode - no real-time updates)`);
+    }
   }
 
   async loadWidgets(bustCache: boolean = false): Promise<Widget[]> {
     try {
-      console.log(`[WidgetPersistence] Loading widgets for dashboard ${this.dashboardId}${bustCache ? ' (cache busting)' : ''}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WidgetPersistence] Loading widgets for dashboard ${this.dashboardId}${bustCache ? ' (cache busting)' : ''}`);
+      }
       
       // Build URL with cache busting parameter if requested
       let url = `/api/dashboards/${this.dashboardId}/widgets`;
@@ -92,7 +96,9 @@ export class WidgetPersistence {
       }
 
       const { widgets } = await response.json();
-      console.log(`[WidgetPersistence] Loaded ${widgets.length} widgets:`, widgets.map((w: Widget) => ({ id: w.id, type: w.type, title: w.config?.title })));
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[WidgetPersistence] Loaded ${widgets.length} widgets:`, widgets.map((w: Widget) => ({ id: w.id, type: w.type, title: w.config?.title })));
+      }
       return widgets;
     } catch (error) {
       console.error('[WidgetPersistence] Error loading widgets:', error);
@@ -102,7 +108,9 @@ export class WidgetPersistence {
   }
 
   createWidget(widget: Widget): void {
-    console.log(`[WidgetPersistence] Queuing widget creation:`, { id: widget.id, type: widget.type });
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[WidgetPersistence] Queuing widget creation:`, { id: widget.id, type: widget.type });
+    }
     
     // Remove from updates/deletes if it exists there
     this.pendingOperations.updates.delete(widget.id);
@@ -116,7 +124,23 @@ export class WidgetPersistence {
   }
 
   updateWidget(widget: Widget): void {
-    console.log(`[WidgetPersistence] Queuing widget update:`, { id: widget.id, type: widget.type });
+    // Check if widget actually changed from what's already pending
+    const existingUpdate = this.pendingOperations.updates.get(widget.id);
+    const existingCreate = this.pendingOperations.creates.get(widget.id);
+    
+    if (existingUpdate && JSON.stringify(existingUpdate) === JSON.stringify(widget)) {
+      // No changes, skip update
+      return;
+    }
+    
+    if (existingCreate && JSON.stringify(existingCreate) === JSON.stringify(widget)) {
+      // No changes, skip update
+      return;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[WidgetPersistence] Queuing widget update:`, { id: widget.id, type: widget.type });
+    }
     
     // If it's in creates, update the create entry instead
     if (this.pendingOperations.creates.has(widget.id)) {

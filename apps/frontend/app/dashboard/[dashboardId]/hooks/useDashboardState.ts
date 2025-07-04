@@ -103,12 +103,13 @@ export function useDashboardState(dashboardId: string) {
         }
       }
       
-      // If we got empty results and this is a cache-busted call, retry with delay
-      if (bustCache && loadedWidgets.length === 0 && retryCount < 2) {
-        console.log(`[useDashboardState] Got empty results, retrying in ${(retryCount + 1) * 1000}ms...`);
+      // Reduced retry count from 2 to 0 to minimize Redis requests
+      // If we got empty results and this is a cache-busted call, retry once with longer delay
+      if (bustCache && loadedWidgets.length === 0 && retryCount < 1) {
+        console.log(`[useDashboardState] Got empty results, retrying in ${(retryCount + 1) * 2000}ms...`);
         setTimeout(() => {
           loadWidgets({ bustCache: true, retryCount: retryCount + 1, silent });
-        }, (retryCount + 1) * 1000);
+        }, (retryCount + 1) * 2000); // Increased delay to reduce request frequency
         return;
       }
       
@@ -143,6 +144,16 @@ export function useDashboardState(dashboardId: string) {
   const handleUpdateWidgets = useCallback((newWidgets: Widget[]) => {
     const oldWidgets = widgets;
     
+    // Early return if widgets are identical (prevents unnecessary persistence calls)
+    if (oldWidgets.length === newWidgets.length && 
+        oldWidgets.every(oldWidget => {
+          const newWidget = newWidgets.find(w => w.id === oldWidget.id);
+          return newWidget && JSON.stringify(oldWidget) === JSON.stringify(newWidget);
+        })) {
+      // No actual changes detected, skip processing
+      return;
+    }
+    
     console.log(`[useDashboardState] handleUpdateWidgets called:`, {
       oldCount: oldWidgets.length,
       newCount: newWidgets.length,
@@ -172,6 +183,11 @@ export function useDashboardState(dashboardId: string) {
         return oldWidget && JSON.stringify(oldWidget) !== JSON.stringify(newWidget);
       }
     );
+
+    // Skip persistence if no actual changes
+    if (deletedWidgets.length === 0 && addedWidgets.length === 0 && updatedWidgets.length === 0) {
+      return;
+    }
 
     console.log(`[useDashboardState] Widget changes breakdown:`, {
       deleted: deletedWidgets.map(w => ({ id: w.id, type: w.type })),

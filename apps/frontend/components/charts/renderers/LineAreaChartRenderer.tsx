@@ -9,11 +9,12 @@ import {
 } from "@/components/ui/chart";
 import type { ChartSpec } from "@/types/chart-types";
 import moment from "moment";
+import { memo } from "react";
 
 /**
- * Unified renderer for area and line charts
+ * Unified renderer for area and line charts - memoized to prevent unnecessary re-renders
  */
-export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
+export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
   console.log(`UnifiedChartRenderer received spec for ${spec.chartType} chart:`, JSON.stringify(spec, null, 2));
 
   if (spec.chartType !== 'area' && spec.chartType !== 'line') {
@@ -130,7 +131,7 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
       config={chartConfig} 
       className="w-full h-full"
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={100}>
         {spec.chartType === 'area' ? (
           <AreaChart {...commonProps}>
             <defs>
@@ -230,7 +231,7 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
       </ResponsiveContainer>
     </ChartContainer>
   );
-}
+});
 
 /**
  * Specialized renderer for area charts - maintained for backwards compatibility

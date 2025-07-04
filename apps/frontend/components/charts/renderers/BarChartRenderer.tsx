@@ -8,11 +8,12 @@ import {
 } from "@/components/ui/chart";
 import type { ChartSpec } from "@/types/chart-types";
 import moment from "moment";
+import { memo } from "react";
 
 /**
- * Specialized renderer for bar charts
+ * Specialized renderer for bar charts - memoized to prevent unnecessary re-renders
  */
-export function BarChartRenderer({ spec }: { spec: ChartSpec }) {
+export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec: ChartSpec }) {
   if (spec.chartType !== 'bar') {
     console.error(`BarChartRenderer: Expected chart type 'bar', got '${spec.chartType}'`);
     return null;
@@ -57,7 +58,7 @@ export function BarChartRenderer({ spec }: { spec: ChartSpec }) {
       config={spec.chartConfig || {}} 
       className="w-full h-full"
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={100}>
         <BarChart 
           data={spec.data} 
           margin={{ left: 12, right: 12, top: 10, bottom: 10 }}
@@ -113,4 +114,4 @@ export function BarChartRenderer({ spec }: { spec: ChartSpec }) {
       </ResponsiveContainer>
     </ChartContainer>
   );
-} 
+}); 
