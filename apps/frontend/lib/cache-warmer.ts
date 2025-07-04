@@ -31,10 +31,20 @@ export class CacheWarmer {
     console.log(`[CACHE_WARMER] Starting cache warming for user ${userId}`)
     
     try {
-      // Pre-warm dashboard list
+      // Check if dashboard list is already cached
+      const isCached = await dashboardCache.checkCacheStatus(`dashboards:${userId}`)
+      
+      if (isCached) {
+        console.log('[CACHE_WARMER] Dashboard list already cached, skipping warm-up')
+        this.isWarmingUp = false
+        return
+      }
+      
+      // Pre-warm dashboard list only if not cached
       const dashboardListResponse = await fetch(`/api/dashboards`, {
         headers: {
-          'x-cache-warming': 'true'
+          'x-cache-warming': 'true',
+          'x-user-id': userId
         }
       })
       
@@ -42,13 +52,23 @@ export class CacheWarmer {
         const dashboards = await dashboardListResponse.json()
         console.log(`[CACHE_WARMER] Pre-warmed dashboard list: ${dashboards.length} dashboards`)
         
-        // Pre-warm first 3 dashboard widget data (most likely to be accessed)
-        const topDashboards = dashboards.slice(0, 3)
+        // Pre-warm first 2 dashboard widget data (reduced from 3 to minimize requests)
+        const topDashboards = dashboards.slice(0, 2)
         const warmupPromises = topDashboards.map(async (dashboard: any) => {
           try {
+            // Check if widgets are already cached
+            const cacheKey = `dashboard:${dashboard.id}:widgets:${userId}`
+            const isWidgetsCached = await dashboardCache.checkCacheStatus(cacheKey)
+            
+            if (isWidgetsCached) {
+              console.log(`[CACHE_WARMER] Widgets for dashboard ${dashboard.id} already cached, skipping`)
+              return
+            }
+            
             const widgetsResponse = await fetch(`/api/dashboards/${dashboard.id}/widgets`, {
               headers: {
-                'x-cache-warming': 'true'
+                'x-cache-warming': 'true',
+                'x-user-id': userId
               }
             })
             

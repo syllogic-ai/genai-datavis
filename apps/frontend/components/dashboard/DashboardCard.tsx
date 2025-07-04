@@ -1,11 +1,14 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Dashboard } from "@/db/schema";
 import { IconRenderer } from "@/components/dashboard/DashboardIconRenderer";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
+
+// Global cache for prefetch requests to prevent duplicates
+const prefetchCache = new Set<string>();
 
 interface DashboardCardProps {
   dashboard: Dashboard;
@@ -44,34 +47,64 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
     router.push(`/dashboard/${dashboard.id}`);
   };
 
-  // Prefetch dashboard data on hover for faster loading
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Debounced prefetch dashboard data on hover for faster loading
   const handleMouseEnter = useCallback(async () => {
-    try {
-      // Prefetch the dashboard page route
-      router.prefetch(`/dashboard/${dashboard.id}`);
-      
-      // Prefetch dashboard widgets data
-      const widgetsPromise = fetch(`/api/dashboards/${dashboard.id}/widgets`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-      
-      // Prefetch dashboard files data (lower priority)
-      const filesPromise = fetch(`/api/dashboards/${dashboard.id}/files`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-      });
-
-      // Don't wait for these to complete, just initiate the requests
-      Promise.allSettled([widgetsPromise, filesPromise]).then(() => {
-        console.log(`[PREFETCH] Dashboard ${dashboard.id} data prefetched`);
-      }).catch(() => {
-        // Silently fail prefetch attempts
-      });
-    } catch (error) {
-      // Silently fail prefetch attempts - they're not critical
+    // Clear any existing timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
     }
+    
+    // Debounce prefetch by 300ms to prevent excessive requests
+    hoverTimeoutRef.current = setTimeout(async () => {
+      const cacheKey = `dashboard-${dashboard.id}`;
+      
+      // Skip if already prefetched
+      if (prefetchCache.has(cacheKey)) {
+        return;
+      }
+      
+      // Mark as prefetched
+      prefetchCache.add(cacheKey);
+      
+      try {
+        // Prefetch the dashboard page route
+        router.prefetch(`/dashboard/${dashboard.id}`);
+        
+        // Only prefetch widgets data (skip files to reduce requests)
+        // Files will be loaded when actually needed
+        const widgetsPromise = fetch(`/api/dashboards/${dashboard.id}/widgets`, {
+          method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'X-Prefetch': 'true' // Mark as prefetch for server-side logging
+          }
+        });
+
+        // Don't wait for this to complete, just initiate the request
+        widgetsPromise.then(() => {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`[PREFETCH] Dashboard ${dashboard.id} widgets prefetched`);
+          }
+        }).catch(() => {
+          // Remove from cache on failure so it can be retried
+          prefetchCache.delete(cacheKey);
+        });
+      } catch (error) {
+        // Remove from cache on failure so it can be retried
+        prefetchCache.delete(cacheKey);
+      }
+    }, 300);
   }, [dashboard.id, router]);
+  
+  // Clean up timeout on mouse leave
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+  }, []);
 
   const formatTimeAgo = (date: Date | string | null) => {
     if (!date) return "Unknown";
@@ -88,6 +121,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
       className="cursor-pointer hover:shadow-md transition-shadow duration-200 border border-gray-200"
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
     >
       <CardContent className="px-6">
         <div className="flex items-center gap-4">

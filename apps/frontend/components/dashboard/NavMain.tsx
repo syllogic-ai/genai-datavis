@@ -382,7 +382,7 @@ export function NavMain({
         <SidebarMenu>
           {/* Dashboard navigation items with collapsible widgets */}
           {dashboardsWithWidgets.length > 0 && (
-            <SidebarMenu className="text-muted font-semibold">
+            <>
               {dashboardsWithWidgets.map((dashboard) => (
                 <SidebarMenuItem key={dashboard.id}>
                   <Collapsible 
@@ -586,7 +586,7 @@ export function NavMain({
                   </Collapsible>
                 </SidebarMenuItem>
               ))}
-            </SidebarMenu>
+            </>
           )}
 
           {/* Show message when no dashboards */}
