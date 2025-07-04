@@ -28,24 +28,59 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
 
   const interval = spec.data.length > 10 ? Math.floor(spec.data.length / 3) : 0;
 
-  // Sort data by date using the dataKey from xAxisConfig
-  const dateKey = spec.xAxisConfig?.dataKey || (spec.chartType === 'line' ? "datetime" : "date");
-  console.log("Using dateKey:", dateKey);
+  // Use the x-axis data key
+  const xAxisKey = spec.xAxisConfig?.dataKey || "name";
+  console.log("Using xAxisKey:", xAxisKey);
   
+  // Check if x-axis values are dates and sort accordingly
+  const isDateAxis = spec.data.length > 0 && spec.data.some(item => {
+    const value = item[xAxisKey];
+    if (!value) return false;
+    
+    // Check if it's a valid date
+    const date = new Date(value);
+    return !isNaN(date.getTime()) && date.toString() !== 'Invalid Date';
+  });
+
+  console.log("Is x-axis date:", isDateAxis);
+  
+  // Sort data based on whether it's a date or string
   const sortedData = [...spec.data].sort((a, b) => {
-    const dateA = new Date(a[dateKey] as string);
-    const dateB = new Date(b[dateKey] as string);
-    return dateA.getTime() - dateB.getTime();
+    const valueA = a[xAxisKey];
+    const valueB = b[xAxisKey];
+    
+    if (!valueA || !valueB) return 0;
+    
+    if (isDateAxis) {
+      // Sort as dates
+      const dateA = new Date(valueA);
+      const dateB = new Date(valueB);
+      return dateA.getTime() - dateB.getTime();
+    } else {
+      // Sort as strings
+      return String(valueA).localeCompare(String(valueB));
+    }
   });
 
   function formatXAxis(tickItem: string) {
-    return moment(tickItem).format(spec.xAxisConfig?.dateFormat ?? "DD-MM-YYYY");
+    // Only format as date if explicitly configured or if we detected it's a date
+    if (spec.xAxisConfig?.dateFormat) {
+      return moment(tickItem).format(spec.xAxisConfig.dateFormat);
+    }
+    
+    // If we detected it's a date but no format specified, use default
+    if (isDateAxis) {
+      return moment(tickItem).format("DD-MM-YYYY");
+    }
+    
+    // For non-date values, return as is
+    return tickItem;
   }
 
   // Get data keys excluding the x-axis key
-  const dataKeys = Object.keys(sortedData[0] || {}).filter(key => key !== dateKey);
+  const dataKeys = Object.keys(sortedData[0] || {}).filter(key => key !== xAxisKey);
   
-  // For line charts with single series, use the first non-date key
+  // For line charts with single series, use the first non-x-axis key
   const singleDataKey = dataKeys.length > 0 ? dataKeys[0] : "";
   
   // Check if we should use stack mode (only applicable for area charts)
@@ -65,10 +100,10 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
   // Create config object compatible with ChartContainer
   const chartConfig: ChartConfig = spec.chartConfig || {};
   
-  // Add the date key to the config if not already present
-  if (!chartConfig[dateKey]) {
-    chartConfig[dateKey] = {
-      label: dateKey,
+  // Add the x-axis key to the config if not already present
+  if (!chartConfig[xAxisKey]) {
+    chartConfig[xAxisKey] = {
+      label: xAxisKey,
       color: "#1f77b4" // Default color
     };
   }
@@ -120,7 +155,7 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
             </defs>
             <CartesianGrid vertical={false} />
             <XAxis
-              dataKey={dateKey}
+              dataKey={xAxisKey}
               tickLine={spec.xAxisConfig?.tickLine ?? false}
               axisLine={spec.xAxisConfig?.axisLine ?? false}
               tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
@@ -159,7 +194,7 @@ export function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
           <LineChart {...commonProps}>
             <CartesianGrid vertical={false} />
             <XAxis
-              dataKey={dateKey}
+              dataKey={xAxisKey}
               tickLine={spec.xAxisConfig?.tickLine ?? false}
               axisLine={spec.xAxisConfig?.axisLine ?? false}
               tickMargin={spec.xAxisConfig?.tickMargin ?? 8}
