@@ -513,7 +513,6 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except Exception as e:
         print(f"Error in visualize_bar: {str(e)}")
 
@@ -552,7 +551,6 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except Exception as e:
         print(f"Error in visualize_area: {str(e)}")
 
@@ -589,7 +587,6 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except Exception as e:
         print(f"Error in visualize_line: {str(e)}")
 
@@ -626,7 +623,6 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except Exception as e:
         print(f"Error in visualize_kpi: {str(e)}")
 
@@ -661,7 +657,6 @@ async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChart
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except Exception as e:
         print(f"Error in visualize_pie: {str(e)}")
         
@@ -712,7 +707,6 @@ async def visualize_table(ctx: RunContext[Deps], input: TableInput) -> TableOutp
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-        await append_chat_message(ctx.deps.chat_id, response.model_dump())
     except Exception as e:
         print(f"Error in visualize_table: {str(e)}")
 

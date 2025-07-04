@@ -330,13 +330,6 @@ async def visualize_chart(ctx: RunContext[Deps], widget_id: str) -> dict:
             deps=newDeps,
         )
         
-        # Add the visualization result to the chat history
-        message = {
-            "role": "chart",
-            "content": widget_id,
-        }
-        
-        await append_chat_message(ctx.deps.chat_id, message=message)
         
         end_time = time.time()
         await _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.deps.chat_id, ctx.deps.request_id)  
