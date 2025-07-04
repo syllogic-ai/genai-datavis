@@ -84,7 +84,7 @@ export function SetupPhase({
         
           <Button
             onClick={onContinue}
-            disabled={files.length === 0 || isLoading}
+            disabled={files.length === 0}
             size="lg"
             className={`px-8 py-3 text-base font-medium transition-all ${
               files.length > 0
@@ -92,16 +92,7 @@ export function SetupPhase({
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                Loading...
-              </div>
-            ) : files.length > 0 ? (
-              <>Continue to Dashboard</>
-            ) : (
-              <>Continue to Dashboard</>
-            )}
+            Continue to Dashboard
           </Button>
         </motion.div>
       </motion.div>

@@ -25,6 +25,7 @@ interface EnhancedDashboardGridProps {
   widgets: Widget[];
   onUpdateWidgets: (widgets: Widget[]) => void;
   onAddWidget?: (addWidgetFn: (type: string) => void) => void;
+  isLoading?: boolean;
 }
 
 const defaultLayouts = {
@@ -63,6 +64,7 @@ export function EnhancedDashboardGrid({
   widgets, 
   onUpdateWidgets,
   onAddWidget,
+  isLoading = false,
 }: EnhancedDashboardGridProps) {
   const [hoveredItems, setHoveredItems] = useState<Record<string, boolean>>({});
   const [isDragging, setIsDragging] = useState(false);
@@ -355,7 +357,7 @@ export function EnhancedDashboardGrid({
           maxWidth: '100%'
         }}
       >
-        {widgets.length === 0 && (
+        {widgets.length === 0 && !isLoading && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

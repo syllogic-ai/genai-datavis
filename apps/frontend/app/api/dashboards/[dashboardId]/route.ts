@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { updateDashboard, getDashboard } from '@/app/lib/actions';
 import db from '@/db';
-import { dashboards, widgets, chats, files, llmUsage } from '@/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { dashboards, widgets, chats, files } from '@/db/schema';
+import { eq, and } from 'drizzle-orm';
 import { dashboardCache } from '@/lib/redis';
 
 export async function GET(
@@ -120,34 +120,8 @@ export async function DELETE(
         .where(eq(widgets.dashboardId, dashboardId));
       console.log('[DELETE API] Widgets deleted successfully');
 
-      // 2. Preserve LLM usage records by nullifying chat references before deleting chats
-      // First get all chat IDs for this dashboard
-      console.log('[DELETE API] Getting chat IDs for dashboard');
-      const dashboardChats = await tx.select({ id: chats.id })
-        .from(chats)
-        .where(eq(chats.dashboardId, dashboardId));
-      
-      const chatIds = dashboardChats.map(chat => chat.id);
-      console.log('[DELETE API] Found chat IDs:', chatIds);
-      
-      // Delete LLM usage records for chats that will be deleted
-      if (chatIds.length > 0) {
-        console.log('[DELETE API] Checking if LLM usage records exist for these chats');
-        const existingLlmUsage = await tx.select()
-          .from(llmUsage)
-          .where(inArray(llmUsage.chatId, chatIds));
-        
-        console.log('[DELETE API] Found LLM usage records:', existingLlmUsage.length);
-        
-        if (existingLlmUsage.length > 0) {
-          console.log('[DELETE API] Deleting LLM usage records for chats');
-          await tx.delete(llmUsage)
-            .where(inArray(llmUsage.chatId, chatIds));
-          console.log(`[DELETE API] Deleted ${existingLlmUsage.length} LLM usage records`);
-        }
-      }
-
-      // Now delete all chats associated with the dashboard
+      // 2. Delete all chats associated with the dashboard
+      // Note: Job and LLM usage records are preserved for analytics (no foreign key constraints)
       console.log('[DELETE API] Deleting chats');
       await tx.delete(chats)
         .where(eq(chats.dashboardId, dashboardId));

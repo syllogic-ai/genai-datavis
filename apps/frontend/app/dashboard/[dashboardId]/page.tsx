@@ -58,6 +58,7 @@ export default function EnhancedDashboardPage() {
     removeFile,
     addFile,
     markFirstMessage,
+    markSetupCompleted,
     refreshFiles,
   } = useSetupState(dashboardId, widgets.length);
 
@@ -110,6 +111,8 @@ export default function EnhancedDashboardPage() {
 
   // Phase transition handlers
   const handleSetupComplete = () => {
+    // Mark setup as completed to allow phase transition
+    markSetupCompleted();
     // Navigate to dashboard without setup parameter
     router.replace(`/dashboard/${dashboardId}`);
   };
@@ -139,16 +142,7 @@ export default function EnhancedDashboardPage() {
     }
   };
 
-  if (isLoading || isSetupLoading || isChatLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex items-center gap-2">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Loading dashboard...</span>
-        </div>
-      </div>
-    );
-  }
+  // Remove global loading screen - let individual components handle their own loading states
 
   if (error || setupError || chatError) {
     return (
@@ -171,7 +165,7 @@ export default function EnhancedDashboardPage() {
         onFileRemoved={removeFile}
         onContinue={handleSetupComplete}
         onRefreshFiles={refreshFiles}
-        isLoading={false}
+        isLoading={isSetupLoading}
       />
     );
   }
@@ -227,6 +221,7 @@ export default function EnhancedDashboardPage() {
               widgets={widgets}
               onUpdateWidgets={handleUpdateWidgets}
               onAddWidget={(fn) => { addWidgetRef.current = fn; }}
+              isLoading={isLoading}
             />
           </div>
 

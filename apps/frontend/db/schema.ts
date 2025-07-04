@@ -16,6 +16,8 @@ export const files = pgTable("files", {
   originalFilename: text("original_filename").notNull(), // User-visible filename
   sanitizedFilename: text("sanitized_filename"), // UUID-based filename for storage
   storagePath: text("storage_path").notNull(),
+  mimeType: text("mime_type"), // MIME type for proper display
+  size: integer("size"), // File size in bytes
   status: text("status").default("ready"), // 'processing' | 'ready' | 'failed'
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -101,8 +103,10 @@ export const chats = pgTable("chats", {
 // LLM USAGE (simplified)
 export const llmUsage = pgTable('llm_usage', {
   id: text("id").primaryKey(),
-  userId: text("user_id").references(() => users.id),
-  chatId: text("chat_id").references(() => chats.id),
+  userId: text("user_id"), // Store as text, no foreign key for analytics preservation
+  chatId: text("chat_id"), // Store as text, no foreign key for analytics preservation
+  requestId: text("request_id"), // Same as job_id for linking to jobs
+  dashboardId: text("dashboard_id"), // Store dashboard_id for analytics
   
   model: text('model').notNull(),
   inputTokens: integer('input_tokens').notNull(),
@@ -115,8 +119,8 @@ export const llmUsage = pgTable('llm_usage', {
 // JOBS (for tracking async analysis tasks)
 export const jobs = pgTable('jobs', {
   id: text("id").primaryKey(), // UUID job ID (same as Redis key)
-  userId: text("user_id").notNull().references(() => users.id),
-  dashboardId: text("dashboard_id").notNull().references(() => dashboards.id),
+  userId: text("user_id").notNull(), // Store as text, no foreign key for analytics preservation
+  dashboardId: text("dashboard_id").notNull(), // Store as text, no foreign key for analytics preservation
   
   // Job metadata
   status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'failed'

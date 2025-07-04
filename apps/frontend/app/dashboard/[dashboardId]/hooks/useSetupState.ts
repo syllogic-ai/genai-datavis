@@ -29,6 +29,7 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
   const [hasMessages, setHasMessages] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [setupCompleted, setSetupCompleted] = useState(false);
 
   // Check if we're in setup mode from URL params
   const isSetupModeFromURL = searchParams.get('setup') === 'true';
@@ -113,10 +114,10 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
   const setupState: SetupState = {
     hasFiles: files.length > 0,
     hasMessages,
-    // Stay in setup mode if URL parameter is set (regardless of files) OR if no files and no messages
-    isSetupMode: (isSetupModeFromURL || files.length === 0) && !hasMessages,
-    // Only go to chat mode when NOT in setup mode URL and have files but no messages
-    isChatMode: files.length > 0 && !hasMessages && !isSetupModeFromURL,
+    // Stay in setup mode if URL parameter is set OR if setup hasn't been completed yet OR if no files and no messages
+    isSetupMode: (isSetupModeFromURL || !setupCompleted || files.length === 0) && !hasMessages,
+    // Only go to chat mode when setup is completed and have files but no messages and not in setup URL mode
+    isChatMode: setupCompleted && files.length > 0 && !hasMessages && !isSetupModeFromURL,
     isFullDashboard: hasMessages && !isSetupModeFromURL, // If has widgets/messages, show full dashboard regardless of files
   };
 
@@ -126,13 +127,20 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
       filesCount: files.length,
       hasMessages,
       isSetupModeFromURL,
+      setupCompleted,
       setupState
     });
-  }, [files.length, hasMessages, isSetupModeFromURL, setupState]);
+  }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted, setupState]);
 
   // Mark that user has sent first message
   const markFirstMessage = useCallback(() => {
     setHasMessages(true);
+  }, []);
+
+  // Mark that user has completed setup phase
+  const markSetupCompleted = useCallback(() => {
+    console.log('[useSetupState] Marking setup as completed');
+    setSetupCompleted(true);
   }, []);
 
   // Refresh files from database
@@ -151,5 +159,6 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
     removeFile,
     addFile,
     markFirstMessage,
+    markSetupCompleted,
   };
 }
