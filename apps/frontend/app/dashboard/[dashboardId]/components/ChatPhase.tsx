@@ -294,24 +294,7 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidget
     }
   };
 
-  // Show loading state while chat is being set up
-  if (isChatLoading || isConversationLoading) {
-    return (
-      <div className="min-h-[calc(100vh-1rem)] flex items-center justify-center p-6 bg-transparent">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-center"
-        >
-          <div className="w-12 h-12 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-blue-600 animate-spin" />
-          </div>
-          <h3 className="text-lg font-medium text-foreground mb-2">Setting up your workspace</h3>
-          <p className="text-sm text-muted-foreground">Preparing the chat interface...</p>
-        </motion.div>
-      </div>
-    );
-  }
+  // Show main UI even while chat is loading - the chat functionality will be disabled until ready
 
   // Show processing state
   if (processingStatus === 'processing' || processingStatus === 'completed') {
@@ -447,10 +430,10 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidget
           <ChatInput 
             availableItems={[]}
             onSubmit={handleSubmit}
-            messagePlaceholder="Ask me anything about your data..."
+            messagePlaceholder={isChatLoading || isConversationLoading ? "Setting up chat interface..." : "Ask me anything about your data..."}
             className="border-none shadow-none bg-transparent text-lg placeholder:text-gray-400 resize-none min-h-[120px] focus:ring-0"
-            isLoading={isSubmitting || processingStatus === 'submitting'}
-            isDisabled={isSubmitting || processingStatus === 'submitting'}
+            isLoading={isSubmitting || processingStatus === 'submitting' || isChatLoading || isConversationLoading}
+            isDisabled={isSubmitting || processingStatus === 'submitting' || isChatLoading || isConversationLoading}
             showTagSelector={false}
             showWidgetDropdown={false}
           />

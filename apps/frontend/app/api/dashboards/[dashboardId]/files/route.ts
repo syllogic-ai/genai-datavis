@@ -17,7 +17,7 @@ export async function POST(
 
     const { dashboardId } = await params;
     const body = await request.json();
-    const { fileName, storagePath, fileType = 'original' } = body;
+    const { fileName, storagePath, fileType = 'original', mimeType, size } = body;
 
     if (!fileName || !storagePath) {
       return NextResponse.json(
@@ -36,7 +36,9 @@ export async function POST(
       fileName,
       sanitizedFilename,
       storagePath,
-      userId
+      userId,
+      mimeType,
+      size
     );
 
     // Link file to dashboard
@@ -85,12 +87,23 @@ export async function GET(
     }
     
     // Cache miss - fetch from database
-    const files = await getDashboardFiles(dashboardId, userId);
+    const dbFiles = await getDashboardFiles(dashboardId, userId);
 
     // If dashboard doesn't exist, return 404
-    if (files === null) {
+    if (dbFiles === null) {
       return NextResponse.json({ error: 'Dashboard not found' }, { status: 404 });
     }
+    
+    // Map database records to frontend interface
+    const files = dbFiles.map(file => ({
+      id: file.id,
+      name: file.originalFilename,
+      size: file.size || 0,
+      type: file.mimeType || 'application/octet-stream',
+      storagePath: file.storagePath,
+      uploadedAt: file.createdAt,
+      status: file.status,
+    }));
     
     // Cache the result
     await dashboardCache.set(cacheKey, files, CACHE_TTL.FILE_LIST);

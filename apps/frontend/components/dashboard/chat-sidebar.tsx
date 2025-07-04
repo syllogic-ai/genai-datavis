@@ -439,7 +439,16 @@ export function ChatSidebar({
                   Start a conversation by describing the widget you want to create.
                 </div>
               ) : (
-                chatHistory.map((msg, index) => (
+                chatHistory
+                  .filter(msg => {
+                    // Additional validation before rendering - should already be filtered by normalizeMessages but double-check
+                    if (!msg.message || typeof msg.message !== 'string' || msg.message.trim() === '') return false;
+                    // Check if message is just a UUID
+                    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                    if (uuidRegex.test(msg.message.trim())) return false;
+                    return true;
+                  })
+                  .map((msg, index) => (
                   <div
                     key={(msg as any).tempId || index}
                     className={cn(

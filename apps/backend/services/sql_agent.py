@@ -135,7 +135,8 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     - When using strftime, always ensure that the argument inside has been transformed to a date first (e.g. strptime(date_column, '%d/%m/%Y')::DATE)
     - When working with dates, always make sure that you transform them to date format first (e.g. strptime(date_column, '%d/%m/%Y')::DATE)
     - To truncate dates to specific parts, use date_trunc(): date_trunc('month', CAST(date_column AS DATE))
-    
+    - Use the correct syntax for strftime: strftime(date_format, date_column) f.i. strftime('%Y-%m-%d', date_column)
+
     User prompt: {ctx.deps.user_prompt}
     """
 
@@ -148,12 +149,22 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     successful_execution = False
     
     sql = input.sql
-    # Always create a new widget for each request
-    widget_id = str(uuid.uuid4())
-    logfire.info("Creating new widget", 
-                 new_widget_id=widget_id,
-                 chat_id=ctx.deps.chat_id, 
-                 request_id=ctx.deps.request_id)
+    # Check if the widget already exists
+    if ctx.deps.widget_id:
+        widget_id = ctx.deps.widget_id
+        task = "update"
+        logfire.info(f"{task} widget", 
+                new_widget_id=widget_id,
+                chat_id=ctx.deps.chat_id, 
+                request_id=ctx.deps.request_id)
+    else:
+        widget_id = str(uuid.uuid4())
+        task = "create"
+
+        logfire.info(f"{task} widget", 
+                    new_widget_id=widget_id,
+                    chat_id=ctx.deps.chat_id, 
+                    request_id=ctx.deps.request_id)
     
     # Convert to uppercase for case-insensitive comparison
     sql_upper = sql.upper()
@@ -186,14 +197,14 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                     dashboard_id = chat_result.data[0]["dashboard_id"]
                 else:
                     error_msg = "Cannot create widget: no dashboard_id available"
-                    logfire.error("Widget creation failed", 
+                    logfire.error(f"{task} widget failed", 
                                  error=error_msg,
                                  chat_id=ctx.deps.chat_id, 
                                  request_id=ctx.deps.request_id)
                     raise ValueError(error_msg)
             except Exception as e:
                 error_msg = f"Error getting dashboard_id from chat: {str(e)}"
-                logfire.error("Dashboard ID lookup failed", 
+                logfire.error(f"{task} widget failed", 
                              error=str(e),
                              chat_id=ctx.deps.chat_id, 
                              request_id=ctx.deps.request_id)
@@ -220,31 +231,39 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
         }
         
         # Insert new widget
-        result = ctx.deps.supabase.table("widgets").insert({
-            "id": widget_id,
-            "dashboard_id": dashboard_id,
-            "title": "Data Analysis Chart",
-            "type": "chart",
-            "config": widget_config,
-            "data": None,
-            "sql": sql,
-            "layout": widget_layout,
-            "chat_id": ctx.deps.chat_id,
-            "is_configured": True,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": datetime.utcnow().isoformat()
-        }).execute()
-            
+        if task == "create":            
+            result = ctx.deps.supabase.table("widgets").insert({
+                "id": widget_id,
+                "dashboard_id": dashboard_id,
+                "title": "Data Analysis Chart",
+                "type": "chart",
+                "config": widget_config,
+                "data": None,
+                "sql": sql,
+                "layout": widget_layout,
+                "chat_id": ctx.deps.chat_id,
+                "is_configured": True,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }).execute()
+        else:
+            # Update existing widget
+            result = ctx.deps.supabase.table("widgets").update({
+                "sql": sql,
+                "layout": widget_layout,
+                "config": widget_config
+            }).eq("id", widget_id).execute()
+
         if not result.data or len(result.data) == 0:
-            error_msg = "Failed to create new widget record"
-            logfire.warn("Widget creation failed", 
+            error_msg = f"Failed to {task} widget record" 
+            logfire.warn(f"{task} widget failed", 
                              error=error_msg,
                              widget_id=widget_id,
                              chat_id=ctx.deps.chat_id, 
                              request_id=ctx.deps.request_id)
             successful_execution = False
         else:
-            logfire.info("Widget created successfully", 
+            logfire.info(f"{task} widget successfully", 
                          widget_id=widget_id,
                          dashboard_id=dashboard_id,
                          chat_id=ctx.deps.chat_id, 
@@ -253,10 +272,10 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
 
     except Exception as e:
         error_msg = f"Error creating/updating widget record: {str(e)}"
-        logfire.error("Widget operation failed", 
+        logfire.error(f"{task} widget failed", 
                      error=str(e),
                      widget_id=widget_id,
-                     operation="create",
+                     operation=task,
                      chat_id=ctx.deps.chat_id, 
                      request_id=ctx.deps.request_id)
         raise ValueError(error_msg)

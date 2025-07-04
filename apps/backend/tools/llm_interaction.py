@@ -81,7 +81,10 @@ async def process_user_request(
                chat_id=chat_id, 
                request_id=request_id,
                file_id=file_id,
-               is_follow_up=is_follow_up)
+               is_follow_up=is_follow_up, 
+               widget_type=widget_type,
+               context_widget_ids=context_widget_ids,
+               target_widget_type=target_widget_type)
     
     # Create DuckDB connection if not provided
     if duck_connection is None:

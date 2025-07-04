@@ -152,7 +152,10 @@ async def get_widgets_types(ctx: RunContext[Deps]) -> List[str]:
     """Tool to get the types of the widgets in the user context, so that the agent can later decide whether to update them or not
     """
     widget_types = {}
-    widgets_list = ctx.deps.contextWidgetIds
+    if ctx.deps.contextWidgetIds:
+        widgets_list = ctx.deps.contextWidgetIds
+    else:
+        return {}
 
     for widget_id in widgets_list:        
         widget_type = ctx.deps.supabase.table("widgets").select("config").eq("id", widget_id).execute()
@@ -369,13 +372,6 @@ async def visualize_chart(ctx: Deps, widget_id: str) -> dict:
             deps=newDeps,
         )
         
-        # Add the visualization result to the chat history
-        message = {
-            "role": "chart",
-            "content": widget_id,
-        }
-        
-        await append_chat_message(ctx.chat_id, message=message)
         
         end_time = time.time()
         await _log_llm(result.usage(), viz_agent, end_time - start_time, ctx.chat_id, ctx.request_id)  

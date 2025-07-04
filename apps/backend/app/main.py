@@ -240,6 +240,7 @@ async def analyze_chat_message(
         request_id=request.request_id,
         dashboard_id=request.dashboardId,
         message=request.message[:100],  # Log first 100 chars
+        contextWidgetIds=request.contextWidgetIds,
         has_context_widgets=request.contextWidgetIds is not None,
         target_widget_type=request.targetWidgetType
     )
@@ -342,7 +343,8 @@ async def analyze_data(
         file_id=request.file_id,
         prompt=request.prompt,
         is_follow_up=request.is_follow_up,
-        widget_type=request.widget_type
+        widget_type=request.widget_type,
+        contextWidgetIds=request.contextWidgetIds
     )
     
     # Prepare task data
@@ -381,7 +383,9 @@ async def analyze_data(
             task_id=task_id,
             queue_name=ANALYSIS_QUEUE_NAME,
             request_id=request.request_id,
-            chat_id=request.chat_id
+            chat_id=request.chat_id,
+            contextWidgetIds=request.contextWidgetIds,
+            widget_type=request.widget_type
         )
         
     except Exception as e:
@@ -459,8 +463,8 @@ async def process_analysis_task(
         # Handle both old and new message formats
         dashboard_id = task_data.get("dashboard_id")
         file_id = task_data.get("file_id")  # Legacy support
-        context_widget_ids = task_data.get("contextWidgetIds")
-        target_widget_type = task_data.get("targetWidgetType")
+        context_widget_ids = task_data.get("context_widget_ids")
+        target_widget_type = task_data.get("target_widget_type")
         
         # Legacy fields
         is_follow_up = task_data.get("is_follow_up", False)
@@ -500,7 +504,9 @@ async def process_analysis_task(
             "Processing analysis task from QStash",
             request_id=request_id,
             chat_id=chat_id,
-            file_id=file_id
+            file_id=file_id,
+            context_widget_ids=context_widget_ids,
+            target_widget_type=target_widget_type
         )
         
         # Update job status to processing (if Redis is available)

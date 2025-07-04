@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Upload, 
@@ -60,6 +60,7 @@ export function EnhancedFileManager({
   const [showExistingFiles, setShowExistingFiles] = useState(true);
   const [duplicateAttempts, setDuplicateAttempts] = useState<string[]>([]);
   const [deletingFileIds, setDeletingFileIds] = useState<Set<string>>(new Set());
+  const processedUploadsRef = useRef<Set<string>>(new Set());
 
   const uploadHook = useSupabaseUpload({
     bucketName: 'test-bucket',
@@ -95,7 +96,18 @@ export function EnhancedFileManager({
   // Enhanced upload processing
   useEffect(() => {
     if (uploadHook.isSuccess && uploadHook.files.length > 0) {
+      // Create a unique identifier for this upload batch
+      const uploadBatchId = uploadHook.files.map(f => f.name).sort().join('|');
+      
+      // Skip if we've already processed this exact upload batch
+      if (processedUploadsRef.current.has(uploadBatchId)) {
+        console.log(`[EnhancedFileManager] Skipping already processed upload batch: ${uploadBatchId}`);
+        return;
+      }
+      
       const processUploads = async () => {
+        // Mark this upload batch as being processed
+        processedUploadsRef.current.add(uploadBatchId);
         // Check for duplicates and warn user (but don't block upload since we use upsert=true)
         const duplicates = checkForDuplicates(uploadHook.files);
         if (duplicates.length > 0) {
@@ -145,6 +157,8 @@ export function EnhancedFileManager({
                   fileName: file.name,
                   storagePath: `test-bucket/dashboards/${dashboardId}/${sanitizedName}`,
                   fileType: 'original',
+                  mimeType: file.type,
+                  size: file.size,
                 }),
               });
 
@@ -194,12 +208,13 @@ export function EnhancedFileManager({
           uploadHook.setErrors([]);
           uploadHook.setSuccesses([]);
           setDuplicateAttempts([]);
+          processedUploadsRef.current.clear(); // Clear processed uploads tracking
         }, 1000);
       };
 
       processUploads();
     }
-  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, checkForDuplicates, dashboardId, onFileAdded, onRefreshFiles]);
+  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, dashboardId, onFileAdded, onRefreshFiles]);
 
   const getFileIcon = (type: string) => {
     if (!type) return <File className="w-4 h-4" />;

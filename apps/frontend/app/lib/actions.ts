@@ -50,7 +50,7 @@ export async function migrateExistingFiles(userId?: string) {
 }
 
 // Create a new file in the database using Drizzle
-export async function createFile(fileId: string, fileType: string, originalFilename: string, sanitizedFilename: string | null, storagePath: string, userId: string) {
+export async function createFile(fileId: string, fileType: string, originalFilename: string, sanitizedFilename: string | null, storagePath: string, userId: string, mimeType?: string, size?: number) {
   try {
     const result = await db.insert(files).values({
       id: fileId,
@@ -59,6 +59,8 @@ export async function createFile(fileId: string, fileType: string, originalFilen
       originalFilename: originalFilename,
       sanitizedFilename: sanitizedFilename,
       storagePath: storagePath,
+      mimeType: mimeType || null,
+      size: size || null,
       status: 'pending', // Assuming 'pending' is the desired initial status based on original code
     }).returning(); // Optional: return the inserted record
 

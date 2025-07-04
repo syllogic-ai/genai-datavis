@@ -106,8 +106,11 @@ async def process_task_from_queue():
                 user_prompt = task_data["user_prompt"]
                 is_follow_up = task_data.get("is_follow_up", False)
                 widget_type = task_data.get("widget_type")
+                context_widget_ids = task_data.get("context_widget_ids")
+                target_widget_type = task_data.get("target_widget_type")
                 
-                logger.info(f"Processing task {request_id} for chat {chat_id}, file {file_id}")
+                logger.info(f"Processing task {request_id} for chat {chat_id}, file {file_id}, 
+                context_widget_ids={context_widget_ids}, target_widget_type={target_widget_type}")
 
                 # Call the main analysis function (this is async)
                 # It requires initialized supabase_worker_client and duckdb_worker_connection
@@ -122,7 +125,9 @@ async def process_task_from_queue():
                     is_follow_up=is_follow_up,
                     widget_type=widget_type,
                     duck_connection=duckdb_worker_connection,
-                    supabase_client=supabase_worker_client
+                    supabase_client=supabase_worker_client,
+                    context_widget_ids=context_widget_ids,
+                    target_widget_type=target_widget_type
                 )
                 
                 processing_time = time.time() - task_start_time

@@ -55,7 +55,16 @@ export function ConversationHistory({ messages }: ConversationHistoryProps) {
             <CardContent className="p-0">
               <ScrollArea className="h-[250px] p-4">
                 <div className="space-y-3">
-                  {messages.map((message, index) => (
+                  {messages
+                    .filter(message => {
+                      // Filter out invalid messages
+                      if (!message.content || typeof message.content !== 'string' || message.content.trim() === '') return false;
+                      // Check if message is just a UUID
+                      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+                      if (uuidRegex.test(message.content.trim())) return false;
+                      return true;
+                    })
+                    .map((message, index) => (
                     <div
                       key={index}
                       className={`p-3 rounded-lg ${
