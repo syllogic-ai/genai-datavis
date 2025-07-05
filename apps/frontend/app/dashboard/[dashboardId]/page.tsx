@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
 import { ChatSidebar } from "@/components/dashboard/chat-sidebar";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
 import { useSetupState } from "./hooks/useSetupState";
@@ -23,6 +23,7 @@ import toast, { Toaster } from 'react-hot-toast';
 export default function EnhancedDashboardPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dashboardId = params.dashboardId as string;
   const { updateCurrentDashboard } = useDashboardContext();
   const { setOpen: setNavigationSidebarOpen } = useSidebar();
@@ -64,10 +65,14 @@ export default function EnhancedDashboardPage() {
 
   // Chat management for the dashboard
   const {
-    chatId,
+    chatId: defaultChatId,
     isLoading: isChatLoading,
     error: chatError
   } = useDashboardChat(dashboardId);
+  
+  // Get chat ID from URL parameter or fall back to default
+  const urlChatId = searchParams.get('chat');
+  const chatId = urlChatId || defaultChatId;
 
   // Memoize dashboard object to prevent recreation on every render
   const dashboardObj = React.useMemo(() => ({

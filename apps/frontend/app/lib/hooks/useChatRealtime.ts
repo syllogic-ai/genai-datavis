@@ -34,6 +34,8 @@ export function useChatRealtime(
     // Set loading state only for initial load or chat ID change
     if (prevChatIdRef.current !== chatId) {
       setIsLoading(true);
+      setConversation([]); // Clear conversation immediately when chat ID changes
+      setError(null); // Clear any previous errors
       prevChatIdRef.current = chatId;
     }
 

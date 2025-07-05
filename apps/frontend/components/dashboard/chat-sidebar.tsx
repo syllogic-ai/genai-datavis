@@ -7,8 +7,9 @@ import { type DashboardWidget } from "./widget-context-selector";
 import { ChatInput } from "./ChatInput";
 import { TagItem } from "@/components/ui/tags/tag-selector";
 import { cn } from "@/lib/utils";
-import { X, Plus, MessageSquare } from "lucide-react";
+import { X, Plus, MessageSquare, Clock, History } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
 import { v4 as uuidv4 } from 'uuid';
 import { Widget } from "@/types/enhanced-dashboard-types";
@@ -59,6 +60,7 @@ export function ChatSidebar({
   const [dashboardChats, setDashboardChats] = React.useState<Chat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = React.useState(false);
   const [showChatList, setShowChatList] = React.useState(false);
+  const [showHistoryPopover, setShowHistoryPopover] = React.useState(false);
   
   // Job monitoring
   const { status: jobStatus } = useJobStatusRealtime(currentJobId, {
@@ -104,6 +106,12 @@ export function ChatSidebar({
   
   // Use real-time chat hook for conversation
   const { conversation, isLoading: chatLoading, error: chatError } = useChatRealtime(chatId);
+  
+  // Clear pending messages when chatId changes
+  React.useEffect(() => {
+    setPendingMessages([]);
+    setCurrentJobId(null);
+  }, [chatId]);
   
   // Convert real-time conversation to our local format and merge with pending messages
   const chatHistory = React.useMemo(() => {
@@ -154,6 +162,18 @@ export function ChatSidebar({
   const handleCreateNewChat = React.useCallback(async () => {
     if (!user?.id) return;
     
+    // Check if there's already a "New Chat" (empty chat)
+    const existingNewChat = dashboardChats.find(chat => 
+      chat.title === "New Chat" || chat.title === "New chat"
+    );
+    
+    if (existingNewChat) {
+      // Navigate to the existing new chat instead of creating another one
+      router.push(`/dashboard/${dashboardId}?chat=${existingNewChat.id}`);
+      setShowHistoryPopover(false);
+      return;
+    }
+    
     try {
       const newChat = await createEmptyChat(user.id, dashboardId);
       setDashboardChats(prev => [newChat, ...prev]);
@@ -164,12 +184,12 @@ export function ChatSidebar({
       // Navigate to the new chat
       router.push(`/dashboard/${dashboardId}?chat=${newChat.id}`);
       
-      // Hide chat list after creating new chat
-      setShowChatList(false);
+      // Hide popover after creating new chat
+      setShowHistoryPopover(false);
     } catch (error) {
       console.error('Error creating new chat:', error);
     }
-  }, [user?.id, dashboardId, router]);
+  }, [user?.id, dashboardId, router, dashboardChats]);
 
   // Load chats when sidebar opens
   React.useEffect(() => {
@@ -333,92 +353,93 @@ export function ChatSidebar({
         <div className="border-b shrink-0 relative z-10 bg-background">
           {/* Main header */}
           <div className="flex items-center justify-between py-2 px-4">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowChatList(!showChatList)}
-                className="h-8 text-sm flex-shrink-0"
-              >
-                <MessageSquare className="h-4 w-4 mr-2" />
-                Chats
-              </Button>
+            {/* Left side - Chat name */}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium truncate">
+                {dashboardChats.find(chat => chat.id === chatId)?.title || "New Chat"}
+              </div>
+            </div>
+            
+            {/* Right side - Three buttons */}
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {/* Plus button - Create new chat */}
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleCreateNewChat}
-                title="New Chat"
-                className="h-8 w-8 flex-shrink-0"
+                title="Create New Chat"
+                className="h-8 w-8"
               >
                 <Plus className="h-4 w-4" />
               </Button>
-              {/* Current chat indicator */}
-              {dashboardChats.length > 0 && (
-                <div className="text-xs text-muted-foreground truncate ml-2">
-                  Current: {dashboardChats.find(chat => chat.id === chatId)?.title || "Unknown Chat"}
-                </div>
-              )}
+              
+              {/* History button - Show past chats */}
+              <Popover open={showHistoryPopover} onOpenChange={setShowHistoryPopover}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title="Chat History"
+                    className="h-8 w-8"
+                  >
+                    <History className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="end">
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm">Chat History</h4>
+                    {isLoadingChats ? (
+                      <div className="text-center text-muted-foreground py-4">
+                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
+                        Loading chats...
+                      </div>
+                    ) : dashboardChats.length > 0 ? (
+                      <div className="space-y-1 max-h-60 overflow-y-auto">
+                        {dashboardChats.map((chat) => {
+                          const isActive = chatId === chat.id;
+                          return (
+                            <Link 
+                              key={chat.id} 
+                              href={`/dashboard/${dashboardId}?chat=${chat.id}`}
+                              onClick={() => setShowHistoryPopover(false)}
+                            >
+                              <div
+                                className={cn(
+                                  "flex items-center gap-2 p-2 rounded text-sm cursor-pointer transition-colors",
+                                  isActive 
+                                    ? "bg-primary text-primary-foreground" 
+                                    : "hover:bg-muted"
+                                )}
+                              >
+                                <MessageSquare className="h-3 w-3 flex-shrink-0" />
+                                <span className="truncate">{chat.title}</span>
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center text-muted-foreground py-4 text-sm">
+                        No chats yet. Click + to create one!
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              
+              {/* X button - Close chat sidebar */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onToggle}
+                title="Close Chat"
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggle}
-              className="h-8 w-8 flex-shrink-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
 
-          {/* Chat list dropdown */}
-          <AnimatePresence>
-            {showChatList && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="border-t bg-background overflow-hidden"
-              >
-                <div className="p-2 max-h-60 overflow-y-auto">
-                  {isLoadingChats ? (
-                    <div className="text-center text-muted-foreground py-4">
-                      <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
-                      Loading chats...
-                    </div>
-                  ) : dashboardChats.length > 0 ? (
-                    <div className="space-y-1">
-                      {dashboardChats.map((chat) => {
-                        const isActive = chatId === chat.id;
-                        return (
-                          <Link 
-                            key={chat.id} 
-                            href={`/dashboard/${dashboardId}?chat=${chat.id}`}
-                            onClick={() => setShowChatList(false)}
-                          >
-                            <div
-                              className={cn(
-                                "flex items-center gap-2 p-2 rounded text-sm cursor-pointer transition-colors",
-                                isActive 
-                                  ? "bg-primary text-primary-foreground" 
-                                  : "hover:bg-muted"
-                              )}
-                            >
-                              <MessageSquare className="h-3 w-3 flex-shrink-0" />
-                              <span className="truncate">{chat.title}</span>
-                            </div>
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center text-muted-foreground py-4 text-sm">
-                      No chats yet. Click + to create one!
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Chat History - with bottom padding for fixed input */}

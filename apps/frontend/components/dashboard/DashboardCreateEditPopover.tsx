@@ -25,7 +25,8 @@ import { Input } from "@/components/ui/input";
 import { IconRenderer } from "@/components/dashboard/DashboardIconRenderer";
 import { IconPickerDialog } from "@/components/dashboard/DashboardIconPicker";
 import { Dashboard } from "@/db/schema";
-import { PlusIcon } from "lucide-react";
+import { PlusIcon, AlertCircle, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface DashboardCreateEditPopoverProps {
   dashboard?: Dashboard;
@@ -49,24 +50,9 @@ export function DashboardCreateEditPopover({
   asDropdownItem = false,
 }: DashboardCreateEditPopoverProps) {
   const [open, setOpen] = useState(false); // Always start closed
-  console.log('[DashboardCreateEditPopover] Component initialized:', { 
-    dashboard: dashboard?.id, 
-    trigger: trigger === null ? 'null' : 'exists', 
-    asDropdownItem, 
-    initialOpen: trigger === null,
-    open
-  });
-  
-  // Add effect to track state changes
-  React.useEffect(() => {
-    console.log('[DashboardCreateEditPopover] State changed:', {
-      open,
-      dashboard: dashboard?.id,
-      trigger: trigger === null ? 'null' : 'exists'
-    });
-  }, [open, dashboard?.id, trigger]);
   const [selectedIcon, setSelectedIcon] = useState(dashboard?.icon || "DocumentTextIcon");
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const form = useForm<FormData>({
     defaultValues: {
@@ -131,6 +117,8 @@ export function DashboardCreateEditPopover({
     if (!data.name.trim()) return;
     
     setIsLoading(true);
+    setError(null);
+    
     try {
       if (dashboard) {
         // Update existing dashboard
@@ -140,14 +128,23 @@ export function DashboardCreateEditPopover({
           body: JSON.stringify({ name: data.name.trim() }),
         });
         
-        if (response.ok) {
-          const updatedDashboard = await response.json();
-          console.log('[DashboardCreateEditPopover] Dashboard updated successfully, closing dialog');
-          onDashboardUpdated?.(updatedDashboard);
-          setOpen(false);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          throw new Error(errorData?.error || `Failed to update dashboard (${response.status})`);
         }
+        
+        const updatedDashboard = await response.json();
+        onDashboardUpdated?.(updatedDashboard);
+        setOpen(false);
       } else {
-        // Create new dashboard
+        // Create new dashboard with optimistic UI
+        const optimisticDashboard: Partial<Dashboard> = {
+          name: data.name.trim(),
+          icon: selectedIcon,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        
         const response = await fetch("/api/dashboards", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -157,16 +154,35 @@ export function DashboardCreateEditPopover({
           }),
         });
         
-        if (response.ok) {
-          const newDashboard = await response.json();
-          onDashboardCreated?.(newDashboard);
-          setOpen(false);
-          form.reset({ name: "New Dashboard" });
-          setSelectedIcon("DocumentTextIcon");
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => null);
+          
+          // Handle specific error cases
+          if (response.status === 401) {
+            throw new Error("You must be signed in to create a dashboard");
+          } else if (response.status === 429) {
+            throw new Error("Too many requests. Please try again later.");
+          } else if (response.status >= 500) {
+            throw new Error("Server error. Please try again later.");
+          } else {
+            throw new Error(errorData?.error || `Failed to create dashboard (${response.status})`);
+          }
         }
+        
+        const newDashboard = await response.json();
+        onDashboardCreated?.(newDashboard);
+        setOpen(false);
+        form.reset({ name: "New Dashboard" });
+        setSelectedIcon("DocumentTextIcon");
       }
     } catch (error) {
       console.error("Error saving dashboard:", error);
+      
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred";
+      setError(errorMessage);
+      
+      // Clear error after 5 seconds
+      setTimeout(() => setError(null), 5000);
     } finally {
       setIsLoading(false);
     }
@@ -212,6 +228,13 @@ export function DashboardCreateEditPopover({
                   {dashboard ? "Update your dashboard details." : "Set up a new dashboard for your data."}
                 </p>
               </div>
+              
+              {error && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
               
               <div className="flex items-center gap-1">
                 <div className="flex-shrink-0">
@@ -280,7 +303,14 @@ export function DashboardCreateEditPopover({
                   onClick={form.handleSubmit(onSubmit)}
                   disabled={isLoading}
                 >
-                  {isLoading ? "Saving..." : dashboard ? "Update" : "Create"}
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    dashboard ? "Update" : "Create"
+                  )}
                 </Button>
               </div>
             </div>
@@ -324,6 +354,12 @@ export function DashboardCreateEditPopover({
           </DialogHeader>
           
           <div className="grid gap-4 py-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
             <div className="flex items-center gap-4">
               {/* Icon Picker */}
               <div className="flex-shrink-0">
@@ -398,7 +434,14 @@ export function DashboardCreateEditPopover({
                 onClick={form.handleSubmit(onSubmit)}
                 disabled={isLoading}
               >
-                {isLoading ? "Saving..." : dashboard ? "Update" : "Create"}
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  dashboard ? "Update" : "Create"
+                )}
               </Button>
             </div>
           </div>
@@ -422,6 +465,13 @@ export function DashboardCreateEditPopover({
               {dashboard ? "Update your dashboard details." : "Set up a new dashboard for your data."}
             </p>
           </div>
+          
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           
           <div className="flex items-center gap-1">
             {/* Icon Picker Square */}
@@ -492,7 +542,14 @@ export function DashboardCreateEditPopover({
               onClick={form.handleSubmit(onSubmit)}
               disabled={isLoading}
             >
-              {isLoading ? "Saving..." : dashboard ? "Update" : "Create"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                dashboard ? "Update" : "Create"
+              )}
             </Button>
           </div>
         </div>

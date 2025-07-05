@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Command, Home, Plus } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import {
   Sidebar,
@@ -28,6 +28,7 @@ export function AppSidebar({
   ...props
 }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useUser();
   const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
   
@@ -40,6 +41,8 @@ export function AppSidebar({
 
   const handleDashboardCreated = (dashboard: Dashboard) => {
     addDashboard(dashboard);
+    // Navigate to the new dashboard
+    router.push(`/dashboard/${dashboard.id}`);
   };
 
   const handleDashboardUpdated = (dashboard: Dashboard) => {
