@@ -21,6 +21,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
 import { useJobStatusRealtime } from "@/app/lib/hooks/useJobStatusRealtime";
+import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobCompletion";
 
 export interface ChatSidebarProps {
   dashboardId: string;
@@ -30,6 +31,7 @@ export interface ChatSidebarProps {
   className?: string;
   dashboardWidgets?: Widget[]; // Add dashboard widgets prop
   onWidgetsRefresh?: () => Promise<void>; // Add widget refresh callback
+  onJobStart?: (jobId: string) => void; // New callback for job tracking
 }
 
 interface ChatMessage {
@@ -52,6 +54,7 @@ export function ChatSidebar({
   className,
   dashboardWidgets = [],
   onWidgetsRefresh,
+  onJobStart,
 }: ChatSidebarProps) {
   // State management
   const [isLoading, setIsLoading] = React.useState(false);
@@ -62,20 +65,20 @@ export function ChatSidebar({
   const [showChatList, setShowChatList] = React.useState(false);
   const [showHistoryPopover, setShowHistoryPopover] = React.useState(false);
   
-  // Job monitoring
+  // Scroll management
+  const scrollAreaRef = React.useRef<HTMLDivElement>(null);
+  const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  
+  // Enhanced job monitoring (keep the old one for backward compatibility)
   const { status: jobStatus } = useJobStatusRealtime(currentJobId, {
     onComplete: async (job) => {
       console.log('Job completed in ChatSidebar:', job);
       setCurrentJobId(null); // Clear job ID
       
-      // Show immediate success toast
-      console.log('Job completed successfully, showing success toast');
-      
-      // Refresh widgets to show newly created ones with cache busting
+      // The enhanced job completion handler in parent will handle the rest
       if (onWidgetsRefresh) {
         try {
           console.log('Refreshing dashboard widgets after job completion (silent refresh)');
-          // Add small delay to ensure backend has completed all operations
           setTimeout(async () => {
             await onWidgetsRefresh();
           }, 1500);
@@ -140,6 +143,41 @@ export function ChatSidebar({
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
   }, [conversation, pendingMessages]);
+  
+  // Auto-scroll to bottom function
+  const scrollToBottom = React.useCallback((behavior: 'smooth' | 'instant' = 'smooth') => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ 
+        behavior,
+        block: 'end',
+        inline: 'nearest'
+      });
+    }
+  }, []);
+  
+  // Scroll to bottom when chat history changes (new messages or chat switch)
+  React.useEffect(() => {
+    if (chatHistory.length > 0) {
+      // Use instant scroll when switching chats, smooth scroll for new messages
+      const behavior = pendingMessages.length > 0 ? 'smooth' : 'instant';
+      scrollToBottom(behavior);
+    }
+  }, [chatHistory, scrollToBottom, pendingMessages.length]);
+  
+  // Scroll to bottom when sidebar opens
+  React.useEffect(() => {
+    if (isOpen && chatHistory.length > 0) {
+      // Small delay to ensure the sidebar is fully rendered
+      setTimeout(() => scrollToBottom('instant'), 100);
+    }
+  }, [isOpen, chatHistory.length, scrollToBottom]);
+  
+  // Scroll to bottom when loading state changes (shows processing message)
+  React.useEffect(() => {
+    if (isLoading) {
+      setTimeout(() => scrollToBottom('smooth'), 100);
+    }
+  }, [isLoading, scrollToBottom]);
 
 
   // Load chats for current dashboard
@@ -256,6 +294,9 @@ export function ChatSidebar({
     // Immediately add user message to pending state for instant display
     setPendingMessages(prev => [...prev, newMessage]);
     setIsLoading(true);
+    
+    // Scroll to bottom to show the new user message
+    setTimeout(() => scrollToBottom('smooth'), 100);
 
     try {
       const analyzeRequest = {
@@ -301,6 +342,11 @@ export function ChatSidebar({
         // Track the job for monitoring
         if (result.taskId) {
           setCurrentJobId(result.taskId);
+          
+          // Notify parent component about job start
+          if (onJobStart) {
+            onJobStart(result.taskId);
+          }
         }
         
         // Remove the pending message since it's now being processed
@@ -444,7 +490,7 @@ export function ChatSidebar({
 
         {/* Chat History - with bottom padding for fixed input */}
         <div className="flex-1 overflow-hidden relative">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full" ref={scrollAreaRef}>
             <div className="p-4 space-y-4 pb-56"> {/* Further increased bottom padding for chat input to ensure all messages are visible */}
               {chatLoading && chatHistory.length === 0 ? (
                 <div className="text-center text-muted-foreground">
@@ -529,6 +575,9 @@ export function ChatSidebar({
                   </div>
                 </div>
               )}
+              
+              {/* Invisible element to scroll to */}
+              <div ref={messagesEndRef} className="h-1 w-full" />
             </div>
           </ScrollArea>
         </div>

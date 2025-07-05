@@ -1,0 +1,1 @@
+ALTER TABLE "dashboards" ADD COLUMN "setup_completed" boolean DEFAULT false NOT NULL;

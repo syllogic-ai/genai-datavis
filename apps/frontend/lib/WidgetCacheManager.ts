@@ -1,5 +1,3 @@
-"use server";
-
 import { Redis } from "@upstash/redis";
 import db from '@/db';
 import { widgets } from '@/db/schema';
@@ -261,5 +259,91 @@ export class WidgetCacheManager {
 
     await Promise.all(operations);
     console.log(`Batch cached ${cacheOperations.length} widgets`);
+  }
+
+  // Job completion cache invalidation
+  async invalidateJobRelatedCaches(jobId: string, dashboardId: string): Promise<{
+    widgetsInvalidated: number;
+    dashboardCacheCleared: boolean;
+  }> {
+    try {
+      console.log(`Invalidating caches for job ${jobId} on dashboard ${dashboardId}`);
+      
+      // Clear all dashboard widget caches
+      await this.invalidateDashboardCache(dashboardId);
+      
+      // Get count of widgets that were invalidated
+      const dashboardWidgetsData = await db.select()
+        .from(widgets)
+        .where(eq(widgets.dashboardId, dashboardId));
+      
+      const widgetsInvalidated = dashboardWidgetsData.length;
+      
+      // Clear any dashboard-level caches
+      const dashboardCacheKeys = [`dashboard:${dashboardId}:*`];
+      for (const pattern of dashboardCacheKeys) {
+        const keys = await this.redis.keys(pattern);
+        if (keys.length > 0) {
+          await this.redis.del(...keys);
+          console.log(`Cleared ${keys.length} dashboard cache keys`);
+        }
+      }
+      
+      console.log(`Job completion cache invalidation completed: ${widgetsInvalidated} widgets invalidated`);
+      
+      return {
+        widgetsInvalidated,
+        dashboardCacheCleared: true
+      };
+    } catch (error) {
+      console.error(`Error invalidating job-related caches:`, error);
+      return {
+        widgetsInvalidated: 0,
+        dashboardCacheCleared: false
+      };
+    }
+  }
+
+  // Preemptive cache warming for new widgets
+  async warmCacheForNewWidgets(dashboardId: string, widgetIds: string[]): Promise<void> {
+    try {
+      console.log(`Warming cache for ${widgetIds.length} new widgets`);
+      
+      const warmingPromises = widgetIds.map(async (widgetId) => {
+        try {
+          // Get widget data to determine cache strategy
+          const widgetData = await db.select()
+            .from(widgets)
+            .where(eq(widgets.id, widgetId))
+            .limit(1);
+          
+          const widget = widgetData[0];
+          if (!widget) return;
+          
+          // Determine cache TTL based on widget type
+          const cacheType = widget.type === 'kpi' ? 'realtime' : 'daily';
+          
+          // If widget has SQL, it will need data fetching
+          if (widget.sql) {
+            // Mark as needing data fetch (don't actually fetch here to avoid long delays)
+            await db.update(widgets)
+              .set({ 
+                lastDataFetch: null, // Reset to force fresh fetch
+                updatedAt: new Date(),
+              })
+              .where(eq(widgets.id, widgetId));
+          }
+          
+          console.log(`Prepared cache warming for widget ${widgetId} (${widget.type})`);
+        } catch (error) {
+          console.error(`Error warming cache for widget ${widgetId}:`, error);
+        }
+      });
+      
+      await Promise.all(warmingPromises);
+      console.log(`Cache warming completed for ${widgetIds.length} widgets`);
+    } catch (error) {
+      console.error('Error in cache warming:', error);
+    }
   }
 }

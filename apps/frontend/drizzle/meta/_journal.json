@@ -92,6 +92,13 @@
       "when": 1751639192588,
       "tag": "0012_reflective_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1751719848221,
+      "tag": "0013_right_cobalt_man",
+      "breakpoints": true
     }
   ]
 }

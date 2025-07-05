@@ -30,6 +30,9 @@ export const dashboards = pgTable("dashboards", {
   description: text("description"),
   icon: text("icon").default("document-text").notNull(),
   
+  // Setup state tracking
+  setupCompleted: boolean("setup_completed").default(false).notNull(),
+  
   // Removed single file reference - now files reference dashboards instead
   
   createdAt: timestamp("created_at").defaultNow(),

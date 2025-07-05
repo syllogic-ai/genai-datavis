@@ -394,6 +394,7 @@ export async function updateDashboard(
     name?: string;
     description?: string;
     icon?: string;
+    setupCompleted?: boolean;
   }
 ) {
   try {

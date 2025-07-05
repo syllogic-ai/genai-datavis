@@ -30,18 +30,19 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [setupCompleted, setSetupCompleted] = useState(false);
+  const [dashboardData, setDashboardData] = useState<any>(null);
 
   // Check if we're in setup mode from URL params
   const isSetupModeFromURL = searchParams.get('setup') === 'true';
 
-  // Load dashboard files (gracefully handle non-existent dashboards)
-  const loadFiles = useCallback(async () => {
+  // Load dashboard data and files
+  const loadDashboardData = useCallback(async () => {
     if (!userId) {
-      console.log('[useSetupState] No userId available, skipping file load');
+      console.log('[useSetupState] No userId available, skipping dashboard load');
       return;
     }
     if (!dashboardId) {
-      console.log('[useSetupState] No dashboardId available, skipping file load');
+      console.log('[useSetupState] No dashboardId available, skipping dashboard load');
       return;
     }
 
@@ -49,32 +50,45 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
       setIsLoading(true);
       setError(null);
 
-      console.log(`[useSetupState] Loading files for dashboard ${dashboardId} and user ${userId}`);
+      console.log(`[useSetupState] Loading dashboard data for ${dashboardId} and user ${userId}`);
       
-      const response = await fetch(`/api/dashboards/${dashboardId}/files`);
+      // Load dashboard metadata (including setupCompleted)
+      const dashboardResponse = await fetch(`/api/dashboards/${dashboardId}`);
+      if (dashboardResponse.ok) {
+        const dashboard = await dashboardResponse.json();
+        setDashboardData(dashboard);
+        setSetupCompleted(dashboard.setupCompleted || false);
+        console.log(`[useSetupState] Dashboard setup completed: ${dashboard.setupCompleted}`);
+      } else {
+        console.warn(`[useSetupState] Failed to load dashboard metadata: ${dashboardResponse.status}`);
+      }
       
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`[useSetupState] API error: ${response.status} - ${errorText}`);
+      // Load files
+      const filesResponse = await fetch(`/api/dashboards/${dashboardId}/files`);
+      
+      if (!filesResponse.ok) {
+        const errorText = await filesResponse.text();
+        console.error(`[useSetupState] Files API error: ${filesResponse.status} - ${errorText}`);
         
         // If dashboard doesn't exist or no files, treat as empty state
-        if (response.status === 404 || response.status === 401) {
+        if (filesResponse.status === 404 || filesResponse.status === 401) {
           console.log(`[useSetupState] Dashboard not found or no access, treating as new dashboard`);
           setFiles([]);
           return;
         }
         
-        throw new Error(`Failed to load files: ${response.status} - ${errorText}`);
+        throw new Error(`Failed to load files: ${filesResponse.status} - ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log(`[useSetupState] Loaded ${data.files?.length || 0} files:`, data.files);
-      setFiles(data.files || []);
+      const filesData = await filesResponse.json();
+      console.log(`[useSetupState] Loaded ${filesData.files?.length || 0} files:`, filesData.files);
+      setFiles(filesData.files || []);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load files';
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load dashboard data';
       console.warn(`[useSetupState] ${errorMessage}, treating as new dashboard`);
       // Don't set error for new dashboards - this is expected behavior
       setFiles([]);
+      setDashboardData(null);
     } finally {
       setIsLoading(false);
     }
@@ -89,15 +103,15 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
 
   // Initialize data
   useEffect(() => {
-    loadFiles();
-  }, [loadFiles]);
+    loadDashboardData();
+  }, [loadDashboardData]);
 
-  // Also reload files when user authentication changes
+  // Also reload data when user authentication changes
   useEffect(() => {
     if (userId) {
-      loadFiles();
+      loadDashboardData();
     }
-  }, [userId, loadFiles]);
+  }, [userId, loadDashboardData]);
 
   // Remove file from local state (API call handled by component)
   const removeFile = useCallback((fileId: string) => {
@@ -138,23 +152,47 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
   }, []);
 
   // Mark that user has completed setup phase
-  const markSetupCompleted = useCallback(() => {
+  const markSetupCompleted = useCallback(async () => {
     console.log('[useSetupState] Marking setup as completed');
-    setSetupCompleted(true);
-  }, []);
+    
+    try {
+      // Update database
+      const response = await fetch(`/api/dashboards/${dashboardId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ setupCompleted: true }),
+      });
+      
+      if (response.ok) {
+        setSetupCompleted(true);
+        console.log('[useSetupState] Setup completed successfully updated in database');
+      } else {
+        console.error('[useSetupState] Failed to update setup completed in database');
+        // Still update local state as fallback
+        setSetupCompleted(true);
+      }
+    } catch (error) {
+      console.error('[useSetupState] Error updating setup completed:', error);
+      // Still update local state as fallback
+      setSetupCompleted(true);
+    }
+  }, [dashboardId]);
 
   // Refresh files from database
   const refreshFiles = useCallback(async () => {
     console.log('[useSetupState] Manually refreshing files...');
-    await loadFiles();
-  }, [loadFiles]);
+    await loadDashboardData();
+  }, [loadDashboardData]);
 
   return {
     files,
     setupState,
     isLoading,
     error,
-    loadFiles,
+    dashboardData,
+    loadFiles: loadDashboardData,
     refreshFiles,
     removeFile,
     addFile,

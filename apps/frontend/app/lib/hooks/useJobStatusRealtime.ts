@@ -21,6 +21,8 @@ export interface UseJobStatusOptions {
   onStatusChange?: (job: JobStatusData) => void;
   onComplete?: (job: JobStatusData) => void;
   onError?: (error: string) => void;
+  onProgress?: (job: JobStatusData) => void;
+  autoRefreshDashboard?: boolean; // New option to automatically refresh dashboard data
 }
 
 export interface UseJobStatusReturn {
@@ -47,7 +49,9 @@ export function useJobStatusRealtime(
   const {
     onStatusChange,
     onComplete,
-    onError
+    onError,
+    onProgress,
+    autoRefreshDashboard = true
   } = options;
 
   const disconnect = useCallback(() => {
@@ -109,6 +113,8 @@ export function useJobStatusRealtime(
           }
           // Don't set up subscription if job is already done
           return;
+        } else if (data.status === 'processing' && onProgress) {
+          onProgress(data);
         }
       }
     } catch (err) {
@@ -154,6 +160,11 @@ export function useJobStatusRealtime(
           
           if (onStatusChange) {
             onStatusChange(updatedJob);
+          }
+
+          // Handle progress updates
+          if (updatedJob.status === 'processing' && onProgress) {
+            onProgress(updatedJob);
           }
 
           // Handle completion (only if not already completed)

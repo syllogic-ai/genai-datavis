@@ -15,10 +15,14 @@ import { useDashboardContext } from "@/components/dashboard/DashboardUserContext
 import { useModalCleanup } from "@/hooks/useModalCleanup";
 import { useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Save, Loader2, Check, AlertCircle } from "lucide-react";
+import { Save, Loader2, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import * as React from "react";
 import toast, { Toaster } from 'react-hot-toast';
+import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobCompletion";
+import { useDashboardRealtime } from "@/app/lib/hooks/useDashboardRealtime";
+import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardUpdates";
+import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
 
 export default function EnhancedDashboardPage() {
   const params = useParams();
@@ -69,6 +73,92 @@ export default function EnhancedDashboardPage() {
     isLoading: isChatLoading,
     error: chatError
   } = useDashboardChat(dashboardId);
+
+  // Enhanced job completion and realtime handling
+  const {
+    trackJob,
+    stopTracking,
+    currentJob,
+    isProcessing,
+    completedJobs,
+    failedJobs
+  } = useDashboardJobCompletion({
+    dashboardId,
+    onWidgetRefresh: () => loadWidgets({ bustCache: true, silent: true }),
+    onCacheInvalidation: (result) => {
+      console.log('Cache invalidation result:', result);
+    },
+    showToasts: true,
+    autoRefresh: true
+  });
+
+  // Realtime dashboard updates with optimistic UI
+  const {
+    isConnected: isRealtimeConnected,
+    lastUpdate,
+    optimisticUpdates,
+    addOptimisticUpdate,
+    rollbackOptimisticUpdate,
+    clearOptimisticUpdates
+  } = useDashboardRealtime({
+    dashboardId,
+    onWidgetAdded: (widget) => {
+      console.log('Widget added via realtime:', widget);
+      // Trigger a silent refresh to include the new widget
+      loadWidgets({ bustCache: true, silent: true });
+    },
+    onWidgetUpdated: (widget) => {
+      console.log('Widget updated via realtime:', widget);
+      // Trigger a silent refresh to update the widget
+      loadWidgets({ bustCache: true, silent: true });
+    },
+    onWidgetDeleted: (widgetId) => {
+      console.log('Widget deleted via realtime:', widgetId);
+      // Trigger a silent refresh to remove the widget
+      loadWidgets({ bustCache: true, silent: true });
+    },
+    enableOptimisticUpdates: true,
+    enableCrossTabSync: true,
+    showNotifications: true
+  });
+
+  // Error handling system
+  const {
+    errors,
+    hasErrors,
+    isRetrying,
+    addError,
+    clearErrors,
+    handleAsyncError
+  } = useErrorHandling({
+    maxRetries: 3,
+    retryDelay: 1000,
+    showToasts: true,
+    logErrors: true,
+    autoRetry: false
+  });
+
+  // Partial updates for large dashboards
+  const {
+    updateWidgets: performPartialUpdate,
+    isUpdating: isPartiallyUpdating,
+    updateProgress: partialUpdateProgress,
+    queuedUpdates,
+    completedUpdates,
+    failedUpdates
+  } = usePartialDashboardUpdates(
+    (widget) => {
+      console.log('Partial update applied to widget:', widget.id);
+      // Force re-render of specific widget
+      handleUpdateWidgets(widgets.map(w => w.id === widget.id ? widget : w));
+    },
+    {
+      maxConcurrentUpdates: 3,
+      batchSize: 5,
+      updateDelay: 100,
+      prioritizeVisible: true
+    }
+  );
   
   // Get chat ID from URL parameter or fall back to default
   const urlChatId = searchParams.get('chat');
@@ -133,19 +223,39 @@ export default function EnhancedDashboardPage() {
 
 
   const handlePublish = async () => {
-    const success = await saveWidgets();
-    if (success) {
+    const result = await handleAsyncError(
+      () => saveWidgets(),
+      { source: 'dashboard-publish', dashboardId }
+    );
+    
+    if (result) {
       toast.success("Dashboard published successfully! 🎉", {
         duration: 3000,
         position: 'top-right',
       });
-    } else {
-      toast.error("Failed to publish dashboard. Please try again.", {
-        duration: 4000,
-        position: 'top-right',
-      });
     }
   };
+
+  // Enhanced widget refresh with error handling and partial updates
+  const handleEnhancedWidgetRefresh = React.useCallback(async (changedWidgetIds?: string[]) => {
+    try {
+      // Load latest widgets
+      await loadWidgets({ bustCache: true, silent: true });
+      
+      // If specific widgets changed, use partial update
+      if (changedWidgetIds && changedWidgetIds.length > 0 && widgets.length > 10) {
+        console.log('Using partial update for large dashboard');
+        await performPartialUpdate(widgets, changedWidgetIds);
+      }
+    } catch (error) {
+      addError({
+        message: 'Failed to refresh dashboard widgets',
+        type: 'server',
+        context: { dashboardId, changedWidgetIds },
+        source: 'widget-refresh'
+      });
+    }
+  }, [loadWidgets, widgets, performPartialUpdate, addError, dashboardId]);
 
   // Remove global loading screen - let individual components handle their own loading states
 
@@ -249,13 +359,14 @@ export default function EnhancedDashboardPage() {
             onToggle={handleChatSidebarToggle}
             dashboardWidgets={widgets}
             onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
+            onJobStart={trackJob}
           />
         )}
       </motion.div>
 
-      {/* Save Status Indicator */}
+      {/* Status Indicators */}
       <AnimatePresence mode="wait">
-        <div className="fixed bottom-4 right-4 z-50">
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
           {saveStatus === 'saving' && (
             <motion.div
               key="saving"
@@ -292,6 +403,103 @@ export default function EnhancedDashboardPage() {
             >
               <AlertCircle className="w-4 h-4" />
               <span className="text-sm">Failed to save</span>
+            </motion.div>
+          )}
+          
+          {/* Processing Status */}
+          {isProcessing && (
+            <motion.div
+              key="processing"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Processing...</span>
+            </motion.div>
+          )}
+          
+          {/* Connection Status */}
+          {!isRealtimeConnected && (
+            <motion.div
+              key="disconnected"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-yellow-600 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <WifiOff className="w-4 h-4" />
+              <span className="text-sm">Reconnecting...</span>
+            </motion.div>
+          )}
+          
+          {/* Optimistic Updates Indicator */}
+          {optimisticUpdates.length > 0 && (
+            <motion.div
+              key="optimistic"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">{optimisticUpdates.length} pending...</span>
+            </motion.div>
+          )}
+          
+          {/* Partial Update Progress */}
+          {isPartiallyUpdating && (
+            <motion.div
+              key="partial-update"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex flex-col gap-1 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-lg min-w-[200px]"
+            >
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm">Updating widgets...</span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <div className="flex-1 bg-indigo-800 rounded-full h-1">
+                  <div 
+                    className="bg-white rounded-full h-1 transition-all duration-300"
+                    style={{ width: `${partialUpdateProgress}%` }}
+                  />
+                </div>
+                <span>{completedUpdates}/{queuedUpdates}</span>
+              </div>
+            </motion.div>
+          )}
+          
+          {/* Error Indicator */}
+          {hasErrors && (
+            <motion.div
+              key="errors"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg cursor-pointer"
+              onClick={clearErrors}
+              title="Click to dismiss all errors"
+            >
+              <AlertCircle className="w-4 h-4" />
+              <span className="text-sm">{errors.length} error(s)</span>
+            </motion.div>
+          )}
+          
+          {/* Retry Indicator */}
+          {isRetrying && (
+            <motion.div
+              key="retrying"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg shadow-lg"
+            >
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Retrying...</span>
             </motion.div>
           )}
         </div>
