@@ -142,6 +142,56 @@ export const jobs = pgTable('jobs', {
   queueTimeMs: integer("queue_time_ms"),
 });
 
+// COLOR PALETTES (multiple palettes per user)
+export const colorPalettes = pgTable("color_palettes", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  isDefault: boolean("is_default").default(false).notNull(),
+  
+  // Chart colors in HSL format (matching CSS variables)
+  chartColors: jsonb("chart_colors").$type<{
+    "chart-1": string;  // e.g., "151.20 26.04% 37.65%"
+    "chart-2": string;
+    "chart-3": string;
+    "chart-4": string;
+    "chart-5": string;
+    [key: string]: string; // Allow additional chart colors
+  }>().notNull(),
+  
+  // Optional brand colors
+  brandColors: jsonb("brand_colors").$type<{
+    primary?: string;
+    secondary?: string;
+    accent?: string;
+  }>(),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// USER PREFERENCES (for non-theme settings)
+export const userPreferences = pgTable("user_preferences", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().unique().references(() => users.id),
+  
+  // Chart display preferences
+  chartDefaults: jsonb("chart_defaults").$type<{
+    showLegend: boolean;
+    showGrid: boolean;
+    animation: boolean;
+  }>().default({
+    showLegend: true,
+    showGrid: true,
+    animation: true
+  }),
+  
+  // Other preferences can be added here
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Type definitions
 export type User = typeof users.$inferSelect;
 export type File = typeof files.$inferSelect;
@@ -150,3 +200,5 @@ export type Widget = typeof widgets.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type LLMUsage = typeof llmUsage.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
+export type ColorPalette = typeof colorPalettes.$inferSelect;
+export type UserPreferences = typeof userPreferences.$inferSelect;

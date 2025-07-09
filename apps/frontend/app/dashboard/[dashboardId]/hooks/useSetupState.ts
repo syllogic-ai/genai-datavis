@@ -32,8 +32,11 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [dashboardData, setDashboardData] = useState<any>(null);
 
-  // Check if we're in setup mode from URL params
-  const isSetupModeFromURL = searchParams.get('setup') === 'true';
+  // Check phase from URL params
+  const urlPhase = searchParams.get('phase');
+  const isSetupModeFromURL = searchParams.get('setup') === 'true' || urlPhase === 'setup';
+  const isChatModeFromURL = urlPhase === 'chat';
+  console.log('[useSetupState] URL params:', { setup: searchParams.get('setup'), phase: urlPhase });
 
   // Load dashboard data and files
   const loadDashboardData = useCallback(async () => {
@@ -57,8 +60,15 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
       if (dashboardResponse.ok) {
         const dashboard = await dashboardResponse.json();
         setDashboardData(dashboard);
-        setSetupCompleted(dashboard.setupCompleted || false);
-        console.log(`[useSetupState] Dashboard setup completed: ${dashboard.setupCompleted}`);
+        // For first-time setup flow, ignore setupCompleted from DB if no widgets exist
+        const hasWidgets = dashboard.widgetCount > 0;
+        const effectiveSetupCompleted = hasWidgets ? (dashboard.setupCompleted || false) : false;
+        setSetupCompleted(effectiveSetupCompleted);
+        console.log(`[useSetupState] Dashboard data:`, {
+          widgetCount: dashboard.widgetCount,
+          dbSetupCompleted: dashboard.setupCompleted,
+          effectiveSetupCompleted
+        });
       } else {
         console.warn(`[useSetupState] Failed to load dashboard metadata: ${dashboardResponse.status}`);
       }
@@ -96,6 +106,7 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
 
   // Determine if user has chatted based on widget count
   useEffect(() => {
+    console.log('[useSetupState] Widget count changed:', currentWidgetCount);
     if (currentWidgetCount !== undefined) {
       setHasMessages(currentWidgetCount > 0);
     }
@@ -139,29 +150,63 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
 
     const hasFiles = files.length > 0;
     
+    // For first-time setup (no widgets/messages), enforce the proper flow
+    if (!hasMessages) {
+      // If chat mode is explicitly set in URL, show chat phase
+      if (isChatModeFromURL && hasFiles) {
+        console.log('[useSetupState] Returning CHAT mode from URL');
+        return {
+          hasFiles,
+          hasMessages: false,
+          isSetupMode: false,
+          isChatMode: true,
+          isFullDashboard: false,
+        };
+      }
+      
+      // Otherwise, show setup mode until user explicitly moves forward
+      // This includes: setup URL param, no phase param, or no files yet
+      console.log('[useSetupState] Returning SETUP mode - isSetupModeFromURL:', isSetupModeFromURL, 'hasFiles:', hasFiles);
+      return {
+        hasFiles,
+        hasMessages: false,
+        isSetupMode: true,
+        isChatMode: false,
+        isFullDashboard: false,
+      };
+    }
+    
+    // Phase 3: Full dashboard - has messages (widgets)
+    // But allow going back to setup if URL param is set
+    if (isSetupModeFromURL) {
+      return {
+        hasFiles,
+        hasMessages: true,
+        isSetupMode: true,
+        isChatMode: false,
+        isFullDashboard: false,
+      };
+    }
+    
     return {
       hasFiles,
-      hasMessages,
-      // If setup is completed and has messages (widgets), go straight to full dashboard
-      // Only show setup mode if explicitly requested via URL or if it's a new dashboard with no setup
-      isSetupMode: !hasMessages && (isSetupModeFromURL || (!setupCompleted && !hasFiles)),
-      // Only go to chat mode when setup is completed, have files but no messages, and not in setup URL mode
-      isChatMode: !hasMessages && setupCompleted && hasFiles && !isSetupModeFromURL,
-      // Show full dashboard if has messages (widgets), regardless of setup state
-      isFullDashboard: hasMessages || (setupCompleted && !isSetupModeFromURL),
+      hasMessages: true,
+      isSetupMode: false,
+      isChatMode: false,
+      isFullDashboard: true,
     };
-  }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted, isLoading]);
+  }, [files.length, hasMessages, isSetupModeFromURL, isChatModeFromURL, isLoading]);
 
-  // Debug logging - commented out to reduce logs
-  // React.useEffect(() => {
-  //   console.log('[useSetupState] State update:', {
-  //     filesCount: files.length,
-  //     hasMessages,
-  //     isSetupModeFromURL,
-  //     setupCompleted,
-  //     setupState
-  //   });
-  // }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted]);
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[useSetupState] State update:', {
+      filesCount: files.length,
+      hasMessages,
+      isSetupModeFromURL,
+      setupCompleted,
+      setupState
+    });
+  }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted, setupState]);
 
   // Mark that user has sent first message
   const markFirstMessage = useCallback(() => {

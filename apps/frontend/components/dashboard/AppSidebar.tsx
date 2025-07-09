@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Command, Home, Plus } from "lucide-react";
+import { Command, Home, Plus, Settings } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import {
@@ -86,6 +86,17 @@ export function AppSidebar({
       
       <SidebarFooter>
         <SidebarMenu>
+          {/* Settings Navigation */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/dashboard/settings" className={pathname?.startsWith('/dashboard/settings') ? 'bg-sidebar-accent' : ''}>
+                <Settings className="size-4" />
+                <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          {/* User Profile */}
           {user && (
             <SidebarMenuItem>
               <SidebarMenuButton size="lg">

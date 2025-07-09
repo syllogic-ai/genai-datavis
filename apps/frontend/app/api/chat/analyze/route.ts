@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { v4 as uuidv4 } from 'uuid';
 import { updateChatConversation } from '@/app/lib/chatActions';
 import db from '@/db';
-import { chats } from '@/db/schema';
+import { chats, colorPalettes } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
@@ -80,6 +80,41 @@ export async function POST(request: NextRequest) {
     // Generate unique request ID for tracking
     const requestId = uuidv4();
 
+    // Get user's default color palette
+    let chartColors = null;
+    try {
+      const defaultPalette = await db
+        .select()
+        .from(colorPalettes)
+        .where(and(
+          eq(colorPalettes.userId, userId),
+          eq(colorPalettes.isDefault, true)
+        ))
+        .limit(1);
+      
+      if (defaultPalette.length > 0) {
+        // Convert chart colors to the format expected by backend
+        const palette = defaultPalette[0];
+        chartColors = {
+          chart1: palette.chartColors["chart-1"],
+          chart2: palette.chartColors["chart-2"],
+          chart3: palette.chartColors["chart-3"],
+          chart4: palette.chartColors["chart-4"],
+          chart5: palette.chartColors["chart-5"],
+          // Include any additional colors
+          ...Object.entries(palette.chartColors).reduce((acc, [key, value]) => {
+            const num = parseInt(key.replace('chart-', ''));
+            if (num > 5) {
+              acc[`chart${num}`] = value;
+            }
+            return acc;
+          }, {} as Record<string, string>)
+        };
+      }
+    } catch (error) {
+      console.warn('Failed to fetch user color palette:', error);
+    }
+
     // Prepare the payload for the backend
     const backendPayload = {
       message,
@@ -90,7 +125,14 @@ export async function POST(request: NextRequest) {
       chat_id: chatId,
       request_id: requestId,
       user_id: userId, // Include the Clerk user ID for job ownership
-      conversation_history: [...conversationHistory, newUserMessage] // Include full conversation
+      conversation_history: [...conversationHistory, newUserMessage], // Include full conversation
+      chart_colors: chartColors || {
+        chart1: "220 70% 50%",    // Default blue
+        chart2: "140 70% 50%",    // Default green
+        chart3: "30 70% 50%",     // Default orange
+        chart4: "0 70% 50%",      // Default red
+        chart5: "270 70% 50%",    // Default purple
+      }
     };
 
     console.log('Sending to backend:', {

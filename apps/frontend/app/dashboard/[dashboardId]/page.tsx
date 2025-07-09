@@ -206,14 +206,20 @@ export default function EnhancedDashboardPage() {
 
   // Phase transition handlers
   const handleSetupComplete = () => {
-    // Mark setup as completed to allow phase transition
-    markSetupCompleted();
-    // Navigate to dashboard without setup parameter
-    router.replace(`/dashboard/${dashboardId}`);
+    // For first-time setup, navigate to chat phase
+    // Use phase=chat to explicitly show chat mode
+    if (!setupState.hasMessages && files.length > 0) {
+      router.replace(`/dashboard/${dashboardId}?phase=chat`);
+    } else {
+      // For returning users, just go back to dashboard
+      router.replace(`/dashboard/${dashboardId}`);
+    }
   };
 
   const handleFirstMessage = () => {
     markFirstMessage();
+    // Also mark setup as completed when first message is sent
+    markSetupCompleted();
   };
 
   const handleBackToSetup = () => {
@@ -257,6 +263,15 @@ export default function EnhancedDashboardPage() {
     }
   }, [loadWidgets, widgets, performPartialUpdate, addError, dashboardId]);
 
+  // Debug phase rendering
+  console.log('[Dashboard Page] Rendering decision:', {
+    isLoading,
+    isSetupLoading,
+    setupState,
+    widgetsCount: widgets.length,
+    isSetupModeFromURL: searchParams.get('setup') === 'true'
+  });
+
   // Show loading state while initial data is being loaded
   if (isLoading || isSetupLoading) {
     return (
@@ -281,33 +296,45 @@ export default function EnhancedDashboardPage() {
   }
 
   // Progressive flow: Setup → Chat → Full Dashboard
-  // Priority: Full Dashboard > Chat Mode > Setup Mode
-  if (!setupState.isFullDashboard) {
-    if (setupState.isSetupMode) {
-      return (
-        <SetupPhase
-          dashboardId={dashboardId}
-          files={files}
-          onFileAdded={addFile}
-          onFileRemoved={removeFile}
-          onContinue={handleSetupComplete}
-          onRefreshFiles={refreshFiles}
-          isLoading={isSetupLoading}
-        />
-      );
-    }
+  console.log('[Dashboard Page] Phase decision:', {
+    isFullDashboard: setupState.isFullDashboard,
+    isSetupMode: setupState.isSetupMode,
+    isChatMode: setupState.isChatMode,
+    showingPhase: setupState.isFullDashboard ? 'FULL_DASHBOARD' : 
+                  setupState.isSetupMode ? 'SETUP' : 
+                  setupState.isChatMode ? 'CHAT' : 'UNKNOWN'
+  });
+  
+  // If we're in setup mode (either by URL or natural flow), show setup
+  if (setupState.isSetupMode) {
+    // Check if this is an update mode (user has widgets but came back to setup)
+    const isUpdatingMode = widgets.length > 0 || setupState.hasMessages;
+    
+    return (
+      <SetupPhase
+        dashboardId={dashboardId}
+        files={files}
+        onFileAdded={addFile}
+        onFileRemoved={removeFile}
+        onContinue={handleSetupComplete}
+        onRefreshFiles={refreshFiles}
+        isLoading={isSetupLoading}
+        isUpdatingMode={isUpdatingMode}
+      />
+    );
+  }
 
-    if (setupState.isChatMode) {
-      return (
-        <ChatPhase
-          dashboardId={dashboardId}
-          files={files}
-          onFirstMessage={handleFirstMessage}
-          onBack={handleBackToSetup}
-          onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
-        />
-      );
-    }
+  // If we're in chat mode, show chat
+  if (setupState.isChatMode) {
+    return (
+      <ChatPhase
+        dashboardId={dashboardId}
+        files={files}
+        onFirstMessage={handleFirstMessage}
+        onBack={handleBackToSetup}
+        onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
+      />
+    );
   }
 
   // Full Dashboard (Phase 3)

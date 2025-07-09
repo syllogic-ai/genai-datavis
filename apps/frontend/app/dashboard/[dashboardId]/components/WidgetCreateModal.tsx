@@ -98,16 +98,15 @@ export function WidgetCreateModal({
             body: JSON.stringify({ creates: [newWidget] }),
         });
 
-        // 3. Call analyze endpoint
-        const response = await fetch(`${NEXT_PUBLIC_API_URL}/analyze`, {
+        // 3. Call analyze endpoint through our API route to include theme colors
+        const response = await fetch('/api/chat/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                prompt: message,
-                chat_id: chatId,
-                file_id: fileId,
-                widget_type: widgetType,
-                request_id: uuidv4(),
+                message,
+                dashboardId: params.dashboardId,
+                targetWidgetType: widgetType,
+                chatId,
             }),
         });
 

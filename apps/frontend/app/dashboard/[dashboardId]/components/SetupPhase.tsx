@@ -14,6 +14,7 @@ interface SetupPhaseProps {
   onContinue: () => void;
   isLoading?: boolean;
   onRefreshFiles?: () => void;
+  isUpdatingMode?: boolean; // True when updating sources from existing dashboard
 }
 
 export function SetupPhase({
@@ -24,6 +25,7 @@ export function SetupPhase({
   onContinue,
   isLoading = false,
   onRefreshFiles,
+  isUpdatingMode = false,
 }: SetupPhaseProps) {
   // Debug logging
   React.useEffect(() => {
@@ -61,8 +63,14 @@ export function SetupPhase({
       >
         {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Connect Your Data Sources</h1>
-          <p className="text-lg text-muted-foreground">Upload your files to get started with data analysis</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            {isUpdatingMode ? "Manage Data Sources" : "Connect Your Data Sources"}
+          </h1>
+          <p className="text-lg text-muted-foreground">
+            {isUpdatingMode 
+              ? "Add, remove, or update your data sources" 
+              : "Upload your files to get started with data analysis"}
+          </p>
         </div>
 
         {/* Enhanced File Manager */}
@@ -84,15 +92,15 @@ export function SetupPhase({
         
           <Button
             onClick={onContinue}
-            disabled={files.length === 0}
+            disabled={!isUpdatingMode && files.length === 0}
             size="lg"
             className={`px-8 py-3 text-base font-medium transition-all ${
-              files.length > 0
+              (isUpdatingMode || files.length > 0)
                 ? 'bg-accent hover:bg-accent text-white shadow-lg hover:shadow-xl'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >
-            Continue to Dashboard
+            {isUpdatingMode ? "Back to Dashboard" : "Continue to Dashboard"}
           </Button>
         </motion.div>
       </motion.div>

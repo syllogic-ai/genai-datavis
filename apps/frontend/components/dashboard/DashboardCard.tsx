@@ -1,11 +1,21 @@
 "use client";
 
-import React, { useCallback, useRef } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dashboard } from "@/db/schema";
 import { IconRenderer } from "@/components/dashboard/DashboardIconRenderer";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreHorizontal, Copy, Edit, Trash2, Loader2 } from "lucide-react";
+import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
 
 // Global cache for prefetch requests to prevent duplicates
 const prefetchCache = new Set<string>();
@@ -42,8 +52,15 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
   const router = useRouter();
   const iconColor = getIconColor(dashboard.icon);
   const abbreviation = getAbbreviation(dashboard.name);
+  const [operationLoading, setOperationLoading] = useState(false);
+  const [renamingDashboard, setRenamingDashboard] = useState<Dashboard | null>(null);
   
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    // Don't navigate if clicking on dropdown menu
+    if ((e.target as HTMLElement).closest('[role="menu"]') || 
+        (e.target as HTMLElement).closest('button[aria-haspopup="menu"]')) {
+      return;
+    }
     router.push(`/dashboard/${dashboard.id}`);
   };
 
@@ -116,14 +133,55 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
     }
   };
 
+  const handleDuplicateDashboard = async () => {
+    setOperationLoading(true);
+    try {
+      const response = await fetch(`/api/dashboards/${dashboard.id}/duplicate`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to duplicate dashboard');
+      }
+      
+      const duplicatedDashboard = await response.json();
+      router.push(`/dashboard/${duplicatedDashboard.id}`);
+    } catch (error) {
+      console.error('Error duplicating dashboard:', error);
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const handleDeleteDashboard = async () => {
+    setOperationLoading(true);
+    try {
+      const response = await fetch(`/api/dashboards/${dashboard.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete dashboard');
+      }
+      
+      // Refresh the page or notify parent component
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting dashboard:', error);
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
   return (
+    <>
     <Card 
-      className="cursor-pointer hover:shadow-md transition-shadow duration-200 border border-gray-200"
+      className="cursor-pointer hover:shadow-md transition-shadow duration-200 border border-gray-200 group"
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <CardContent className="px-6">
+      <CardContent className="px-6 relative">
         <div className="flex items-center gap-4">
           {/* Icon */}
           <div className={`w-16 h-16 rounded-xl ${iconColor} flex items-center justify-center flex-shrink-0`}>
@@ -154,7 +212,81 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
             )}
           </div>
         </div>
+
+        {/* Dropdown Menu - positioned absolutely in top right */}
+        <div className="absolute top-4 right-4">
+          {operationLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">Dashboard options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDuplicateDashboard();
+                  }}
+                  disabled={operationLoading}
+                >
+                  <Copy className="mr-2 h-4 w-4" />
+                  Duplicate
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingDashboard(dashboard);
+                  }}
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm(`Are you sure you want to delete "${dashboard.name}"?`)) {
+                      handleDeleteDashboard();
+                    }
+                  }}
+                  disabled={operationLoading}
+                  className="text-red-600 focus:text-red-600"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </CardContent>
     </Card>
+
+    {/* Rename Dashboard Popover */}
+    {renamingDashboard && (
+      <DashboardCreateEditPopover
+        isOpen={!!renamingDashboard}
+        onOpenChange={(open) => !open && setRenamingDashboard(null)}
+        editingDashboard={renamingDashboard}
+        onDashboardCreated={(updatedDashboard) => {
+          if (onDashboardUpdated) {
+            onDashboardUpdated(updatedDashboard);
+          }
+          setRenamingDashboard(null);
+        }}
+      />
+    )}
+  </>
   );
 } 
