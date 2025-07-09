@@ -53,7 +53,8 @@ async def process_user_request(
     supabase_client: Optional[Client] = None,
     dashboard_id: Optional[str] = None,
     context_widget_ids: Optional[List[str]] = None,
-    target_widget_type: Optional[str] = None
+    target_widget_type: Optional[str] = None,
+    chart_colors: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
     Process a user request through the multi-agent system.
@@ -114,7 +115,8 @@ async def process_user_request(
         widget_type=widget_type,
         dashboard_id=dashboard_id,
         contextWidgetIds=context_widget_ids,
-        targetWidgetType=target_widget_type
+        targetWidgetType=target_widget_type,
+        chart_colors=chart_colors
     )
     
     try:

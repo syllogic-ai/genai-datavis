@@ -54,7 +54,7 @@ export function AppSidebar({
   };
 
   return (
-    <Sidebar variant="inset" {...props}>
+    <Sidebar variant="inset" className="fixed h-full" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -70,10 +70,30 @@ export function AppSidebar({
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+          
+          {/* Home Button */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/dashboard" className={pathname === '/dashboard' ? 'bg-secondary' : ''}>
+                <Home className="size-4" />
+                <span>Home</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          {/* Settings Button */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/dashboard/settings" className={pathname?.startsWith('/dashboard/settings') ? 'bg-secondary' : ''}>
+                <Settings className="size-4" />
+                <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       
-      <SidebarContent>
+      <SidebarContent className="overflow-y-auto">
         <NavMain
           dashboards={dashboards}
           currentDashboardId={activeChatId}
@@ -86,16 +106,6 @@ export function AppSidebar({
       
       <SidebarFooter>
         <SidebarMenu>
-          {/* Settings Navigation */}
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link href="/dashboard/settings" className={pathname?.startsWith('/dashboard/settings') ? 'bg-sidebar-accent' : ''}>
-                <Settings className="size-4" />
-                <span>Settings</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          
           {/* User Profile */}
           {user && (
             <SidebarMenuItem>

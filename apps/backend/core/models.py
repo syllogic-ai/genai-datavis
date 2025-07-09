@@ -29,6 +29,7 @@ class Deps(BaseModel):
     dashboard_id: Optional[str] = None
     contextWidgetIds: Optional[List[str]] = None
     targetWidgetType: Optional[str] = None
+    chart_colors: Optional[Dict[str, str]] = None  # User's color palette
 
 class GradientStops(BaseModel):
     """

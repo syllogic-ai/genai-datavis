@@ -146,9 +146,12 @@ class ChatAnalysisRequest(BaseModel):
     dashboardId: str
     contextWidgetIds: Optional[List[str]] = None
     targetWidgetType: Optional[str] = None
+    targetChartSubType: Optional[str] = None
     chat_id: str
     request_id: str
     user_id: Optional[str] = None  # Clerk user ID for job ownership
+    conversation_history: Optional[List[Dict[str, Any]]] = None
+    chart_colors: Optional[Dict[str, str]] = None  # User's color palette
 
 # Request model for the chart spec data endpoint
 class ChartSpecRequest(BaseModel):
@@ -257,8 +260,10 @@ async def analyze_chat_message(
         "user_prompt": request.message,
         "context_widget_ids": request.contextWidgetIds,
         "target_widget_type": request.targetWidgetType,
+        "target_chart_subtype": request.targetChartSubType,
         "user_id": request.user_id,  # Include user_id for job tracking
-        "received_at": datetime.now().isoformat()
+        "received_at": datetime.now().isoformat(),
+        "chart_colors": request.chart_colors  # Include user's color palette
     }
 
     try:
@@ -554,6 +559,9 @@ async def process_analysis_task(
                     except Exception as e:
                         logfire.warn(f"Failed to update job progress: {e}")
                     
+                    # Extract chart colors from task data
+                    chart_colors = task_data.get("chart_colors")
+                    
                     # Use existing agentic flow with dashboard context
                     result = await process_user_request(
                         chat_id=chat_id,
@@ -566,7 +574,8 @@ async def process_analysis_task(
                         supabase_client=supabase,
                         dashboard_id=dashboard_id,
                         context_widget_ids=context_widget_ids,
-                        target_widget_type=target_widget_type
+                        target_widget_type=target_widget_type,
+                        chart_colors=chart_colors
                     )
                     
                     # Add dashboard context to result
@@ -607,6 +616,7 @@ async def process_analysis_task(
                 }
         else:
             # Legacy file-based processing
+            chart_colors = task_data.get("chart_colors")
             result = await process_user_request(
                 chat_id=chat_id,
                 request_id=request_id,
@@ -615,7 +625,8 @@ async def process_analysis_task(
                 is_follow_up=is_follow_up,
                 widget_type=widget_type,
                 duck_connection=duck_connection,
-                supabase_client=supabase
+                supabase_client=supabase,
+                chart_colors=chart_colors
             )
         
         processing_time = time.time() - start_time

@@ -394,7 +394,7 @@ export function NavMain({
                   >
                     <div 
                       className={`relative group rounded-md transition-all duration-200 ${
-                        dashboard.isActive ? 'bg-sidebar-foreground/5' : ''
+                        dashboard.isActive ? 'bg-secondary' : ''
                       }`}
                       onMouseEnter={() => {
                         setHoveredDashboard(dashboard.id);
@@ -408,7 +408,7 @@ export function NavMain({
                       {/* Main Dashboard Button */}
                       <div className={`relative flex items-center w-full h-8 rounded-md transition-colors ${
                         dashboard.isActive 
-                          ? 'bg-sidebar-foreground/5 hover:bg-sidebar-foreground/10' 
+                          ? 'bg-secondary hover:bg-secondary/80' 
                           : 'hover:bg-secondary/40'
                       } ${hoveredDashboard === dashboard.id && !dashboard.isActive ? 'bg-secondary/40' : ''}`}>
                         {/* Chevron - positioned absolutely to avoid flex conflicts */}

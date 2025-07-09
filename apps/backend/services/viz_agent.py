@@ -100,7 +100,62 @@ class yAxisConfigClass(BaseModel):
     hide: bool = Field(default=False, description="Whether to hide the y-axis")
 
 class colorPaletteClass(BaseModel):
-    colors: list[str] = Field(default=["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#6366f1"], description="The color palette to use for the chart")
+    colors: list[str] = Field(default_factory=lambda: ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#6366f1"], description="The color palette to use for the chart")
+    
+    @classmethod
+    def from_chart_colors(cls, chart_colors: Optional[Dict[str, str]] = None):
+        """Create colorPaletteClass from chart_colors dict"""
+        if not chart_colors:
+            return cls()
+        
+        # Convert chart1, chart2, etc. to hex colors
+        colors = []
+        for i in range(1, 11):  # Support up to 10 colors
+            key = f"chart{i}"
+            if key in chart_colors:
+                # Convert HSL string to hex
+                hsl_value = chart_colors[key]
+                hex_color = hsl_to_hex(hsl_value)
+                if hex_color:
+                    colors.append(hex_color)
+        
+        return cls(colors=colors if colors else None)
+
+def hsl_to_hex(hsl: str) -> str:
+    """Convert HSL string format 'h s% l%' to hex color"""
+    try:
+        # Parse HSL values
+        parts = hsl.strip().split()
+        if len(parts) != 3:
+            return "#000000"
+        
+        h = float(parts[0]) / 360  # Normalize hue to 0-1
+        s = float(parts[1].rstrip('%')) / 100
+        l = float(parts[2].rstrip('%')) / 100
+        
+        # Convert HSL to RGB
+        if s == 0:
+            r = g = b = l
+        else:
+            def hue_to_rgb(p, q, t):
+                if t < 0: t += 1
+                if t > 1: t -= 1
+                if t < 1/6: return p + (q - p) * 6 * t
+                if t < 1/2: return q
+                if t < 2/3: return p + (q - p) * (2/3 - t) * 6
+                return p
+            
+            q = l * (1 + s) if l < 0.5 else l + s - l * s
+            p = 2 * l - q
+            r = hue_to_rgb(p, q, h + 1/3)
+            g = hue_to_rgb(p, q, h)
+            b = hue_to_rgb(p, q, h - 1/3)
+        
+        # Convert to hex
+        return "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+    except Exception as e:
+        logfire.warn(f"Failed to convert HSL to hex: {hsl}, error: {e}")
+        return "#000000"
 
 # =============================================== Bar Chart definitions ===============================================
 class barConfigClass(BaseModel):
@@ -492,7 +547,7 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
     """
     print("Called visualize bar tool!")
     chartType = "bar"
-    colors = colorPaletteClass().colors
+    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
 
     data_cols = input.dataColumns
     x_key = input.xColumn
@@ -528,7 +583,7 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
     """
     print("Called visualize area tool!")
     chartType = "area"
-    colors = colorPaletteClass().colors
+    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
 
     data_cols = input.dataColumns
     x_key = input.xColumn
@@ -566,7 +621,7 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
     """
     print("Called visualize line tool!")
     chartType = "line"
-    colors = colorPaletteClass().colors
+    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
 
     data_cols = input.dataColumns
     x_key = input.xColumn
@@ -638,7 +693,7 @@ async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChart
     """
     print("Called visualize pie tool!")
     chartType = "pie"
-    colors = colorPaletteClass().colors
+    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
     data_cols = input.dataColumn
     # chart_config = convert_chart_data_to_chart_config(data_cols, colors)
 
