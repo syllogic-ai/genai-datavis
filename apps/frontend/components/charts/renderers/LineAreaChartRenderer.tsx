@@ -1,6 +1,6 @@
 "use client";
 
-import { AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, YAxis, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, LineChart, Line, XAxis, CartesianGrid, YAxis } from "recharts";
 import {
   ChartTooltip,
   ChartTooltipContent,
@@ -131,8 +131,7 @@ export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }:
       config={chartConfig} 
       className="w-full h-full"
     >
-      <ResponsiveContainer width="100%" height="100%" debounce={100}>
-        {spec.chartType === 'area' ? (
+      {spec.chartType === 'area' ? (
           <AreaChart {...commonProps}>
             <defs>
               {useGradient && dataKeys.map((key) => {
@@ -191,7 +190,7 @@ export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }:
               );
             })}
           </AreaChart>
-        ) : (
+      ) : (
           <LineChart {...commonProps}>
             <CartesianGrid vertical={false} />
             <XAxis
@@ -227,8 +226,7 @@ export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }:
               );
             })}
           </LineChart>
-        )}
-      </ResponsiveContainer>
+      )}
     </ChartContainer>
   );
 });

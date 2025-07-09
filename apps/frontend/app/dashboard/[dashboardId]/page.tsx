@@ -15,7 +15,7 @@ import { useDashboardContext } from "@/components/dashboard/DashboardUserContext
 import { useModalCleanup } from "@/hooks/useModalCleanup";
 import { useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Save, Loader2, Check, AlertCircle, Wifi, WifiOff } from "lucide-react";
+import { Save, Loader2, Check, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import * as React from "react";
 import toast, { Toaster } from 'react-hot-toast';
@@ -257,7 +257,17 @@ export default function EnhancedDashboardPage() {
     }
   }, [loadWidgets, widgets, performPartialUpdate, addError, dashboardId]);
 
-  // Remove global loading screen - let individual components handle their own loading states
+  // Show loading state while initial data is being loaded
+  if (isLoading || isSetupLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <span className="text-lg text-muted-foreground">Loading dashboard...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (error || setupError || chatError) {
     return (
@@ -271,30 +281,33 @@ export default function EnhancedDashboardPage() {
   }
 
   // Progressive flow: Setup → Chat → Full Dashboard
-  if (setupState.isSetupMode) {
-    return (
-      <SetupPhase
-        dashboardId={dashboardId}
-        files={files}
-        onFileAdded={addFile}
-        onFileRemoved={removeFile}
-        onContinue={handleSetupComplete}
-        onRefreshFiles={refreshFiles}
-        isLoading={isSetupLoading}
-      />
-    );
-  }
+  // Priority: Full Dashboard > Chat Mode > Setup Mode
+  if (!setupState.isFullDashboard) {
+    if (setupState.isSetupMode) {
+      return (
+        <SetupPhase
+          dashboardId={dashboardId}
+          files={files}
+          onFileAdded={addFile}
+          onFileRemoved={removeFile}
+          onContinue={handleSetupComplete}
+          onRefreshFiles={refreshFiles}
+          isLoading={isSetupLoading}
+        />
+      );
+    }
 
-  if (setupState.isChatMode) {
-    return (
-      <ChatPhase
-        dashboardId={dashboardId}
-        files={files}
-        onFirstMessage={handleFirstMessage}
-        onBack={handleBackToSetup}
-        onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
-      />
-    );
+    if (setupState.isChatMode) {
+      return (
+        <ChatPhase
+          dashboardId={dashboardId}
+          files={files}
+          onFirstMessage={handleFirstMessage}
+          onBack={handleBackToSetup}
+          onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
+        />
+      );
+    }
   }
 
   // Full Dashboard (Phase 3)
@@ -420,19 +433,6 @@ export default function EnhancedDashboardPage() {
             </motion.div>
           )}
           
-          {/* Connection Status */}
-          {!isRealtimeConnected && (
-            <motion.div
-              key="disconnected"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="flex items-center gap-2 bg-yellow-600 text-white px-4 py-2 rounded-lg shadow-lg"
-            >
-              <WifiOff className="w-4 h-4" />
-              <span className="text-sm">Reconnecting...</span>
-            </motion.div>
-          )}
           
           {/* Optimistic Updates Indicator */}
           {optimisticUpdates.length > 0 && (

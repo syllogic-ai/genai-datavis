@@ -54,6 +54,28 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
   
   const channelRef = useRef<RealtimeChannel | null>(null);
   const lastProcessedUpdateRef = useRef<string | null>(null);
+  const handlersRef = useRef({
+    onWidgetAdded,
+    onWidgetUpdated,
+    onWidgetDeleted,
+    onDashboardUpdated
+  });
+  const optimisticUpdatesRef = useRef(optimisticUpdates);
+  
+  // Update handlers ref when they change
+  useEffect(() => {
+    handlersRef.current = {
+      onWidgetAdded,
+      onWidgetUpdated,
+      onWidgetDeleted,
+      onDashboardUpdated
+    };
+  }, [onWidgetAdded, onWidgetUpdated, onWidgetDeleted, onDashboardUpdated]);
+  
+  // Update optimistic updates ref
+  useEffect(() => {
+    optimisticUpdatesRef.current = optimisticUpdates;
+  }, [optimisticUpdates]);
 
   // Add optimistic update
   const addOptimisticUpdate = useCallback((update: OptimisticUpdate) => {
@@ -119,7 +141,7 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
   const handleWidgetChange = useCallback((payload: any) => {
     const { eventType, new: newWidget, old: oldWidget } = payload;
     
-    console.log('Widget change detected:', { eventType, newWidget, oldWidget });
+    // console.log('Widget change detected:', { eventType, newWidget, oldWidget });
     
     // Prevent duplicate processing
     const updateId = `${eventType}-${newWidget?.id || oldWidget?.id}-${Date.now()}`;
@@ -132,7 +154,7 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
     setLastUpdate(new Date());
     
     // Find and confirm matching optimistic update
-    const matchingUpdate = optimisticUpdates.find(update => {
+    const matchingUpdate = optimisticUpdatesRef.current.find(update => {
       if (eventType === 'INSERT' && update.type === 'create') {
         return update.widget?.id === newWidget?.id;
       } else if (eventType === 'UPDATE' && update.type === 'update') {
@@ -150,34 +172,34 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
     // Handle the actual change
     switch (eventType) {
       case 'INSERT':
-        if (newWidget && onWidgetAdded) {
-          onWidgetAdded(newWidget);
+        if (newWidget && handlersRef.current.onWidgetAdded) {
+          handlersRef.current.onWidgetAdded(newWidget);
         }
         break;
       case 'UPDATE':
-        if (newWidget && onWidgetUpdated) {
-          onWidgetUpdated(newWidget);
+        if (newWidget && handlersRef.current.onWidgetUpdated) {
+          handlersRef.current.onWidgetUpdated(newWidget);
         }
         break;
       case 'DELETE':
-        if (oldWidget && onWidgetDeleted) {
-          onWidgetDeleted(oldWidget.id);
+        if (oldWidget && handlersRef.current.onWidgetDeleted) {
+          handlersRef.current.onWidgetDeleted(oldWidget.id);
         }
         break;
     }
-  }, [optimisticUpdates, onWidgetAdded, onWidgetUpdated, onWidgetDeleted, confirmOptimisticUpdate]);
+  }, [confirmOptimisticUpdate]);
 
   // Handle dashboard changes
   const handleDashboardChange = useCallback((payload: any) => {
     const { eventType, new: newDashboard } = payload;
     
-    console.log('Dashboard change detected:', { eventType, newDashboard });
+    // console.log('Dashboard change detected:', { eventType, newDashboard });
     
-    if (eventType === 'UPDATE' && newDashboard && onDashboardUpdated) {
-      onDashboardUpdated(newDashboard.id);
+    if (eventType === 'UPDATE' && newDashboard && handlersRef.current.onDashboardUpdated) {
+      handlersRef.current.onDashboardUpdated(newDashboard.id);
       setLastUpdate(new Date());
     }
-  }, [onDashboardUpdated]);
+  }, []);
 
   // Cross-tab synchronization
   const handleCrossTabSync = useCallback((event: StorageEvent) => {
@@ -185,19 +207,19 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
     
     if (event.key === `dashboard-${dashboardId}-updated` && event.newValue) {
       const data = JSON.parse(event.newValue);
-      console.log('Cross-tab sync detected:', data);
+      // console.log('Cross-tab sync detected:', data);
       
-      if (data.type === 'widget-added' && onWidgetAdded) {
-        onWidgetAdded(data.widget);
-      } else if (data.type === 'widget-updated' && onWidgetUpdated) {
-        onWidgetUpdated(data.widget);
-      } else if (data.type === 'widget-deleted' && onWidgetDeleted) {
-        onWidgetDeleted(data.widgetId);
+      if (data.type === 'widget-added' && handlersRef.current.onWidgetAdded) {
+        handlersRef.current.onWidgetAdded(data.widget);
+      } else if (data.type === 'widget-updated' && handlersRef.current.onWidgetUpdated) {
+        handlersRef.current.onWidgetUpdated(data.widget);
+      } else if (data.type === 'widget-deleted' && handlersRef.current.onWidgetDeleted) {
+        handlersRef.current.onWidgetDeleted(data.widgetId);
       }
       
       setLastUpdate(new Date());
     }
-  }, [dashboardId, enableCrossTabSync, onWidgetAdded, onWidgetUpdated, onWidgetDeleted]);
+  }, [dashboardId, enableCrossTabSync]);
 
   // Disconnect function
   const disconnect = useCallback(() => {
@@ -240,7 +262,7 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
         handleDashboardChange
       )
       .subscribe((status) => {
-        console.log('Dashboard realtime subscription status:', status);
+        // console.log('Dashboard realtime subscription status:', status);
         setIsConnected(status === 'SUBSCRIBED');
       });
 
@@ -261,11 +283,7 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
     isSignedIn,
     userId,
     dashboardId,
-    handleWidgetChange,
-    handleDashboardChange,
-    handleCrossTabSync,
-    enableCrossTabSync,
-    disconnect
+    enableCrossTabSync
   ]);
 
   // Cleanup optimistic updates after timeout

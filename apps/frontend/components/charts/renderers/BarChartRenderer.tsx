@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart, Bar, XAxis, CartesianGrid, YAxis, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, CartesianGrid, YAxis } from "recharts";
 import {
   ChartTooltip,
   ChartTooltipContent,
@@ -58,7 +58,6 @@ export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec:
       config={spec.chartConfig || {}} 
       className="w-full h-full"
     >
-      <ResponsiveContainer width="100%" height="100%" debounce={100}>
         <BarChart 
           data={spec.data} 
           margin={{ left: 12, right: 12, top: 10, bottom: 10 }}
@@ -111,7 +110,6 @@ export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec:
             />
           ))}
         </BarChart>
-      </ResponsiveContainer>
     </ChartContainer>
   );
 }); 

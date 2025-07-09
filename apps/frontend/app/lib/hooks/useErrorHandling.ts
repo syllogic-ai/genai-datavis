@@ -70,7 +70,7 @@ export function useErrorHandling(
   const generateFriendlyMessage = useCallback((error: any, type: ErrorDetails['type']): string => {
     switch (type) {
       case 'network':
-        return 'Network connection failed. Please check your internet connection.';
+        return 'Network connection failed.';
       case 'validation':
         return error?.message || 'Invalid data provided. Please check your input.';
       case 'server':

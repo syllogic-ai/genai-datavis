@@ -1,6 +1,6 @@
 "use client";
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
+import { PieChart, Pie, Cell, Legend } from "recharts";
 import {
   ChartTooltip,
   ChartTooltipContent,
@@ -58,7 +58,6 @@ export function PieChartRenderer({ spec }: { spec: ChartSpec }) {
       config={spec.chartConfig || {}} 
       className="w-full h-full"
     >
-      <ResponsiveContainer width="100%" height="100%">
         <PieChart margin={{ top: 20, right: 30, bottom: 20, left: 30 }}>
           <Pie
             data={pieData}
@@ -86,7 +85,6 @@ export function PieChartRenderer({ spec }: { spec: ChartSpec }) {
             <ChartLegend content={<ChartLegendContent />} />
           )}
         </PieChart>
-      </ResponsiveContainer>
     </ChartContainer>
   );
 }

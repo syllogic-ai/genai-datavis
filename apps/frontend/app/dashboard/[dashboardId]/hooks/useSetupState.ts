@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
@@ -124,27 +124,44 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
     setFiles(prev => [...prev, file]);
   }, []);
 
-  // Calculate setup state
-  const setupState: SetupState = {
-    hasFiles: files.length > 0,
-    hasMessages,
-    // Stay in setup mode if URL parameter is set OR if setup hasn't been completed yet OR if no files and no messages
-    isSetupMode: (isSetupModeFromURL || !setupCompleted || files.length === 0) && !hasMessages,
-    // Only go to chat mode when setup is completed and have files but no messages and not in setup URL mode
-    isChatMode: setupCompleted && files.length > 0 && !hasMessages && !isSetupModeFromURL,
-    isFullDashboard: hasMessages && !isSetupModeFromURL, // If has widgets/messages, show full dashboard regardless of files
-  };
+  // Calculate setup state - memoized to prevent unnecessary recalculations
+  const setupState: SetupState = useMemo(() => {
+    // If loading, return a safe default state
+    if (isLoading) {
+      return {
+        hasFiles: false,
+        hasMessages: false,
+        isSetupMode: false,
+        isChatMode: false,
+        isFullDashboard: false,
+      };
+    }
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('[useSetupState] State update:', {
-      filesCount: files.length,
+    const hasFiles = files.length > 0;
+    
+    return {
+      hasFiles,
       hasMessages,
-      isSetupModeFromURL,
-      setupCompleted,
-      setupState
-    });
-  }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted, setupState]);
+      // If setup is completed and has messages (widgets), go straight to full dashboard
+      // Only show setup mode if explicitly requested via URL or if it's a new dashboard with no setup
+      isSetupMode: !hasMessages && (isSetupModeFromURL || (!setupCompleted && !hasFiles)),
+      // Only go to chat mode when setup is completed, have files but no messages, and not in setup URL mode
+      isChatMode: !hasMessages && setupCompleted && hasFiles && !isSetupModeFromURL,
+      // Show full dashboard if has messages (widgets), regardless of setup state
+      isFullDashboard: hasMessages || (setupCompleted && !isSetupModeFromURL),
+    };
+  }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted, isLoading]);
+
+  // Debug logging - commented out to reduce logs
+  // React.useEffect(() => {
+  //   console.log('[useSetupState] State update:', {
+  //     filesCount: files.length,
+  //     hasMessages,
+  //     isSetupModeFromURL,
+  //     setupCompleted,
+  //     setupState
+  //   });
+  // }, [files.length, hasMessages, isSetupModeFromURL, setupCompleted]);
 
   // Mark that user has sent first message
   const markFirstMessage = useCallback(() => {
