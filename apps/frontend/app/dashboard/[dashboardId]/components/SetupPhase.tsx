@@ -96,7 +96,7 @@ export function SetupPhase({
             size="lg"
             className={`px-8 py-3 text-base font-medium transition-all ${
               (isUpdatingMode || files.length > 0)
-                ? 'bg-accent hover:bg-accent text-white shadow-lg hover:shadow-xl'
+                ? 'bg-primary hover:bg-primary/90 text-white shadow-lg hover:shadow-xl'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
           >

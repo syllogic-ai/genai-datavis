@@ -110,12 +110,57 @@ export function NavMain({
   const [widgetCounts, setWidgetCounts] = useState<Record<string, number>>({});
   const [loadedDashboardIds, setLoadedDashboardIds] = useState<Set<string>>(new Set());
   
+  // Store widgets for each dashboard
+  const [dashboardWidgets, setDashboardWidgets] = useState<Record<string, Widget[]>>({});
+  
   // Track which dashboards are expanded
   const [expandedDashboards, setExpandedDashboards] = useState<Set<string>>(new Set());
 
-  // Function to toggle dashboard expansion
-  const toggleDashboardExpansion = useCallback((dashboardId: string) => {
+  // Function to load widgets for a specific dashboard
+  const loadWidgetsForDashboard = useCallback(async (dashboardId: string): Promise<Widget[]> => {
+    // Return cached widgets if available
+    if (dashboardWidgets[dashboardId]) {
+      return dashboardWidgets[dashboardId];
+    }
+
+    // If this is the current dashboard and we have widgets, use them
+    if (dashboardId === activeDashboardId && currentDashboardWidgets.length > 0) {
+      const widgets = currentDashboardWidgets;
+      setDashboardWidgets(prev => ({ ...prev, [dashboardId]: widgets }));
+      return widgets;
+    }
+
+    try {
+      console.log(`[NavMain] Loading widgets for dashboard ${dashboardId}`);
+      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`);
+      if (!response.ok) {
+        console.warn(`[NavMain] Failed to load widgets for dashboard ${dashboardId}`);
+        const emptyWidgets: Widget[] = [];
+        setDashboardWidgets(prev => ({ ...prev, [dashboardId]: emptyWidgets }));
+        return emptyWidgets;
+      }
+
+      const { widgets } = await response.json();
+      const widgetArray = widgets || [];
+      console.log(`[NavMain] Loaded ${widgetArray.length} widgets for dashboard ${dashboardId}`);
+      
+      setDashboardWidgets(prev => ({ ...prev, [dashboardId]: widgetArray }));
+      setWidgetCounts(prev => ({ ...prev, [dashboardId]: widgetArray.length }));
+      setLoadedDashboardIds(prev => new Set(prev).add(dashboardId));
+      return widgetArray;
+    } catch (error) {
+      console.error(`[NavMain] Error loading widgets for dashboard ${dashboardId}:`, error);
+      const emptyWidgets: Widget[] = [];
+      setDashboardWidgets(prev => ({ ...prev, [dashboardId]: emptyWidgets }));
+      setWidgetCounts(prev => ({ ...prev, [dashboardId]: 0 }));
+      return emptyWidgets;
+    }
+  }, [dashboardWidgets, activeDashboardId, currentDashboardWidgets]);
+
+  // Function to toggle dashboard expansion and load widgets if needed
+  const toggleDashboardExpansion = useCallback(async (dashboardId: string) => {
     console.log('[NavMain] Toggling dashboard expansion for:', dashboardId);
+    
     setExpandedDashboards(prev => {
       const newSet = new Set(prev);
       const wasExpanded = newSet.has(dashboardId);
@@ -125,62 +170,29 @@ export function NavMain({
       } else {
         newSet.add(dashboardId);
         console.log('[NavMain] Expanding dashboard:', dashboardId);
+        // Load widgets if expanding and not already loaded
+        if (!dashboardWidgets[dashboardId]) {
+          loadWidgetsForDashboard(dashboardId);
+        }
       }
       console.log('[NavMain] New expanded dashboards:', Array.from(newSet));
       return newSet;
     });
-  }, []);
+  }, [dashboardWidgets, loadWidgetsForDashboard]);
 
   // Chat functionality moved to chat sidebar
-
-  // Load widget count for a specific dashboard (lazy loading)
-  const loadWidgetCountForDashboard = useCallback(async (dashboardId: string): Promise<number> => {
-    // Return cached count if available
-    if (widgetCounts[dashboardId] !== undefined) {
-      return widgetCounts[dashboardId];
-    }
-
-    // If this is the current dashboard and we have widgets, use them
-    if (dashboardId === activeDashboardId && currentDashboardWidgets.length > 0) {
-      const count = currentDashboardWidgets.length;
-      setWidgetCounts(prev => ({ ...prev, [dashboardId]: count }));
-      return count;
-    }
-
-    try {
-      console.log(`[NavMain] Loading widget count for dashboard ${dashboardId}`);
-      const response = await fetch(`/api/dashboards/${dashboardId}/widgets`);
-      if (!response.ok) {
-        console.warn(`[NavMain] Failed to load widgets for dashboard ${dashboardId}`);
-        setWidgetCounts(prev => ({ ...prev, [dashboardId]: 0 }));
-        return 0;
-      }
-
-      const { widgets } = await response.json();
-      const count = widgets?.length || 0;
-      console.log(`[NavMain] Loaded ${count} widgets for dashboard ${dashboardId}`);
-      
-      setWidgetCounts(prev => ({ ...prev, [dashboardId]: count }));
-      setLoadedDashboardIds(prev => new Set(prev).add(dashboardId));
-      return count;
-    } catch (error) {
-      console.error(`[NavMain] Error loading widgets for dashboard ${dashboardId}:`, error);
-      setWidgetCounts(prev => ({ ...prev, [dashboardId]: 0 }));
-      return 0;
-    }
-  }, [widgetCounts, activeDashboardId, currentDashboardWidgets]);
 
   // Update dashboards with widget data (without fetching all at once)
   const updateDashboardsWithWidgetData = useCallback(() => {
     const dashboardsWithWidgetData = dashboards.map(dashboard => ({
       ...dashboard,
       isActive: dashboard.id === activeDashboardId,
-      widgets: dashboard.id === activeDashboardId ? currentDashboardWidgets : [],
+      widgets: dashboardWidgets[dashboard.id] || (dashboard.id === activeDashboardId ? currentDashboardWidgets : []),
       widgetCount: widgetCounts[dashboard.id] ?? 0, // Use cached count or 0
     }));
 
     setDashboardsWithWidgets(dashboardsWithWidgetData);
-  }, [dashboards, activeDashboardId, currentDashboardWidgets, widgetCounts]);
+  }, [dashboards, activeDashboardId, currentDashboardWidgets, widgetCounts, dashboardWidgets]);
 
   // Update dashboard list when dashboards or widget counts change
   useEffect(() => {
@@ -196,6 +208,9 @@ export function NavMain({
       
       // Update the cached widget count for the current dashboard
       setWidgetCounts(prev => ({ ...prev, [activeDashboardId]: currentDashboardWidgets.length }));
+      
+      // Update the dashboardWidgets state for the current dashboard
+      setDashboardWidgets(prev => ({ ...prev, [activeDashboardId]: currentDashboardWidgets }));
       
       setDashboardsWithWidgets(prev => 
         prev.map(dashboard => 
@@ -217,9 +232,9 @@ export function NavMain({
   // Load widget count for current dashboard immediately
   useEffect(() => {
     if (activeDashboardId && !loadedDashboardIds.has(activeDashboardId)) {
-      loadWidgetCountForDashboard(activeDashboardId);
+      loadWidgetsForDashboard(activeDashboardId);
     }
-  }, [activeDashboardId, loadedDashboardIds, loadWidgetCountForDashboard]);
+  }, [activeDashboardId, loadedDashboardIds, loadWidgetsForDashboard]);
 
   // Dashboard operations
   const handleDuplicateDashboard = useCallback(async (dashboard: Dashboard) => {
@@ -395,13 +410,7 @@ export function NavMain({
             <>
               {dashboardsWithWidgets.map((dashboard) => (
                 <SidebarMenuItem key={dashboard.id}>
-                  <Collapsible 
-                    open={expandedDashboards.has(dashboard.id)}
-                    onOpenChange={(open) => {
-                      console.log('[NavMain] Collapsible onOpenChange called for dashboard:', dashboard.id, 'open:', open);
-                      toggleDashboardExpansion(dashboard.id);
-                    }}
-                  >
+                  <Collapsible key={dashboard.id} open={expandedDashboards.has(dashboard.id)}>
                     <div 
                       className={`relative group rounded-md transition-all duration-200 ${
                         dashboard.isActive ? 'bg-secondary' : ''
@@ -410,7 +419,7 @@ export function NavMain({
                         setHoveredDashboard(dashboard.id);
                         // Lazy load widget count when user hovers over dashboard
                         if (!loadedDashboardIds.has(dashboard.id)) {
-                          loadWidgetCountForDashboard(dashboard.id);
+                          loadWidgetsForDashboard(dashboard.id);
                         }
                       }}
                       onMouseLeave={() => setHoveredDashboard(null)}
@@ -418,51 +427,50 @@ export function NavMain({
                       {/* Main Dashboard Button */}
                       <div className={`relative flex items-center w-full h-8 rounded-md transition-colors ${
                         dashboard.isActive 
-                          ? 'bg-secondary hover:bg-secondary/80' 
-                          : 'hover:bg-secondary/40'
-                      } ${hoveredDashboard === dashboard.id && !dashboard.isActive ? 'bg-secondary/40' : ''}`}>
+                          ? 'bg-secondary hover:bg-secondary' 
+                          : 'hover:bg-secondary'
+                      } ${hoveredDashboard === dashboard.id && !dashboard.isActive ? 'bg-secondary' : ''}`}>
                         {/* Chevron - positioned absolutely to avoid flex conflicts */}
-                        {dashboard.widgets.length > 0 ? (
-                          <CollapsibleTrigger
-                            className="absolute left-2 h-4 w-4 p-0 transition-all duration-200 data-[state=open]:rotate-90 hover:bg-secondary/40 z-30 flex items-center justify-center rounded-sm pointer-events-auto"
-                            onClick={() => {
-                              console.log('[NavMain] Chevron clicked for dashboard:', dashboard.id);
-                              // Let the CollapsibleTrigger handle the toggle naturally
-                            }}
-                            onMouseEnter={() => {
-                              console.log('[NavMain] Chevron mouse enter for dashboard:', dashboard.id);
-                            }}
-                            onMouseLeave={() => {
-                              console.log('[NavMain] Chevron mouse leave for dashboard:', dashboard.id);
-                            }}
-                          >
+                        <CollapsibleTrigger
+                          className="absolute left-2 h-4 w-4 p-0 transition-all duration-200 data-[state=open]:rotate-90 hover:bg-primary/30 z-30 flex items-center justify-center rounded-sm pointer-events-auto"
+                          onClick={() => {
+                            console.log('[NavMain] Chevron clicked for dashboard:', dashboard.id);
+                            toggleDashboardExpansion(dashboard.id);
+                          }}
+                          onMouseEnter={() => {
+                            console.log('[NavMain] Chevron mouse enter for dashboard:', dashboard.id);
+                          }}
+                          onMouseLeave={() => {
+                            console.log('[NavMain] Chevron mouse leave for dashboard:', dashboard.id);
+                          }}
+                        >
+                          {dashboard.widgets.length > 0 ? (
                             <ChevronRight className={`h-3 w-3 transition-opacity duration-200 ${
                               hoveredDashboard === dashboard.id 
                                 ? 'opacity-100' 
                                 : 'opacity-30'
                             }`} />
-                            <span className="sr-only">Toggle widgets</span>
-                          </CollapsibleTrigger>
-                        ) : (
-                          /* Show chevron on hover for consistency, but not functional */
-                          <div className="absolute left-2 h-4 w-4 flex items-center justify-center">
-                            {/* Dashboard Icon - visible when not hovered */}
-                            <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
-                              hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
-                            }`}>
-                              <IconRenderer
-                                className="size-4 text-sidebar-foreground"
-                                icon={dashboard.icon}
-                              />
-                            </div>
-                            {/* Chevron - visible on hover */}
-                            <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
-                              hoveredDashboard === dashboard.id ? 'opacity-100' : 'opacity-0'
-                            }`}>
-                              <ChevronRight className="h-3 w-3 text-sidebar-foreground/50" />
-                            </div>
-                          </div>
-                        )}
+                          ) : (
+                            <>
+                              {/* Dashboard Icon - visible when not hovered */}
+                              <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                                hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
+                              }`}>
+                                <IconRenderer
+                                  className="size-4 text-sidebar-foreground"
+                                  icon={dashboard.icon}
+                                />
+                              </div>
+                              {/* Chevron - visible on hover */}
+                              <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                                hoveredDashboard === dashboard.id ? 'opacity-100' : 'opacity-0'
+                              }`}>
+                                <ChevronRight className="h-3 w-3 text-sidebar-foreground/50" />
+                              </div>
+                            </>
+                          )}
+                          <span className="sr-only">Toggle widgets</span>
+                        </CollapsibleTrigger>
                         
                         {/* Dashboard name - positioned to not overlap chevron */}
                         <Link href={`/dashboard/${dashboard.id}`} className="absolute left-8 right-10 py-1 truncate">
@@ -573,23 +581,31 @@ export function NavMain({
                     </div>
                     
                     {/* Collapsible Widget List */}
-                    {dashboard.widgets.length > 0 && (
+                    {expandedDashboards.has(dashboard.id) && (
                       <CollapsibleContent>
                         <SidebarMenuSub>
-                          {dashboard.widgets.map((widget) => (
-                            <SidebarMenuSubItem key={widget.id}>
-                              <SidebarMenuSubButton asChild>
-                                <Link href={`/dashboard/${dashboard.id}#widget-${widget.id}`}>
-                                  <span className="text-xs text-muted-foreground capitalize">
-                                    {widget.type}
-                                  </span>
-                                  <span className="truncate text-sm">
-                                    {widget.config?.title || `${widget.type} widget`}
-                                  </span>
-                                </Link>
-                              </SidebarMenuSubButton>
+                          {dashboard.widgets.length > 0 ? (
+                            dashboard.widgets.map((widget) => (
+                              <SidebarMenuSubItem key={widget.id}>
+                                <SidebarMenuSubButton asChild>
+                                  <Link href={`/dashboard/${dashboard.id}#widget-${widget.id}`}>
+                                    <span className="text-xs text-muted-foreground capitalize">
+                                      {widget.type}
+                                    </span>
+                                    <span className="truncate text-sm">
+                                      {widget.config?.title || `${widget.type} widget`}
+                                    </span>
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))
+                          ) : (
+                            <SidebarMenuSubItem>
+                              <div className="flex items-center px-3 py-2 text-xs text-muted-foreground/60 cursor-default">
+                                No widgets inside
+                              </div>
                             </SidebarMenuSubItem>
-                          ))}
+                          )}
                         </SidebarMenuSub>
                       </CollapsibleContent>
                     )}
