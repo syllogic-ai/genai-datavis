@@ -54,7 +54,8 @@ async def process_user_request(
     dashboard_id: Optional[str] = None,
     context_widget_ids: Optional[List[str]] = None,
     target_widget_type: Optional[str] = None,
-    chart_colors: Optional[Dict[str, str]] = None
+    chart_colors: Optional[Dict[str, str]] = None,
+    user_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Process a user request through the multi-agent system.
@@ -116,7 +117,8 @@ async def process_user_request(
         dashboard_id=dashboard_id,
         contextWidgetIds=context_widget_ids,
         targetWidgetType=target_widget_type,
-        chart_colors=chart_colors
+        chart_colors=chart_colors,
+        user_id=user_id
     )
     
     try:

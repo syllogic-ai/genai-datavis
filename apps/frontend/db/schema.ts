@@ -142,34 +142,79 @@ export const jobs = pgTable('jobs', {
   queueTimeMs: integer("queue_time_ms"),
 });
 
-// COLOR PALETTES (multiple palettes per user)
-export const colorPalettes = pgTable("color_palettes", {
+// THEMES (dashboard-level theming system)
+export const themes = pgTable("themes", {
   id: text("id").primaryKey(),
-  userId: text("user_id").notNull().references(() => users.id),
+  dashboardId: text("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
-  isDefault: boolean("is_default").default(false).notNull(),
+  isActive: boolean("is_active").default(false).notNull(),
   
-  // Chart colors in HSL format (matching CSS variables)
-  chartColors: jsonb("chart_colors").$type<{
-    "chart-1": string;  // e.g., "151.20 26.04% 37.65%"
-    "chart-2": string;
-    "chart-3": string;
-    "chart-4": string;
-    "chart-5": string;
-    [key: string]: string; // Allow additional chart colors
+  // Complete theme styles for light/dark modes
+  styles: jsonb("styles").$type<{
+    light: ThemeStyleProps;
+    dark: ThemeStyleProps;
   }>().notNull(),
   
-  // Optional brand colors
-  brandColors: jsonb("brand_colors").$type<{
-    primary?: string;
-    secondary?: string;
-    accent?: string;
-  }>(),
+  // Optional reference to built-in preset
+  presetId: text("preset_id"),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Theme style properties interface
+export interface ThemeStyleProps {
+  // Chart colors (OKLCH format)
+  "chart-1": string;  // e.g., "oklch(0.81 0.10 252)"
+  "chart-2": string;
+  "chart-3": string;
+  "chart-4": string;
+  "chart-5": string;
+  [key: `chart-${number}`]: string; // Allow additional chart colors
+  
+  // Font configuration
+  "font-sans": string;  // e.g., "Inter, sans-serif"
+  "font-serif": string; // e.g., "Merriweather, serif"
+  "font-mono": string;  // e.g., "JetBrains Mono, monospace"
+  "font-size-base": string; // e.g., "16px"
+  "font-size-sm": string;   // e.g., "14px"
+  "font-size-lg": string;   // e.g., "18px"
+  
+  // UI colors
+  background: string;
+  foreground: string;
+  card: string;
+  "card-foreground": string;
+  primary: string;
+  "primary-foreground": string;
+  secondary?: string;
+  "secondary-foreground"?: string;
+  muted?: string;
+  "muted-foreground"?: string;
+  accent?: string;
+  "accent-foreground"?: string;
+  destructive?: string;
+  "destructive-foreground"?: string;
+  border?: string;
+  input?: string;
+  ring?: string;
+  
+  // Additional styling
+  radius: string;
+  spacing: string;
+  
+  // Shadow properties
+  "shadow-color"?: string;
+  "shadow-opacity"?: string;
+  "shadow-blur"?: string;
+  "shadow-spread"?: string;
+  "shadow-offset-x"?: string;
+  "shadow-offset-y"?: string;
+  
+  // Other properties
+  "letter-spacing"?: string;
+}
 
 // USER PREFERENCES (for non-theme settings)
 export const userPreferences = pgTable("user_preferences", {
@@ -200,5 +245,5 @@ export type Widget = typeof widgets.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type LLMUsage = typeof llmUsage.$inferSelect;
 export type Job = typeof jobs.$inferSelect;
-export type ColorPalette = typeof colorPalettes.$inferSelect;
+export type Theme = typeof themes.$inferSelect;
 export type UserPreferences = typeof userPreferences.$inferSelect;

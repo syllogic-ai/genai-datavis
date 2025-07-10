@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Widget } from "@/types/enhanced-dashboard-types";
 import { ChartRenderer } from "@/components/charts/ChartRenderer";
 import { ChartSpec } from "@/types/chart-types";
+import { useDashboardChartColors } from "@/hooks/useDashboardChartColors";
+import { convertHexToThemeReference } from "@/lib/update-widget-colors";
 
 interface ChartWidgetProps {
   widget: Widget;
@@ -16,6 +18,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   const [title, setTitle] = useState(widget.config.title || "New Chart");
   const [description, setDescription] = useState(widget.config.description || "");
   const [chartType, setChartType] = useState(widget.config.chartType || "bar");
+  const { resolveWidgetColor } = useDashboardChartColors();
 
   const handleSave = () => {
     onUpdate(widget.id, {
@@ -46,6 +49,42 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
     { name: "Jun", value: 239, revenue: 3800, cost: 2500 },
   ];
 
+  // Build chart config with resolved theme colors
+  const chartConfig = useMemo(() => {
+    if (widget.config.chartConfig) {
+      // If we have existing chartConfig, resolve any theme references
+      const resolvedConfig: any = {};
+      Object.entries(widget.config.chartConfig).forEach(([key, config], index) => {
+        // Convert hex colors to theme references for existing widgets
+        const colorToResolve = config.color?.startsWith('#') 
+          ? convertHexToThemeReference(config.color)
+          : config.color;
+          
+        resolvedConfig[key] = {
+          ...config,
+          color: resolveWidgetColor(colorToResolve, index)
+        };
+      });
+      return resolvedConfig;
+    }
+    
+    // Default chart config with theme colors
+    return {
+      value: {
+        label: "Value",
+        color: resolveWidgetColor("var(--chart-1)", 0),
+      },
+      revenue: {
+        label: "Revenue",  
+        color: resolveWidgetColor("var(--chart-2)", 1),
+      },
+      cost: {
+        label: "Cost",
+        color: resolveWidgetColor("var(--chart-3)", 2),
+      },
+    };
+  }, [widget.config.chartConfig, resolveWidgetColor]);
+
   const chartSpec: ChartSpec = {
     chartType: chartType as any,
     title: widget.config.title || "Sample Chart",
@@ -54,20 +93,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
     xAxisConfig: widget.config.xAxisConfig || {
       dataKey: "name",
     },
-    chartConfig: widget.config.chartConfig || {
-      value: {
-        label: "Value",
-        color: "hsl(var(--chart-1))",
-      },
-      revenue: {
-        label: "Revenue",  
-        color: "hsl(var(--chart-2))",
-      },
-      cost: {
-        label: "Cost",
-        color: "hsl(var(--chart-3))",
-      },
-    },
+    chartConfig,
   };
 
   if (isEditing) {

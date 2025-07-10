@@ -4,7 +4,6 @@ import "./globals.css";
 
 import { Navbar } from "@/components/ui/navbar";
 import { ClerkProvider } from '@clerk/nextjs';
-import { ThemeProvider } from "@/components/theme/ThemeContext";
 
 const openSans = Open_Sans({
   variable: "--font-open-sans",
@@ -26,15 +25,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <ClerkProvider>
-        <ThemeProvider>
-          <body
-            className={`${openSans.variable} antialiased font-sans`}
-            style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
-          >
-            {/* <Navbar /> */}
-            {children}
-          </body>
-        </ThemeProvider>
+        <body
+          className={`${openSans.variable} antialiased font-sans`}
+          style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
+        >
+          {/* <Navbar /> */}
+          {children}
+        </body>
       </ClerkProvider>
     </html>
   );

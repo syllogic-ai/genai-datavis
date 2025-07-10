@@ -14,8 +14,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Copy, Edit, Trash2, Loader2 } from "lucide-react";
+import { MoreHorizontal, Copy, Edit, Trash2, Loader2, X } from "lucide-react";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // Global cache for prefetch requests to prevent duplicates
 const prefetchCache = new Set<string>();
@@ -23,6 +32,8 @@ const prefetchCache = new Set<string>();
 interface DashboardCardProps {
   dashboard: Dashboard;
   onDashboardUpdated?: (dashboard: Dashboard) => void;
+  onDashboardCreated?: (dashboard: Dashboard) => void;
+  onDashboardDeleted?: (dashboardId: string) => void;
 }
 
 // Function to generate a color based on the dashboard icon
@@ -48,12 +59,14 @@ const getAbbreviation = (name: string): string => {
   return words.slice(0, 2).map(word => word[0]).join("").toUpperCase();
 };
 
-export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardProps) {
+export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreated, onDashboardDeleted }: DashboardCardProps) {
   const router = useRouter();
   const iconColor = getIconColor(dashboard.icon);
   const abbreviation = getAbbreviation(dashboard.name);
   const [operationLoading, setOperationLoading] = useState(false);
   const [renamingDashboard, setRenamingDashboard] = useState<Dashboard | null>(null);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   
   const handleClick = (e: React.MouseEvent) => {
     // Don't navigate if clicking on dropdown menu
@@ -145,9 +158,15 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
       }
       
       const duplicatedDashboard = await response.json();
-      router.push(`/dashboard/${duplicatedDashboard.id}`);
+      // Call the parent's onDashboardCreated callback to update the list
+      if (onDashboardCreated) {
+        onDashboardCreated(duplicatedDashboard);
+      }
+      // Don't navigate - stay on the dashboard home page
+      console.log(`Dashboard duplicated successfully: ${duplicatedDashboard.name}`);
     } catch (error) {
       console.error('Error duplicating dashboard:', error);
+      alert('Failed to duplicate dashboard. Please try again.');
     } finally {
       setOperationLoading(false);
     }
@@ -164,10 +183,15 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
         throw new Error('Failed to delete dashboard');
       }
       
-      // Refresh the page or notify parent component
-      window.location.reload();
+      // Notify parent component to update the list
+      if (onDashboardDeleted) {
+        onDashboardDeleted(dashboard.id);
+      }
+      
+      console.log(`Dashboard "${dashboard.name}" deleted successfully`);
     } catch (error) {
       console.error('Error deleting dashboard:', error);
+      alert('Failed to delete dashboard. Please try again.');
     } finally {
       setOperationLoading(false);
     }
@@ -218,7 +242,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
           {operationLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
           ) : (
-            <DropdownMenu>
+            <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -246,7 +270,11 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    setRenamingDashboard(dashboard);
+                    // Close dropdown first, then open rename dialog after a brief delay
+                    setDropdownOpen(false);
+                    setTimeout(() => {
+                      setRenamingDashboard(dashboard);
+                    }, 100);
                   }}
                 >
                   <Edit className="mr-2 h-4 w-4" />
@@ -256,9 +284,11 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
                 <DropdownMenuItem
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`Are you sure you want to delete "${dashboard.name}"?`)) {
-                      handleDeleteDashboard();
-                    }
+                    // Close dropdown first, then open delete dialog after a brief delay
+                    setDropdownOpen(false);
+                    setTimeout(() => {
+                      setShowDeleteDialog(true);
+                    }, 100);
                   }}
                   disabled={operationLoading}
                   className="text-red-600 focus:text-red-600"
@@ -273,20 +303,89 @@ export function DashboardCard({ dashboard, onDashboardUpdated }: DashboardCardPr
       </CardContent>
     </Card>
 
-    {/* Rename Dashboard Popover */}
+    {/* Rename Dashboard Dialog */}
     {renamingDashboard && (
       <DashboardCreateEditPopover
-        isOpen={!!renamingDashboard}
-        onOpenChange={(open) => !open && setRenamingDashboard(null)}
-        editingDashboard={renamingDashboard}
-        onDashboardCreated={(updatedDashboard) => {
+        dashboard={renamingDashboard}
+        trigger={null}
+        onDashboardUpdated={(updatedDashboard) => {
           if (onDashboardUpdated) {
             onDashboardUpdated(updatedDashboard);
           }
           setRenamingDashboard(null);
         }}
+        onDialogClose={() => setRenamingDashboard(null)}
       />
     )}
+
+    {/* Delete Confirmation Dialog */}
+    <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialogContent className="max-w-md">
+        <AlertDialogHeader>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-lg font-semibold">Delete Dashboard</AlertDialogTitle>
+              </div>
+            </div>
+            
+            {/* X Close Button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 rounded-full hover:bg-gray-100 -mt-1"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={operationLoading}
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </div>
+          
+          <div className="mt-4 space-y-3">
+            <AlertDialogDescription className="text-sm text-gray-600">
+              Are you sure you want to delete &quot;{dashboard.name}&quot;? This action will permanently delete all associated data and cannot be undone.
+            </AlertDialogDescription>
+            <div className="text-sm text-gray-600">
+              <div className="font-medium text-gray-700 mb-1">This includes:</div>
+              <div className="space-y-1 pl-4">
+                <div>• The dashboard and all its widgets</div>
+                <div>• All associated data files</div>
+                <div>• Chat history and conversations</div>
+              </div>
+            </div>
+            <div className="font-medium text-red-600 text-sm">
+              ⚠️ This action cannot be undone.
+            </div>
+          </div>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction
+            onClick={() => {
+              handleDeleteDashboard();
+              setShowDeleteDialog(false);
+            }}
+            className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-500"
+            disabled={operationLoading}
+          >
+            {operationLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Dashboard
+              </>
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </>
   );
 } 

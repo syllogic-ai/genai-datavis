@@ -575,7 +575,8 @@ async def process_analysis_task(
                         dashboard_id=dashboard_id,
                         context_widget_ids=context_widget_ids,
                         target_widget_type=target_widget_type,
-                        chart_colors=chart_colors
+                        chart_colors=chart_colors,
+                        user_id=user_id_from_task
                     )
                     
                     # Add dashboard context to result
@@ -626,7 +627,8 @@ async def process_analysis_task(
                 widget_type=widget_type,
                 duck_connection=duck_connection,
                 supabase_client=supabase,
-                chart_colors=chart_colors
+                chart_colors=chart_colors,
+                user_id=user_id_from_task
             )
         
         processing_time = time.time() - start_time

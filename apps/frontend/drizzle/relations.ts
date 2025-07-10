@@ -1,34 +1,60 @@
 import { relations } from "drizzle-orm/relations";
-import { files, chats, users, charts } from "./schema";
+import { dashboards, files, users, chats, widgets, themes } from "./schema";
 
-export const chatsRelations = relations(chats, ({one, many}) => ({
-	file: one(files, {
-		fields: [chats.fileId],
-		references: [files.id]
+export const filesRelations = relations(files, ({one}) => ({
+	dashboard: one(dashboards, {
+		fields: [files.dashboardId],
+		references: [dashboards.id]
 	}),
-	user: one(users, {
-		fields: [chats.userId],
-		references: [users.id]
-	}),
-	charts: many(charts),
-}));
-
-export const filesRelations = relations(files, ({one, many}) => ({
-	chats: many(chats),
 	user: one(users, {
 		fields: [files.userId],
 		references: [users.id]
 	}),
 }));
 
-export const usersRelations = relations(users, ({many}) => ({
-	chats: many(chats),
+export const dashboardsRelations = relations(dashboards, ({one, many}) => ({
 	files: many(files),
+	user: one(users, {
+		fields: [dashboards.userId],
+		references: [users.id]
+	}),
+	chats: many(chats),
+	widgets: many(widgets),
+	themes: many(themes),
 }));
 
-export const chartsRelations = relations(charts, ({one}) => ({
+export const usersRelations = relations(users, ({many}) => ({
+	files: many(files),
+	dashboards: many(dashboards),
+	chats: many(chats),
+}));
+
+export const chatsRelations = relations(chats, ({one, many}) => ({
+	dashboard: one(dashboards, {
+		fields: [chats.dashboardId],
+		references: [dashboards.id]
+	}),
+	user: one(users, {
+		fields: [chats.userId],
+		references: [users.id]
+	}),
+	widgets: many(widgets),
+}));
+
+export const widgetsRelations = relations(widgets, ({one}) => ({
 	chat: one(chats, {
-		fields: [charts.chatId],
+		fields: [widgets.chatId],
 		references: [chats.id]
+	}),
+	dashboard: one(dashboards, {
+		fields: [widgets.dashboardId],
+		references: [dashboards.id]
+	}),
+}));
+
+export const themesRelations = relations(themes, ({one}) => ({
+	dashboard: one(dashboards, {
+		fields: [themes.dashboardId],
+		references: [dashboards.id]
 	}),
 }));

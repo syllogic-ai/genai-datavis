@@ -16,6 +16,58 @@ import io
 
 # =============================================== Helper Functions ===============================================
 
+async def fetch_user_default_color_palette(user_id: str, supabase: Any) -> Optional[Dict[str, str]]:
+    """
+    Fetch the user's default color palette from the database.
+    Returns a dict with chart1, chart2, etc. as keys and HSL values.
+    """
+    try:
+        # Query for the user's default color palette
+        result = supabase.table("color_palettes").select("*").eq("user_id", user_id).eq("is_default", True).execute()
+        
+        if result.data and len(result.data) > 0:
+            palette = result.data[0]
+            # Get the chart_colors JSON field
+            chart_colors_json = palette.get("chart_colors", {})
+            
+            # Convert the palette format from chart-1, chart-2 to chart1, chart2
+            chart_colors = {}
+            for i in range(1, 11):  # Support up to 10 colors
+                key_from = f"chart-{i}"   # Database key name (with hyphen)
+                key_to = f"chart{i}"      # Expected format (without hyphen)
+                if key_from in chart_colors_json and chart_colors_json[key_from]:
+                    chart_colors[key_to] = chart_colors_json[key_from]
+            
+            logfire.info(f"Fetched default color palette for user {user_id}", 
+                        colors_count=len(chart_colors),
+                        palette_name=palette.get("name"),
+                        chart_colors=chart_colors)
+            return chart_colors if chart_colors else None
+        else:
+            logfire.info(f"No default color palette found for user {user_id}")
+            return None
+    except Exception as e:
+        logfire.error(f"Error fetching user color palette: {e}", user_id=user_id)
+        return None
+
+async def get_color_palette(ctx: RunContext[Deps]) -> Dict[str, str]:
+    """
+    Get the color palette to use for visualization.
+    Now returns theme references that will be resolved on the frontend.
+    """
+    # Always return theme references
+    # The actual colors will be resolved on the frontend based on the dashboard theme
+    theme_palette = {
+        "chart1": "var(--chart-1)",
+        "chart2": "var(--chart-2)",
+        "chart3": "var(--chart-3)",
+        "chart4": "var(--chart-4)",
+        "chart5": "var(--chart-5)"
+    }
+    
+    logfire.info("Returning theme color references", palette=theme_palette)
+    return theme_palette
+
 async def execute_sql_and_get_data(ctx: RunContext[Deps]) -> list:
     """
     Execute SQL query from widget and return chart data
@@ -100,26 +152,20 @@ class yAxisConfigClass(BaseModel):
     hide: bool = Field(default=False, description="Whether to hide the y-axis")
 
 class colorPaletteClass(BaseModel):
-    colors: list[str] = Field(default_factory=lambda: ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4", "#14b8a6", "#f97316", "#6366f1"], description="The color palette to use for the chart")
+    colors: list[str] = Field(default_factory=lambda: ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"], description="The color palette to use for the chart - now uses theme references")
     
     @classmethod
     def from_chart_colors(cls, chart_colors: Optional[Dict[str, str]] = None):
-        """Create colorPaletteClass from chart_colors dict"""
-        if not chart_colors:
-            return cls()
-        
-        # Convert chart1, chart2, etc. to hex colors
-        colors = []
-        for i in range(1, 11):  # Support up to 10 colors
-            key = f"chart{i}"
-            if key in chart_colors:
-                # Convert HSL string to hex
-                hsl_value = chart_colors[key]
-                hex_color = hsl_to_hex(hsl_value)
-                if hex_color:
-                    colors.append(hex_color)
-        
-        return cls(colors=colors if colors else None)
+        """Create colorPaletteClass from chart_colors dict - now returns theme references"""
+        # Always return theme references regardless of input
+        # The actual colors will be resolved on the frontend based on the dashboard theme
+        return cls(colors=[
+            "var(--chart-1)",
+            "var(--chart-2)", 
+            "var(--chart-3)",
+            "var(--chart-4)",
+            "var(--chart-5)"
+        ])
 
 def hsl_to_hex(hsl: str) -> str:
     """Convert HSL string format 'h s% l%' to hex color"""
@@ -547,7 +593,9 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
     """
     print("Called visualize bar tool!")
     chartType = "bar"
-    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
+    # Get color palette with fallback to user's default
+    chart_colors = await get_color_palette(ctx)
+    colors = colorPaletteClass.from_chart_colors(chart_colors).colors
 
     data_cols = input.dataColumns
     x_key = input.xColumn
@@ -583,7 +631,9 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
     """
     print("Called visualize area tool!")
     chartType = "area"
-    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
+    # Get color palette with fallback to user's default
+    chart_colors = await get_color_palette(ctx)
+    colors = colorPaletteClass.from_chart_colors(chart_colors).colors
 
     data_cols = input.dataColumns
     x_key = input.xColumn
@@ -621,7 +671,9 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
     """
     print("Called visualize line tool!")
     chartType = "line"
-    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
+    # Get color palette with fallback to user's default
+    chart_colors = await get_color_palette(ctx)
+    colors = colorPaletteClass.from_chart_colors(chart_colors).colors
 
     data_cols = input.dataColumns
     x_key = input.xColumn
@@ -693,7 +745,9 @@ async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChart
     """
     print("Called visualize pie tool!")
     chartType = "pie"
-    colors = colorPaletteClass.from_chart_colors(ctx.deps.chart_colors).colors
+    # Get color palette with fallback to user's default
+    chart_colors = await get_color_palette(ctx)
+    colors = colorPaletteClass.from_chart_colors(chart_colors).colors
     data_cols = input.dataColumn
     # chart_config = convert_chart_data_to_chart_config(data_cols, colors)
 

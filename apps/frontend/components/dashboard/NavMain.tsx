@@ -233,14 +233,24 @@ export function NavMain({
       if (response.ok) {
         const newDashboard = await response.json();
         onDashboardCreated?.(newDashboard);
-        router.push(`/dashboard/${newDashboard.id}`);
+        // Update local state without navigation
+        setDashboardsWithWidgets(prev => {
+          const updated = [...prev, { ...newDashboard, widgets: [] }];
+          // Sort by creation date (newest first)
+          return updated.sort((a, b) => 
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
+        // Don't navigate - just show success feedback
+        console.log(`[NavMain] Dashboard duplicated successfully: ${newDashboard.name}`);
       }
     } catch (error) {
       console.error('Error duplicating dashboard:', error);
+      alert('Failed to duplicate dashboard. Please try again.');
     } finally {
       setOperationLoading(prev => ({ ...prev, [dashboard.id]: false }));
     }
-  }, [onDashboardCreated, router]);
+  }, [onDashboardCreated]);
 
   const handleDeleteDashboard = useCallback(async (dashboardId: string) => {
     console.log(`[NavMain] Starting delete operation for dashboard ${dashboardId}`);

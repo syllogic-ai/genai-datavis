@@ -30,6 +30,7 @@ class Deps(BaseModel):
     contextWidgetIds: Optional[List[str]] = None
     targetWidgetType: Optional[str] = None
     chart_colors: Optional[Dict[str, str]] = None  # User's color palette
+    user_id: Optional[str] = None  # User ID for fetching preferences
 
 class GradientStops(BaseModel):
     """

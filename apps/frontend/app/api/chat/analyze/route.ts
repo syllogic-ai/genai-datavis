@@ -3,7 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { v4 as uuidv4 } from 'uuid';
 import { updateChatConversation } from '@/app/lib/chatActions';
 import db from '@/db';
-import { chats, colorPalettes } from '@/db/schema';
+import { chats } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
@@ -80,40 +80,10 @@ export async function POST(request: NextRequest) {
     // Generate unique request ID for tracking
     const requestId = uuidv4();
 
-    // Get user's default color palette
-    let chartColors = null;
-    try {
-      const defaultPalette = await db
-        .select()
-        .from(colorPalettes)
-        .where(and(
-          eq(colorPalettes.userId, userId),
-          eq(colorPalettes.isDefault, true)
-        ))
-        .limit(1);
-      
-      if (defaultPalette.length > 0) {
-        // Convert chart colors to the format expected by backend
-        const palette = defaultPalette[0];
-        chartColors = {
-          chart1: palette.chartColors["chart-1"],
-          chart2: palette.chartColors["chart-2"],
-          chart3: palette.chartColors["chart-3"],
-          chart4: palette.chartColors["chart-4"],
-          chart5: palette.chartColors["chart-5"],
-          // Include any additional colors
-          ...Object.entries(palette.chartColors).reduce((acc, [key, value]) => {
-            const num = parseInt(key.replace('chart-', ''));
-            if (num > 5) {
-              acc[`chart${num}`] = value;
-            }
-            return acc;
-          }, {} as Record<string, string>)
-        };
-      }
-    } catch (error) {
-      console.warn('Failed to fetch user color palette:', error);
-    }
+    // Chart colors are now handled at the dashboard level via themes
+    // The backend will return theme color references (var(--chart-1), etc.)
+    // which will be resolved on the frontend
+    const chartColors = null;
 
     // Prepare the payload for the backend
     const backendPayload = {
@@ -174,8 +144,12 @@ export async function POST(request: NextRequest) {
     // If this is the first message in the chat (only contains the user message we just added), trigger auto-rename
     if (conversationHistory.length === 0) {
       try {
+        // Get the base URL from the request
+        const url = new URL(request.url);
+        const baseUrl = `${url.protocol}//${url.host}`;
+        
         // Don't await this - let it run in background
-        fetch('/api/chat/rename', {
+        fetch(`${baseUrl}/api/chat/rename`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 

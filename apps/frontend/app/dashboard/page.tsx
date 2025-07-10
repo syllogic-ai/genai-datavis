@@ -17,7 +17,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const { user, isLoaded, isSignedIn } = useUser();
   const { warmCache } = useCacheWarming();
-  const { dashboards, addDashboard, updateDashboard } = useDashboardContext();
+  const { dashboards, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,6 +38,11 @@ export default function DashboardPage() {
 
   const handleDashboardUpdated = (updatedDashboard: Dashboard) => {
     updateDashboard(updatedDashboard);
+  };
+
+  const handleDashboardDeleted = (dashboardId: string) => {
+    // Remove dashboard from context state
+    deleteDashboard(dashboardId);
   };
 
   // Show loading state
@@ -147,6 +152,8 @@ export default function DashboardPage() {
                         key={dashboard.id}
                         dashboard={dashboard}
                         onDashboardUpdated={handleDashboardUpdated}
+                        onDashboardCreated={handleDashboardCreated}
+                        onDashboardDeleted={handleDashboardDeleted}
                       />
                     ))}
                   </div>
@@ -165,6 +172,8 @@ export default function DashboardPage() {
                         key={dashboard.id}
                         dashboard={dashboard}
                         onDashboardUpdated={handleDashboardUpdated}
+                        onDashboardCreated={handleDashboardCreated}
+                        onDashboardDeleted={handleDashboardDeleted}
                       />
                     ))}
                   </div>

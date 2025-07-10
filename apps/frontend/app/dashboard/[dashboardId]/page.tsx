@@ -23,8 +23,9 @@ import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobComple
 import { useDashboardRealtime } from "@/app/lib/hooks/useDashboardRealtime";
 import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardUpdates";
 import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
+import { DashboardThemeProvider } from "@/components/theme/DashboardThemeProvider";
 
-export default function EnhancedDashboardPage() {
+function EnhancedDashboardContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -533,5 +534,16 @@ export default function EnhancedDashboardPage() {
       </AnimatePresence>
 
     </motion.div>
+  );
+}
+
+export default function EnhancedDashboardPage() {
+  const params = useParams();
+  const dashboardId = params.dashboardId as string;
+
+  return (
+    <DashboardThemeProvider dashboardId={dashboardId}>
+      <EnhancedDashboardContent />
+    </DashboardThemeProvider>
   );
 }

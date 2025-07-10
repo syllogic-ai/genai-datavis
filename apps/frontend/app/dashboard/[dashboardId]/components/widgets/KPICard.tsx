@@ -10,16 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useDashboardChartColors } from "@/hooks/useDashboardChartColors";
 
-// Default styles for KPI cards (matching KPIRenderer)
+// Default styles for KPI cards - now uses theme variables
 const defaultStyles = {
-  valueColor: "#111827", // text-gray-900
-  labelColor: "#6B7280", // text-gray-500
-  subLabelColor: "#9CA3AF", // text-gray-400
-  changePositiveColor: "#10B981", // text-emerald-500
-  changeNegativeColor: "#EF4444", // text-red-500
-  changeFlatColor: "#9CA3AF", // text-gray-400
-  backgroundColor: "transparent", // white
+  valueColor: "var(--foreground)", // Theme foreground color
+  labelColor: "var(--muted-foreground)", // Theme muted foreground
+  subLabelColor: "var(--muted-foreground)", // Theme muted foreground
+  changePositiveColor: "var(--chart-2)", // Usually green in themes
+  changeNegativeColor: "var(--chart-4)", // Usually red in themes
+  changeFlatColor: "var(--muted-foreground)", // Theme muted foreground
+  backgroundColor: "transparent",
   padding: "1.5rem",
   borderRadius: "0.5rem",
   fontSize: {
@@ -138,13 +139,14 @@ export function KPICard({ widget, onUpdate, isEditing, onEditToggle }: KPICardPr
   };
 
   const getChangeColorClass = () => {
+    // Using CSS classes that reference theme variables
     switch (kpiChangeDirection) {
       case "increase":
-        return "text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30";
+        return "[color:var(--chart-2)] bg-green-50/50 dark:bg-green-900/30";
       case "decrease":
-        return "text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/30";
+        return "[color:var(--chart-4)] bg-red-50/50 dark:bg-red-900/30";
       default:
-        return "text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/30";
+        return "[color:var(--muted-foreground)] bg-gray-50/50 dark:bg-gray-900/30";
     }
   };
 
