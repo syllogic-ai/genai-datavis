@@ -40,7 +40,7 @@ class AnalysisOutput(BaseModel):
     widget_ids: Optional[List[str]] = Field(default=None, description="IDs of widgets created (supports multiple widgets)")
     confidence_score: Optional[int] = Field(default=None, description="Confidence score from 0 to 100 if SQL was generated")
     confidence_reasoning: Optional[str] = Field(default=None, description="Explanation of the confidence score if calculated")
-    follow_up_questions: Optional[List[str]] = Field(default=None, description="Follow-up questions to improve confidence if score is low")
+    # follow_up_questions: Optional[List[str]] = Field(default=None, description="Follow-up questions to improve confidence if score is low")
 
 
 # Declare the coordinator agent
@@ -80,7 +80,7 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     
     You have the following tools available:
     1. `get_widgets_types`: Get the types of the widgets in the user context, so that the agent can later decide whether to update them or not
-    2. `create_specific_widget`: Create a specific, targeted widget with a clear purpose and distinct configuration.
+    2. `create_specific_widget`: Create a specific, targeted widget with a clear purpose and distinct configuration (if confidence score allows it).
     3. `update_widget_formatting`: Update an existing widget with a new formatting request (f.i. color, size, width, labels, etc.).
     4. `update_widget_data`: Update an existing widget with new data (f.i. axis sorting, new columns, new filters, new time period, etc.).
 
@@ -90,12 +90,12 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     3. If a formatting update is needed, run the update_widget_formatting tool.
     4. If a data update is needed, run the update_widget_data tool.
     5. If no update is needed, return the widget_id and don't run any other tool.
-    6. If the user asks for a new widget, run the create_specific_widget tool.
+    6. If the user asks for a new widget, run the create_specific_widget tool. If the confidence score is below the threshold, do not retry to create the widget.
        
     # CONFIDENCE SCORING HANDLING:
     # - The SQL agent will always return a confidence score (0-100) indicating how well the generated query matches the user's request
-    # - If the confidence score is below 90, DO NOT proceed with visualization, nor return any dataset.
-    # - Instead, inform the user that you don't have enough information to produce the requested query
+    # - If the confidence score is below 80, DO NOT proceed with visualization, nor return any dataset.
+    # - When confidence score is below 80, inform the user that I don't have enough information to produce the requested query, and ask for more information using the follow_up_questions field.
     # - Focus on clarifying ambiguous terms, specifying time periods, identifying specific columns, or defining business logic
     
     # Your workflow should follow these rules:
@@ -183,38 +183,38 @@ async def generate_sql(ctx: Deps) -> SQLOutput:
         end_time = time.time()
         
         # Store the widget_id for potential visualization
-        created_widget_id = result.output.widget_id
+        # created_widget_id = result.output.widget_id
         
-        # Always calculate confidence score for the generated SQL
-        profile = extract_schema_sample(ctx.file_id)
-        confidence_input = ConfidenceInput(
-            user_prompt=ctx.user_prompt,
-            generated_sql=result.output.sql,
-            dataset_schema=profile.columns
-        )
+        # # Always calculate confidence score for the generated SQL
+        # profile = extract_schema_sample(ctx.file_id)
+        # confidence_input = ConfidenceInput(
+        #     user_prompt=ctx.user_prompt,
+        #     generated_sql=result.output.sql,
+        #     dataset_schema=profile.columns
+        # )
         
-        # Calculate confidence using a direct function call
-        confidence_score, confidence_reasoning = await calculate_confidence_direct(
-            ctx, confidence_input
-        )
+        # # Calculate confidence using a direct function call
+        # confidence_score, confidence_reasoning = await calculate_confidence_direct(
+        #     ctx, confidence_input
+        # )
         
-        # Generate follow-up questions if confidence is low
-        follow_up_questions = []
-        if confidence_score < 50:
-            follow_up_questions = [
-                "What time period are you interested in analyzing?",
-                "Which specific columns from the dataset would you like to include?",
-                "Are there any specific conditions or filters you'd like to apply?"
-            ]
+        # # Generate follow-up questions if confidence is low
+        # follow_up_questions = []
+        # if confidence_score < 50:
+        #     follow_up_questions = [
+        #         "What time period are you interested in analyzing?",
+        #         "Which specific columns from the dataset would you like to include?",
+        #         "Are there any specific conditions or filters you'd like to apply?"
+        #     ]
         
-        # Update the SQL output with confidence information
-        result.output.confidence_score = confidence_score
-        result.output.confidence_reasoning = confidence_reasoning
-        result.output.follow_up_questions = follow_up_questions
+        # # Update the SQL output with confidence information
+        # result.output.confidence_score = confidence_score
+        # result.output.confidence_reasoning = confidence_reasoning
+        # result.output.follow_up_questions = follow_up_questions
         
         # Log confidence information
         logfire.info("SQL generation completed with confidence score", 
-                     confidence_score=confidence_score,
+                     confidence_score=result.output.confidence_score,
                      user_prompt=ctx.user_prompt,
                      chat_id=ctx.chat_id, 
                      request_id=ctx.request_id)
@@ -383,7 +383,7 @@ async def visualize_chart(ctx: Deps, widget_id: str) -> dict:
         raise
 
 @coordinator_agent.tool
-async def create_specific_widget(ctx: RunContext[Deps], widget_description: str, chart_type: str, focus_area: str) -> str:
+async def create_specific_widget(ctx: RunContext[Deps], widget_description: str, chart_type: str, focus_area: str) -> dict:
     """
     Create a specific widget with a targeted purpose.
     
@@ -430,9 +430,17 @@ async def create_specific_widget(ctx: RunContext[Deps], widget_description: str,
     sql_result = await generate_sql(ctx.deps)
 
     logfire.info("SQL RESULTS to coord agent", sql_result=sql_result)
-    if sql_result.confidence_score < 90:
-        logfire.info(f"Confidence score is too low, skipping widget creation: {sql_result.confidence_score}")
-        return None
+    if sql_result.confidence_score < 80:
+        
+        return_dict = {
+            "widget_id": None,
+            "confidence_score": sql_result.confidence_score,
+            "confidence_reasoning": sql_result.confidence_reasoning,
+            "follow_up_questions": sql_result.follow_up_questions
+        }
+
+        logfire.info(f"Confidence score is too low, skipping widget creation: {return_dict}")
+        return return_dict
 
     focused_deps.widget_id = sql_result.widget_id
 
@@ -445,6 +453,13 @@ async def create_specific_widget(ctx: RunContext[Deps], widget_description: str,
             lambda: visualize_chart(focused_deps, sql_result.widget_id)
         )
         
+        return_dict = {
+            "widget_id": sql_result.widget_id,
+            "confidence_score": sql_result.confidence_score,
+            "confidence_reasoning": sql_result.confidence_reasoning,
+            "follow_up_questions": sql_result.follow_up_questions
+        }
+
         logfire.info(f"Successfully created {chart_type} widget", 
                     widget_id=sql_result.widget_id,
                     description=widget_description,
@@ -453,7 +468,7 @@ async def create_specific_widget(ctx: RunContext[Deps], widget_description: str,
                     follow_up_questions=sql_result.follow_up_questions
                     )
         
-        return sql_result.widget_id
+        return return_dict
     else:
         raise Exception("SQL generation did not create a widget")
     
