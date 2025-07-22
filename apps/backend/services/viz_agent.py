@@ -6,6 +6,8 @@ import logfire
 from pydantic import BaseModel, Field
 from pydantic_ai import RunContext, Tool, Agent, ModelRetry
 import pandas as pd
+import sys
+import os
 
 from apps.backend.utils.chat import append_chat_message, convert_chart_data_to_chart_config, remove_null_pairs, update_widget_specs
 from apps.backend.utils.logging import _log_llm
@@ -14,7 +16,80 @@ from apps.backend.core.models import Deps
 import requests
 import io
 
+
 # =============================================== Helper Functions ===============================================
+
+def extract_retry_info(ctx: RunContext[Deps]) -> dict:
+    """
+    Extract retry information from the context.
+    """
+    return {
+        "retry_count": ctx.retry,
+        "run_step": ctx.run_step,
+        "tool_call_id": ctx.tool_call_id,
+        "tool_name": ctx.tool_name,
+        "is_retry": ctx.retry > 0,
+        "is_final_retry": ctx.retry >= 3  # Assuming max 3 retries
+    }
+
+def extract_retry_prompt_parts(ctx: RunContext[Deps]) -> list:
+    """
+    Extract RetryPromptPart content from the context messages.
+    """
+    retry_parts = []
+    
+    for message in ctx.messages:
+        if hasattr(message, 'parts'):
+            for part in message.parts:
+                if hasattr(part, 'part_kind') and part.part_kind == 'retry-prompt':
+                    retry_parts.append({
+                        'content': part.content,
+                        'tool_name': part.tool_name,
+                        'tool_call_id': part.tool_call_id,
+                        'timestamp': part.timestamp
+                    })
+    
+    return retry_parts
+
+def extract_all_message_parts(ctx: RunContext[Deps]) -> dict:
+    """
+    Extract all types of message parts from the context.
+    """
+    parts_by_type = {
+        'system-prompt': [],
+        'user-prompt': [],
+        'retry-prompt': [],
+        'tool-call': [],
+        'tool-result': []
+    }
+    
+    for message in ctx.messages:
+        if hasattr(message, 'parts'):
+            for part in message.parts:
+                if hasattr(part, 'part_kind'):
+                    part_type = part.part_kind
+                    if part_type in parts_by_type:
+                        part_data = {
+                            'content': getattr(part, 'content', None),
+                            'timestamp': getattr(part, 'timestamp', None)
+                        }
+                        
+                        # Add specific fields based on part type
+                        if part_type == 'retry-prompt':
+                            part_data.update({
+                                'tool_name': getattr(part, 'tool_name', None),
+                                'tool_call_id': getattr(part, 'tool_call_id', None)
+                            })
+                        elif part_type == 'tool-call':
+                            part_data.update({
+                                'tool_name': getattr(part, 'tool_name', None),
+                                'args': getattr(part, 'args', None),
+                                'tool_call_id': getattr(part, 'tool_call_id', None)
+                            })
+                        
+                        parts_by_type[part_type].append(part_data)
+    
+    return parts_by_type
 
 async def fetch_user_default_color_palette(user_id: str, supabase: Any) -> Optional[Dict[str, str]]:
     """
@@ -46,7 +121,7 @@ async def fetch_user_default_color_palette(user_id: str, supabase: Any) -> Optio
         else:
             logfire.info(f"No default color palette found for user {user_id}")
             return None
-    except Exception as e:
+    except ModelRetry as e:
         logfire.error(f"Error fetching user color palette: {e}", user_id=user_id)
         return None
 
@@ -117,7 +192,7 @@ async def execute_sql_and_get_data(ctx: RunContext[Deps]) -> list:
                         widget_id=ctx.deps.widget_id,
                         rows_returned=len(chart_data),
                         sql_query=sql_query)
-        except Exception as sql_error:
+        except ModelRetry as sql_error:
             logfire.error("SQL execution failed in viz_agent", 
                          error=str(sql_error),
                          sql_query=sql_query,
@@ -126,7 +201,7 @@ async def execute_sql_and_get_data(ctx: RunContext[Deps]) -> list:
         
         return chart_data
         
-    except Exception as e:
+    except ModelRetry as e:
         logfire.error("Failed to execute SQL in viz_agent", 
                      error=str(e), 
                      widget_id=ctx.deps.widget_id)
@@ -199,7 +274,7 @@ def hsl_to_hex(hsl: str) -> str:
         
         # Convert to hex
         return "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
-    except Exception as e:
+    except ModelRetry as e:
         logfire.warn(f"Failed to convert HSL to hex: {hsl}, error: {e}")
         return "#000000"
 
@@ -470,7 +545,8 @@ class TableOutput(BaseModel):
 # Declare the agent
 viz_agent = Agent(
     "openai:gpt-4o-mini",
-    deps_type=Deps
+    deps_type=Deps, 
+    retries=3,
 )
 
 # Declare the systems prompt
@@ -519,6 +595,7 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     4. You CANNOT use any other tools for visualization
     5. If the user's request is unclear, default to a bar chart using visualize_bar
     6. During the agent execution, make sure that you keep all the previous parameters that the user has set in previous executions.
+    7. Always start by calling the get_latest_message tool to get the messages from the context, to get message from previous failed attempts.
     
     TOOL SELECTION RULES:
     - For comparing values across categories: Use visualize_bar
@@ -551,8 +628,18 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     - Execute exactly one visualization tool
     - Return the exact tool output
     - Use update_color if color changes are requested
+
+
+    
     """
     return prompt
+
+@viz_agent.tool
+async def get_latest_message(ctx: RunContext[Deps]) -> str:
+    """
+    A tool to get the messages from the context.
+    """
+    return f"Messages from previous retries: {ctx.messages[-1].parts if ctx.messages else 'No messages'}"
 
 @viz_agent.tool
 async def update_color(ctx: RunContext[Deps], chart_specs: dict, update_col: str, update_color: str):
@@ -619,7 +706,7 @@ async def visualize_bar(ctx: RunContext[Deps], input: BarChartInput) -> BarChart
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-    except Exception as e:
+    except ModelRetry as e:
         print(f"Error in visualize_bar: {str(e)}")
 
     return response
@@ -659,7 +746,7 @@ async def visualize_area(ctx: RunContext[Deps], input: AreaChartInput) -> AreaCh
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-    except Exception as e:
+    except ModelRetry as e:
         print(f"Error in visualize_area: {str(e)}")
 
     return response
@@ -697,7 +784,7 @@ async def visualize_line(ctx: RunContext[Deps], input: LineChartInput) -> LineCh
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-    except Exception as e:
+    except ModelRetry as e:
         print(f"Error in visualize_line: {str(e)}")
 
     return response
@@ -733,7 +820,7 @@ async def visualize_kpi(ctx: RunContext[Deps], input: KPIInput) -> KPIOutput:
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-    except Exception as e:
+    except ModelRetry as e:
         print(f"Error in visualize_kpi: {str(e)}")
 
     return response 
@@ -769,7 +856,7 @@ async def visualize_pie(ctx: RunContext[Deps], input: PieChartInput) -> PieChart
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-    except Exception as e:
+    except ModelRetry as e:
         print(f"Error in visualize_pie: {str(e)}")
         
     return response
@@ -788,20 +875,6 @@ async def visualize_table(ctx: RunContext[Deps], input: TableInput) -> TableOutp
     # if input.columnFormatters:
     table_config = input.tableConfig.model_dump()
     
-    # if input.tableConfig.columnFormatters:
-    #     formatters = {}
-    #     for col, formatter in input.tableConfig.columnFormatters.items():
-    #         formatters[col] = {"type": formatter}
-
-    #     for col, formatter in formatters.items():
-    #         if formatter == "currency" and not formatter.currency:
-    #             formatter.currency = "USD"
-    #         if formatter in ["number", "percentage"] and formatter.decimals is None:
-    #                 formatter.decimals = 2
-
-    #     table_config["columnFormatters"] = formatters
-
-    # logfire.info(f"Column formatters: {formatters}")
     if input.tableConfig.columnFormatters:
         logfire.info(f"Column formatters type: {input.tableConfig.columnFormatters}")
 
@@ -819,8 +892,7 @@ async def visualize_table(ctx: RunContext[Deps], input: TableInput) -> TableOutp
         chart_data = await execute_sql_and_get_data(ctx)
         # Update widget with both config and data
         await update_widget_specs(widget_id, response.model_dump(), chart_data)
-    except Exception as e:
+    except ModelRetry as e:
         print(f"Error in visualize_table: {str(e)}")
 
     return response
-

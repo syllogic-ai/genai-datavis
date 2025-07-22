@@ -4,7 +4,7 @@ import time
 import uuid
 import logfire
 from pydantic import BaseModel, Field
-from pydantic_ai import RunContext, Tool, Agent, ModelRetry
+from pydantic_ai import RunContext, Tool, Agent, ModelRetry, ToolOutput
 
 from apps.backend.core.models import Deps, DatasetProfile
 from apps.backend.utils.files import extract_schema_sample, get_column_unique_values
@@ -25,30 +25,41 @@ class ConfidenceInput(BaseModel):
     """Input for confidence scoring."""
     user_prompt: str = Field(description="The user's original question")
     generated_sql: str = Field(description="The SQL query that was generated")
-    dataset_schema: Dict[str, str] = Field(description="The dataset schema with column names and types")
+    # dataset_schema: Dict[str, str] = Field(description="The dataset schema with column names and types")
 
 class ConfidenceOutput(BaseModel):
     """Output from confidence scoring."""
     confidence_score: int = Field(description="Confidence score from 0 to 100")
     reasoning: str = Field(description="Explanation of the confidence score")
-    potential_issues: List[str] = Field(description="List of potential issues or concerns")
+    potential_issues: Optional[List[str]] = Field(default=None, description="List of potential issues or concerns")
+    follow_up_questions: Optional[List[str]] = Field(default=None, description="List of follow-up questions to improve confidence")
 
 class SQLOutput(BaseModel):
     """Output from SQL generation, includes widget ID."""
     widget_id: str = Field(description="The ID of the widget that was created or updated with the SQL query.")
-    sql: str = Field(description="The generated SQL query")
+    sql: Optional[str] = Field(default=None, description="The generated SQL query")
     insights_title: Optional[str] = Field(default=None, description="Title of the insights if generated")
     insights_analysis: Optional[str] = Field(default=None, description="Business insights analysis if generated")
     success: bool = Field(default=True, description="Whether the SQL query was executed successfully")
-    confidence_score: Optional[int] = Field(default=None, description="Confidence score from 0 to 100 if calculated")
+    confidence_score: int = Field(description="Confidence score from 0 to 100")
     confidence_reasoning: Optional[str] = Field(default=None, description="Explanation of the confidence score if calculated")
     follow_up_questions: Optional[List[str]] = Field(default=None, description="Follow-up questions to improve confidence if calculated")
+
+confidence_agent = Agent(
+            "openai:gpt-4o-mini",
+            system_prompt="You are an expert SQL analyst evaluating the quality and accuracy of a generated SQL query against a user's request.",
+            output_type=ConfidenceOutput,
+            retries=3
+        )
 
 # Declare the SQL agent
 sql_agent = Agent(
     "openai:gpt-4o-mini",
     deps_type=Deps,
-    output_type=SQLOutput,
+    # output_type=ToolOutput(SQLOutput, name="calculate_output"),
+    output_type=[calculate]
+    # output_type=SQLOutput,
+    retries=3
 )
 
 @sql_agent.system_prompt
@@ -85,6 +96,9 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     You are a SQL expert specializing in DuckDB. Given a dataset schema, sample data, 
     and a user's question, generate ONLY valid DuckDB SQL queries. Your response should give EXACTLY what the users asked for, no more, no less.
     
+    Always start by calling the get_latest_message tool to get the messages from the context, to get message from previous failed attempts.
+    You then use the calculate tool to get the SQL query. Then, return the output of the calculate tool EXACTLY as is!
+
     Here is the schema and sample data:
 
     Schema:
@@ -143,6 +157,16 @@ async def sql_system_prompt(ctx: RunContext[Deps]) -> str:
     return prompt
 
 @sql_agent.tool
+async def get_latest_message(ctx: RunContext[Deps]) -> str:
+    """
+    A tool to get the messages from the context.
+    """
+
+    latest_message = ctx.messages[-1].parts if ctx.messages else 'No messages'
+    logfire.info(f"Getting latest message: {latest_message}")
+    return f"Messages from previous retries: {latest_message}"
+
+@sql_agent.tool
 async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     """Execute the SQL query and create or update a widget record in Supabase."""
     start_time = time.time()
@@ -179,8 +203,16 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                          disallowed_term=term, 
                          chat_id=ctx.deps.chat_id, 
                          request_id=ctx.deps.request_id)
-            raise ValueError(error_msg)
+            raise ModelRetry(error_msg)
     
+    # Calculate confidence score
+    confidence_input = ConfidenceInput(
+        user_prompt=ctx.deps.user_prompt,
+        generated_sql=sql,
+        # dataset_schema=profile.columns
+    )
+    confidence_output = await calculate_confidence(ctx.deps, confidence_input)
+
     # Create or update the widget record in Supabase with the generated SQL
     try:
         # Always create new widget
@@ -202,7 +234,7 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                                  chat_id=ctx.deps.chat_id, 
                                  request_id=ctx.deps.request_id)
                     raise ValueError(error_msg)
-            except Exception as e:
+            except ModelRetry as e:
                 error_msg = f"Error getting dashboard_id from chat: {str(e)}"
                 logfire.error(f"{task} widget failed", 
                              error=str(e),
@@ -270,7 +302,7 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
                          request_id=ctx.deps.request_id)
             successful_execution = True
 
-    except Exception as e:
+    except ModelRetry as e:
         error_msg = f"Error creating/updating widget record: {str(e)}"
         logfire.error(f"{task} widget failed", 
                      error=str(e),
@@ -282,12 +314,13 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput) -> SQLOutput:
     
     end_time = time.time()
     
-    return SQLOutput(widget_id=widget_id, sql=sql, success=successful_execution)
+    return SQLOutput(widget_id=widget_id, sql=sql, success=successful_execution, 
+    confidence_score=confidence_output.confidence_score, confidence_reasoning=confidence_output.reasoning, follow_up_questions=confidence_output.follow_up_questions)
 
 @sql_agent.tool
 async def get_column_unique_values(ctx: RunContext[Deps], column_name: str) -> list[str]:
     """Get unique values for a given column."""
-    unique_values = get_unique_values(ctx.deps.file_id, column_name)
+    unique_values = get_column_unique_values(ctx.deps.file_id, column_name)
 
     logfire.info("Unique values for column", 
                  column_name=column_name, 
@@ -296,19 +329,20 @@ async def get_column_unique_values(ctx: RunContext[Deps], column_name: str) -> l
                  request_id=ctx.deps.request_id)
     return unique_values
 
-@sql_agent.tool
-async def calculate_confidence(ctx: RunContext[Deps], input: ConfidenceInput) -> ConfidenceOutput:
+async def calculate_confidence(ctx: Deps, input: ConfidenceInput) -> ConfidenceOutput:
     """Calculate confidence score for how well the generated SQL matches the user's request."""
     
+    logfire.info(f"Calculating confidence for {ctx}")
+
     # Get the dataset profile to provide context
-    profile = extract_schema_sample(ctx.deps.file_id)
+    profile = extract_schema_sample(ctx.file_id)
     
     # Create a detailed prompt for confidence evaluation
     confidence_prompt = f"""
     You are an expert SQL analyst evaluating the quality and accuracy of a generated SQL query against a user's request.
     
     DATASET SCHEMA:
-    {json.dumps(profile.columns, indent=2)}
+    {"\n".join([f"Column: {col} | Type: {dtype}" for col, dtype in profile.columns.items()])}
     
     USER'S REQUEST:
     "{input.user_prompt}"
@@ -319,9 +353,9 @@ async def calculate_confidence(ctx: RunContext[Deps], input: ConfidenceInput) ->
     TASK: Evaluate how well the generated SQL query matches the user's request and provide a confidence score from 0 to 100.
     
     EVALUATION CRITERIA:
-    1. **Semantic Alignment (0-30 points)**: Does the SQL query address what the user actually asked for?
+    1. **Semantic Alignment (0-30 points)**: Does the SQL query address what the user actually asked for? Is the user asking for something else?
     2. **Technical Accuracy (0-25 points)**: Is the SQL syntactically correct and follows best practices?
-    3. **Data Relevance (0-20 points)**: Are the correct columns and tables being used?
+    3. **Data Relevance (0-20 points)**: Are the correct columns and tables being used? Are the exaact information requested available in the dataset?
     4. **Logical Completeness (0-15 points)**: Does the query include all necessary operations (filtering, grouping, etc.)?
     5. **Edge Case Handling (0-10 points)**: Does the query handle potential data issues (NULLs, edge cases)?
     
@@ -341,25 +375,25 @@ async def calculate_confidence(ctx: RunContext[Deps], input: ConfidenceInput) ->
     {{
         "confidence_score": <integer 0-100>,
         "reasoning": "<detailed explanation of the score>",
-        "potential_issues": ["<issue1>", "<issue2>", ...]
+        "potential_issues": ["<issue1>", "<issue2>", ...],
+        "follow_up_questions": ["<question1>", "<question2>", ...]
     }}
     
     Be thorough in your analysis and provide specific reasons for your confidence level.
     """
-    
+
     try:
+        logfire.info(f"Running confidence agent with prompt: {confidence_prompt}")
         # Use the agent's model to evaluate confidence
-        response = await ctx.agent.model.complete(
-            messages=[{"role": "user", "content": confidence_prompt}],
-            response_format={"type": "json_object"}
-        )
+        response = await confidence_agent.run(confidence_prompt, deps=ctx)
         
         # Parse the response
-        confidence_data = json.loads(response.content)
+        confidence_data = response.output
         
-        confidence_score = confidence_data.get("confidence_score", 50)
-        reasoning = confidence_data.get("reasoning", "No reasoning provided")
-        potential_issues = confidence_data.get("potential_issues", [])
+        confidence_score = confidence_data.confidence_score
+        reasoning = confidence_data.reasoning
+        potential_issues = confidence_data.potential_issues
+        follow_up_questions = confidence_data.follow_up_questions
         
         # Ensure confidence score is within bounds
         confidence_score = max(0, min(100, confidence_score))
@@ -367,21 +401,22 @@ async def calculate_confidence(ctx: RunContext[Deps], input: ConfidenceInput) ->
         logfire.info("Confidence score calculated", 
                      confidence_score=confidence_score,
                      user_prompt=input.user_prompt,
-                     chat_id=ctx.deps.chat_id, 
-                     request_id=ctx.deps.request_id)
+                     chat_id=ctx.chat_id, 
+                     request_id=ctx.request_id)
         
         return ConfidenceOutput(
             confidence_score=confidence_score,
             reasoning=reasoning,
-            potential_issues=potential_issues
+            potential_issues=potential_issues,
+            follow_up_questions=follow_up_questions
         )
         
-    except Exception as e:
+    except ModelRetry as e:
         error_msg = f"Error calculating confidence score: {str(e)}"
         logfire.error("Confidence calculation failed", 
                      error=str(e), 
-                     chat_id=ctx.deps.chat_id, 
-                     request_id=ctx.deps.request_id)
+                     chat_id=ctx.chat_id, 
+                     request_id=ctx.request_id)
         
         # Return a default low confidence score on error
         return ConfidenceOutput(

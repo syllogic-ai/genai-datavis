@@ -4,7 +4,7 @@ import time
 import asyncio
 import logfire
 from pydantic import BaseModel, Field
-from pydantic_ai import RunContext, Tool, Agent, ModelRetry
+from pydantic_ai import RunContext, Tool, Agent, ModelRetry, ToolOutput
 
 from apps.backend.core.models import Deps, DatasetProfile
 from apps.backend.utils.files import extract_schema_sample
@@ -94,7 +94,7 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
        
     # CONFIDENCE SCORING HANDLING:
     # - The SQL agent will always return a confidence score (0-100) indicating how well the generated query matches the user's request
-    # - If the confidence score is below 50, DO NOT proceed with visualization
+    # - If the confidence score is below 90, DO NOT proceed with visualization, nor return any dataset.
     # - Instead, inform the user that you don't have enough information to produce the requested query
     # - Focus on clarifying ambiguous terms, specifying time periods, identifying specific columns, or defining business logic
     
@@ -235,8 +235,8 @@ class ConfidenceOutput(BaseModel):
     """Output from confidence scoring."""
     confidence_score: int = Field(description="Confidence score from 0 to 100")
     reasoning: str = Field(description="Explanation of the confidence score")
-    potential_issues: List[str] = Field(description="List of potential issues or concerns")
-    follow_up_questions: List[str] = Field(description="List of follow-up questions to improve confidence")
+    potential_issues: Optional[List[str]] = Field(default=None, description="List of potential issues or concerns")
+    follow_up_questions: Optional[List[str]] = Field(default=None, description="List of follow-up questions to improve confidence")
 
 async def calculate_confidence_direct(deps: Deps, confidence_input: ConfidenceInput) -> tuple[int, str]:
     """Direct function to calculate confidence score using heuristics."""
@@ -428,6 +428,12 @@ async def create_specific_widget(ctx: RunContext[Deps], widget_description: str,
     logfire.info(f"Generating SQL for widget: {widget_description},  focus_deps={focused_deps}")
     
     sql_result = await generate_sql(ctx.deps)
+
+    logfire.info("SQL RESULTS to coord agent", sql_result=sql_result)
+    if sql_result.confidence_score < 90:
+        logfire.info(f"Confidence score is too low, skipping widget creation: {sql_result.confidence_score}")
+        return None
+
     focused_deps.widget_id = sql_result.widget_id
 
     logfire.info(f"SQL generated for widget: {widget_description}")
