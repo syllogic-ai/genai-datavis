@@ -156,6 +156,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             overflow-y: visible !important;
             word-wrap: break-word !important;
             overflow-wrap: break-word !important;
+            color: hsl(var(--foreground)) !important;
+            font-family: var(--font-sans) !important;
           }
           
           .ProseMirror h1 {
@@ -163,6 +165,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             font-weight: bold;
             margin: 1rem 0 0.5rem 0;
             line-height: 1.2;
+            color: hsl(var(--foreground));
+            font-family: var(--font-serif);
           }
           
           .ProseMirror h2 {
@@ -170,6 +174,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             font-weight: bold;
             margin: 0.75rem 0 0.5rem 0;
             line-height: 1.3;
+            color: hsl(var(--foreground));
+            font-family: var(--font-serif);
           }
           
           .ProseMirror h3 {
@@ -177,6 +183,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             font-weight: bold;
             margin: 0.5rem 0 0.25rem 0;
             line-height: 1.4;
+            color: hsl(var(--foreground));
+            font-family: var(--font-serif);
           }
           
           .ProseMirror h4 {
@@ -184,6 +192,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             font-weight: bold;
             margin: 0.5rem 0 0.25rem 0;
             line-height: 1.4;
+            color: hsl(var(--foreground));
+            font-family: var(--font-serif);
           }
           
           .ProseMirror h5 {
@@ -191,6 +201,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             font-weight: bold;
             margin: 0.5rem 0 0.25rem 0;
             line-height: 1.4;
+            color: hsl(var(--foreground));
+            font-family: var(--font-serif);
           }
           
           .ProseMirror h6 {
@@ -198,11 +210,15 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             font-weight: bold;
             margin: 0.5rem 0 0.25rem 0;
             line-height: 1.4;
+            color: hsl(var(--foreground));
+            font-family: var(--font-serif);
           }
           
           .ProseMirror p {
             margin: 0.25rem 0;
             line-height: 1.6;
+            color: hsl(var(--foreground));
+            font-family: var(--font-sans);
           }
           
           .ProseMirror p:first-child {
@@ -236,6 +252,8 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
             margin: 0.25rem 0;
             display: list-item;
             list-style-position: outside;
+            color: hsl(var(--foreground));
+            font-family: var(--font-sans);
           }
           
           .ProseMirror ul li {
@@ -247,75 +265,50 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
           }
           
           .ProseMirror blockquote {
-            border-left: 4px solid #e5e7eb;
+            border-left: 4px solid hsl(var(--border));
             margin: 1rem 0;
             padding-left: 1rem;
             font-style: italic;
-            color: #6b7280;
-          }
-          
-          .dark .ProseMirror blockquote {
-            border-left-color: #374151;
-            color: #9ca3af;
+            color: hsl(var(--muted-foreground));
           }
           
           .ProseMirror code {
-            background-color: #f3f4f6;
-            color: #ef4444;
+            background-color: hsl(var(--muted));
+            color: hsl(var(--accent-foreground));
             padding: 0.125rem 0.25rem;
             border-radius: 0.25rem;
             font-family: 'Courier New', Courier, monospace;
             font-size: 0.875rem;
           }
           
-          .dark .ProseMirror code {
-            background-color: #374151;
-            color: #f87171;
-          }
-          
           .ProseMirror pre {
-            background-color: #f8f9fa;
-            border: 1px solid #e9ecef;
+            background-color: hsl(var(--muted));
+            border: 1px solid hsl(var(--border));
             border-radius: 0.375rem;
             padding: 1rem;
             margin: 1rem 0;
             overflow-x: auto;
             font-family: 'Courier New', Courier, monospace;
             font-size: 0.875rem;
-          }
-          
-          .dark .ProseMirror pre {
-            background-color: #1f2937;
-            border-color: #374151;
+            color: hsl(var(--foreground));
           }
           
           .ProseMirror a {
-            color: #3b82f6;
+            color: hsl(var(--primary));
             text-decoration: underline;
           }
           
           .ProseMirror a:hover {
-            color: #1d4ed8;
-          }
-          
-          .dark .ProseMirror a {
-            color: #60a5fa;
-          }
-          
-          .dark .ProseMirror a:hover {
-            color: #93c5fd;
+            color: hsl(var(--primary));
+            opacity: 0.8;
           }
           
           .ProseMirror p.is-editor-empty:first-child::before {
             content: attr(data-placeholder);
             float: left;
-            color: #9ca3af;
+            color: hsl(var(--muted-foreground));
             pointer-events: none;
             height: 0;
-          }
-          
-          .dark .ProseMirror p.is-editor-empty:first-child::before {
-            color: #6b7280;
           }
           
           .tippy-box {

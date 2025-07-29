@@ -25,7 +25,7 @@ import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobComple
 import { useDashboardRealtime } from "@/app/lib/hooks/useDashboardRealtime";
 import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardUpdates";
 import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
-import { DashboardThemeProvider } from "@/components/theme/DashboardThemeProvider";
+import { DashboardThemeProvider, useDashboardTheme } from "@/components/theme/DashboardThemeProvider";
 
 function EnhancedDashboardContent() {
   const params = useParams();
@@ -34,6 +34,11 @@ function EnhancedDashboardContent() {
   const dashboardId = params.dashboardId as string;
   const { updateCurrentDashboard } = useDashboardContext();
   const { setOpen: setNavigationSidebarOpen } = useSidebar();
+  const { themeClassName, getThemeStyles } = useDashboardTheme();
+  
+  // Get theme styles for background
+  const themeStyles = getThemeStyles();
+  const themeBackground = themeStyles?.background || '';
   
   // Chat sidebar state
   const [isChatSidebarOpen, setIsChatSidebarOpen] = useState(false);
@@ -364,15 +369,17 @@ function EnhancedDashboardContent() {
       {/* Text Editor Toolbar */}
       <DashboardToolbar />
 
-      {/* Main Content */}
+      {/* Main Content - Apply theme here */}
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
         className="flex-1 flex overflow-hidden"
+        style={{ backgroundColor: themeBackground }}
       >
+        {/* Themed content area - Only dashboard widgets get themed */}
         <div 
-          className="flex-1 flex flex-col overflow-hidden transition-all duration-300"
+          className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${themeClassName}`}
           style={{ 
             width: isChatSidebarOpen ? 'calc(100% - 400px)' : '100%',
             minWidth: '320px' // Ensure minimum usable width
@@ -387,7 +394,6 @@ function EnhancedDashboardContent() {
             />
           </div>
 
-        
           {/* Floating Widget Dock - positioned relative to this content area */}
           <FloatingWidgetDock 
             onAddWidget={handleAddWidget} 
@@ -397,7 +403,7 @@ function EnhancedDashboardContent() {
           />
         </div>
 
-        {/* Chat Sidebar - Integrated inline */}
+        {/* Chat Sidebar - Outside theme scope */}
         {chatId && (
           <ChatSidebar
             dashboardId={dashboardId}

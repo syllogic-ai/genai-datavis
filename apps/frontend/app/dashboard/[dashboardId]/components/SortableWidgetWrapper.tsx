@@ -100,11 +100,7 @@ export function SortableWidgetWrapper({
         <div
           {...attributes}
           {...listeners}
-          className={`absolute z-40 ${
-            widgetType === 'text' 
-              ? 'top-1/2 -translate-y-1/2 -left-2' 
-              : 'top-2 -left-2'
-          }`}
+          className="absolute z-40 top-1/2 -translate-y-1/2 -left-4"
         >
           <DragHandle 
             isVisible={!isDragging && isHovered && !showDeleteDialog}
@@ -127,9 +123,17 @@ export function SortableWidgetWrapper({
         )}
       </AnimatePresence>
       
-      {/* Content wrapper with natural height - no borders for text blocks */}
+      {/* Content wrapper with responsive heights based on widget type */}
       <div className={`w-full bg-transparent rounded-lg transition-all ${
         isSortableDragging ? 'opacity-50 scale-[0.98] shadow-lg' : ''
+      } ${
+        widgetType === 'text' 
+          ? '' // Text blocks have natural height
+          : widgetType === 'kpi'
+          ? 'h-32 sm:h-36 md:h-40' // KPI cards are compact
+          : widgetType === 'table'
+          ? 'h-64 sm:h-80 md:h-96' // Tables need more height
+          : 'h-64 sm:h-72 md:h-80' // Charts have medium height
       }`}>
         {children}
       </div>

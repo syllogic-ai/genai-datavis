@@ -10,12 +10,16 @@ import {
 import type { ChartSpec } from "@/types/chart-types";
 import moment from "moment";
 import { memo } from "react";
+import { useThemeGridLines } from "@/hooks/useThemeGridLines";
 
 /**
  * Unified renderer for area and line charts - memoized to prevent unnecessary re-renders
  */
 export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }: { spec: ChartSpec }) {
   console.log(`UnifiedChartRenderer received spec for ${spec.chartType} chart:`, JSON.stringify(spec, null, 2));
+
+  // Get theme setting for grid lines - must be called at the top level
+  const showGridLines = useThemeGridLines();
 
   if (spec.chartType !== 'area' && spec.chartType !== 'line') {
     console.error(`UnifiedChartRenderer: Expected chart type 'area' or 'line', got '${spec.chartType}'`);
@@ -153,7 +157,7 @@ export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }:
                 );
               })}
             </defs>
-            <CartesianGrid vertical={false} />
+            {showGridLines && <CartesianGrid vertical={false} />}
             <XAxis
               dataKey={xAxisKey}
               tickLine={spec.xAxisConfig?.tickLine ?? false}
@@ -192,7 +196,7 @@ export const UnifiedChartRenderer = memo(function UnifiedChartRenderer({ spec }:
           </AreaChart>
       ) : (
           <LineChart {...commonProps}>
-            <CartesianGrid vertical={false} />
+            {showGridLines && <CartesianGrid vertical={false} />}
             <XAxis
               dataKey={xAxisKey}
               tickLine={spec.xAxisConfig?.tickLine ?? false}

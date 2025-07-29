@@ -250,7 +250,7 @@ export function SimpleDashboardLayout({
   }, [onAddWidget, handleAddWidget]);
 
   return (
-    <div className="w-full p-4 pl-12 transition-all duration-300 ease-out min-h-screen">
+    <div className="w-full px-12 pt-8 pb-4 transition-all duration-300 ease-out min-h-screen">
       {widgets.length === 0 && !isLoading && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}

@@ -8,6 +8,7 @@ import {
   Database,
 } from "lucide-react";
 import { Button } from "../ui/button";
+import { ThemeSelector } from "./ThemeSelector";
 
 export function DashboardHeader({
   dashboardTitle,
@@ -33,6 +34,8 @@ export function DashboardHeader({
         </div>
         
         <div className="flex items-center gap-3">
+          {/* Theme Selector */}
+          {dashboardId && <ThemeSelector dashboardId={dashboardId} />}
 
           {/* Sources Button */}
           <Button 

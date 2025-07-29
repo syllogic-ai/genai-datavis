@@ -22,7 +22,8 @@
       "Bash(curl:*)",
       "Bash(npx drizzle-kit:*)",
       "Bash(psql:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npx shadcn@latest add:*)"
     ],
     "deny": []
   }

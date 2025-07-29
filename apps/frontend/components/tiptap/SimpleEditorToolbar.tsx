@@ -60,7 +60,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        className="w-full z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 shadow-sm"
+        className="w-full z-40 bg-background border-b border-border"
       >
         <div className="flex items-center gap-1 px-4 py-2 overflow-x-auto">
           {/* Undo/Redo */}
@@ -85,7 +85,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             <Redo className="h-4 w-4" />
           </Button>
 
-          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 
           {/* Text formatting */}
           <Button
@@ -94,7 +94,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleBold().run()}
             data-active={editor.isActive('bold')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Bold className="h-4 w-4" />
           </Button>
@@ -104,7 +104,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleItalic().run()}
             data-active={editor.isActive('italic')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Italic className="h-4 w-4" />
           </Button>
@@ -114,7 +114,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleUnderline().run()}
             data-active={editor.isActive('underline')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Underline className="h-4 w-4" />
           </Button>
@@ -124,12 +124,12 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleCode().run()}
             data-active={editor.isActive('code')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Code className="h-4 w-4" />
           </Button>
 
-          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 
           {/* Headings */}
           <Button
@@ -138,7 +138,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setParagraph().run()}
             data-active={editor.isActive('paragraph')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Pilcrow className="h-4 w-4" />
           </Button>
@@ -148,7 +148,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             data-active={editor.isActive('heading', { level: 1 })}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Heading1 className="h-4 w-4" />
           </Button>
@@ -158,7 +158,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             data-active={editor.isActive('heading', { level: 2 })}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Heading2 className="h-4 w-4" />
           </Button>
@@ -168,12 +168,12 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
             data-active={editor.isActive('heading', { level: 3 })}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Heading3 className="h-4 w-4" />
           </Button>
 
-          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 
           {/* Text Alignment */}
           <Button
@@ -182,7 +182,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setTextAlign('left').run()}
             data-active={editor.isActive({ textAlign: 'left' })}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <AlignLeft className="h-4 w-4" />
           </Button>
@@ -192,7 +192,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setTextAlign('center').run()}
             data-active={editor.isActive({ textAlign: 'center' })}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <AlignCenter className="h-4 w-4" />
           </Button>
@@ -202,12 +202,12 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().setTextAlign('right').run()}
             data-active={editor.isActive({ textAlign: 'right' })}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <AlignRight className="h-4 w-4" />
           </Button>
 
-          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 
           {/* Lists */}
           <Button
@@ -216,7 +216,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleBulletList().run()}
             data-active={editor.isActive('bulletList')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <List className="h-4 w-4" />
           </Button>
@@ -226,12 +226,12 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleOrderedList().run()}
             data-active={editor.isActive('orderedList')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <ListOrdered className="h-4 w-4" />
           </Button>
 
-          <Separator orientation="vertical" className="mx-1 h-6" />
+          <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 
           {/* Quote and Link */}
           <Button
@@ -240,7 +240,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => editor.chain().focus().toggleBlockquote().run()}
             data-active={editor.isActive('blockquote')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Quote className="h-4 w-4" />
           </Button>
@@ -250,7 +250,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
             onMouseDown={(e) => e.preventDefault()}
             onClick={toggleLink}
             data-active={editor.isActive('link')}
-            className="h-8 w-8 p-0 data-[active=true]:bg-gray-200 dark:data-[active=true]:bg-gray-700"
+            className="h-8 w-8 p-0 data-[active=true]:bg-accent data-[active=true]:text-accent-foreground"
           >
             <Link className="h-4 w-4" />
           </Button>

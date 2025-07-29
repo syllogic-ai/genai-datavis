@@ -1,7 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { Theme, ThemeStyleProps } from "@/db/schema";
+import { THEME_PRESETS } from "@/lib/theme-presets";
 
 interface DashboardThemeContextType {
   theme: Theme | null;
@@ -10,9 +11,31 @@ interface DashboardThemeContextType {
   error: string | null;
   setActiveTheme: (themeId: string | null) => Promise<void>;
   getThemeStyles: () => ThemeStyleProps | null;
+  themeClassName: string;
 }
 
 const DashboardThemeContext = createContext<DashboardThemeContextType | undefined>(undefined);
+
+// Function to clean up global theme variables
+function cleanupGlobalTheme() {
+  const root = document.documentElement;
+  
+  // List of theme variables to remove
+  const themeVariables = [
+    'background', 'foreground', 'card', 'card-foreground', 'popover', 'popover-foreground',
+    'primary', 'primary-foreground', 'secondary', 'secondary-foreground', 'muted', 'muted-foreground',
+    'accent', 'accent-foreground', 'destructive', 'destructive-foreground', 'border', 'input', 'ring',
+    'chart-1', 'chart-2', 'chart-3', 'chart-4', 'chart-5',
+    'font-family', 'font-mono', 'font-serif', 'border-radius', 'letter-spacing', 'spacing',
+    'shadow-offset-x', 'shadow-offset-y', 'shadow-blur', 'shadow-spread', 'shadow-color', 'shadow-opacity',
+    'shadow', 'shadow-sm', 'shadow-md', 'shadow-lg', 'show-grid-lines'
+  ];
+
+  // Remove all theme variables from :root
+  themeVariables.forEach(variable => {
+    root.style.removeProperty(`--${variable}`);
+  });
+}
 
 export function DashboardThemeProvider({
   dashboardId,
@@ -26,6 +49,7 @@ export function DashboardThemeProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
+  const [themeClassName, setThemeClassName] = useState<string>('');
 
   // Detect dark mode
   useEffect(() => {
@@ -67,28 +91,7 @@ export function DashboardThemeProvider({
     };
   }, []);
 
-  // Load dashboard theme on mount
-  useEffect(() => {
-    loadDashboardTheme();
-  }, [dashboardId]);
-
-  // Apply active theme to CSS variables
-  useEffect(() => {
-    if (activeTheme) {
-      console.log('Applying theme with isDark:', isDark);
-      applyThemeToDOM(activeTheme, isDark);
-    } else {
-      // If no active theme, ensure we're in light mode with default colors
-      console.log('No active theme, forcing light mode');
-      const root = document.documentElement;
-      root.classList.remove('dark');
-      // Set basic light mode colors
-      root.style.setProperty('--background', 'hsl(0 0% 100%)');
-      root.style.setProperty('--foreground', 'hsl(0 1.64% 11.96%)');
-    }
-  }, [activeTheme, isDark]);
-
-  const loadDashboardTheme = async () => {
+  const loadDashboardTheme = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
@@ -105,7 +108,53 @@ export function DashboardThemeProvider({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [dashboardId]);
+
+  // Load dashboard theme on mount
+  useEffect(() => {
+    loadDashboardTheme();
+  }, [dashboardId, loadDashboardTheme]);
+
+  // Apply active theme to CSS variables
+  useEffect(() => {
+    let className = '';
+    
+    if (activeTheme) {
+      console.log('Applying theme with isDark:', isDark);
+      className = applyThemeToDOM(activeTheme, isDark, dashboardId);
+    } else {
+      // If no active theme, apply default preset theme
+      console.log('No active theme, applying default preset');
+      const defaultPreset = THEME_PRESETS.find(p => p.id === 'default');
+      if (defaultPreset) {
+        const defaultTheme = {
+          id: defaultPreset.id,
+          userId: '',
+          name: defaultPreset.name,
+          description: defaultPreset.description || null,
+          isDefault: false,
+          presetId: defaultPreset.id,
+          styles: defaultPreset.styles as { light: ThemeStyleProps; dark: ThemeStyleProps },
+          createdAt: null,
+          updatedAt: null,
+        };
+        className = applyThemeToDOM(defaultTheme, isDark, dashboardId);
+      }
+    }
+    
+    // Set the theme class name
+    setThemeClassName(className);
+    
+    // Return cleanup function to remove theme styles when component unmounts
+    return () => {
+      const styleElement = document.getElementById(`theme-${dashboardId}`);
+      if (styleElement) {
+        styleElement.remove();
+      }
+      // Clean up global CSS variables when switching themes or unmounting
+      cleanupGlobalTheme();
+    };
+  }, [activeTheme, isDark, dashboardId]);
 
   const setActiveTheme = async (themeId: string | null) => {
     try {
@@ -136,6 +185,7 @@ export function DashboardThemeProvider({
     error,
     setActiveTheme,
     getThemeStyles,
+    themeClassName,
   };
 
   return (
@@ -153,111 +203,119 @@ export function useDashboardTheme() {
   return context;
 }
 
-// Apply theme styles to CSS variables
-function applyThemeToDOM(theme: Theme, isDark: boolean) {
+// Apply theme styles to CSS variables - SCOPED TO DASHBOARD ONLY
+function applyThemeToDOM(theme: Theme, isDark: boolean, dashboardId: string) {
   const styles = isDark ? theme.styles.dark : theme.styles.light;
-  const root = document.documentElement;
-
-  console.log('Applying theme:', theme.name, 'isDark:', isDark);
+  
+  console.log('Applying theme:', theme.name, 'isDark:', isDark, 'to dashboard:', dashboardId);
   console.log('Theme styles:', styles);
 
-  // Ensure dark class matches our isDark state
-  if (isDark) {
-    root.classList.add('dark');
-  } else {
-    root.classList.remove('dark');
+  // Create a unique CSS class for this dashboard's theme
+  const themeClassName = `dashboard-theme-${dashboardId}`;
+  
+  // Remove any existing theme styles for this dashboard
+  const existingStyle = document.getElementById(`theme-${dashboardId}`);
+  if (existingStyle) {
+    existingStyle.remove();
   }
 
-  // Force override body background to ensure it's not black
-  document.body.style.backgroundColor = isDark ? 
-    (styles.background || 'oklch(0.1400 0 0)') : 
-    (styles.background || 'hsl(0 0% 100%)');
-
-  // Apply chart colors
+  // Apply theme variables to global :root so they override default styles
+  const root = document.documentElement;
+  
+  // Apply all theme styles as CSS variables to :root
   Object.entries(styles).forEach(([key, value]) => {
-    if (key.startsWith("chart-")) {
-      // Set the CSS variable
+    if (typeof value === 'string') {
       root.style.setProperty(`--${key}`, value);
-      console.log(`Set --${key} to ${value}`);
     }
   });
 
-  // Apply font settings
-  if (styles["font-sans"]) {
-    root.style.setProperty("--font-sans", styles["font-sans"]);
-  }
-  if (styles["font-serif"]) {
-    root.style.setProperty("--font-serif", styles["font-serif"]);
-  }
-  if (styles["font-mono"]) {
-    root.style.setProperty("--font-mono", styles["font-mono"]);
-  }
+  // Create a new style element with scoped CSS variables for cleanup
+  const styleElement = document.createElement('style');
+  styleElement.id = `theme-${dashboardId}`;
+  
+  let cssRules = `.${themeClassName} {\n`;
 
-  // Apply font sizes
-  if (styles["font-size-base"]) {
-    root.style.setProperty("--font-size-base", styles["font-size-base"]);
-    // Also apply to body for global font size
-    document.body.style.fontSize = styles["font-size-base"];
-  }
-  if (styles["font-size-sm"]) {
-    root.style.setProperty("--font-size-sm", styles["font-size-sm"]);
-  }
-  if (styles["font-size-lg"]) {
-    root.style.setProperty("--font-size-lg", styles["font-size-lg"]);
-  }
-
-  // Apply UI colors with fallbacks
-  const uiColors = [
-    "background", "foreground", "card", "card-foreground",
-    "primary", "primary-foreground", "secondary", "secondary-foreground",
-    "muted", "muted-foreground", "accent", "accent-foreground",
-    "destructive", "destructive-foreground", "border", "input", "ring"
-  ];
-
-  // Define fallbacks for critical colors
-  const fallbacks = isDark ? {
-    background: 'oklch(0.1400 0 0)',
-    foreground: 'oklch(1 0 0)',
-    card: 'oklch(0.1800 0 0)',
-    'card-foreground': 'oklch(1 0 0)'
-  } : {
-    background: 'hsl(0 0% 100%)',
-    foreground: 'hsl(0 1.64% 11.96%)',
-    card: 'hsl(20 20.00% 97.06%)',
-    'card-foreground': 'hsl(0 0% 14.90%)'
-  };
-
-  uiColors.forEach(colorKey => {
-    const value = styles[colorKey as keyof ThemeStyleProps] || fallbacks[colorKey as keyof typeof fallbacks];
-    if (value) {
-      root.style.setProperty(`--${colorKey}`, value);
-      console.log(`Set --${colorKey} to ${value}`);
+  // Also add the variables to the scoped class for completeness
+  Object.entries(styles).forEach(([key, value]) => {
+    if (typeof value === 'string') {
+      cssRules += `  --${key}: ${value};
+`;
     }
   });
-
-  // Apply other styling
-  if (styles.radius) {
-    root.style.setProperty("--radius", styles.radius);
-  }
-  if (styles.spacing) {
-    root.style.setProperty("--spacing", styles.spacing);
-  }
-
-  // Apply shadow properties
-  const shadowProps = [
-    "shadow-color", "shadow-opacity", "shadow-blur",
-    "shadow-spread", "shadow-offset-x", "shadow-offset-y"
-  ];
-
-  shadowProps.forEach(prop => {
-    const key = prop as keyof ThemeStyleProps;
-    if (styles[key]) {
-      root.style.setProperty(`--${prop}`, styles[key]);
+  
+  // Generate dynamic shadow from individual shadow properties
+  const shadowColor = styles["shadow-color"] || "oklch(0 0 0)";
+  const shadowOpacity = parseFloat(styles["shadow-opacity"] || "0.1");
+  const shadowBlur = styles["shadow-blur"] || "3";
+  const shadowSpread = styles["shadow-spread"] || "0";
+  const shadowOffsetX = styles["shadow-offset-x"] || "0";
+  const shadowOffsetY = styles["shadow-offset-y"] || "1";
+  
+  // Convert OKLCH color to rgba for better browser compatibility
+  let shadowColorWithOpacity;
+  if (shadowColor.startsWith('oklch(')) {
+    const match = shadowColor.match(/oklch\(([^)]+)\)/);
+    if (match) {
+      const values = match[1].split(' ');
+      const lightness = parseFloat(values[0]) || 0;
+      const grayValue = Math.round(lightness * 255);
+      shadowColorWithOpacity = `rgba(${grayValue}, ${grayValue}, ${grayValue}, ${shadowOpacity})`;
+    } else {
+      shadowColorWithOpacity = `rgba(0, 0, 0, ${shadowOpacity})`;
     }
-  });
-
-  // Apply letter spacing
-  if (styles["letter-spacing"]) {
-    root.style.setProperty("--letter-spacing", styles["letter-spacing"]);
+  } else if (shadowColor.startsWith('hsl(')) {
+    shadowColorWithOpacity = shadowColor.replace('hsl(', 'hsla(').replace(')', `, ${shadowOpacity})`)
+  } else if (shadowColor.startsWith('rgb(')) {
+    shadowColorWithOpacity = shadowColor.replace('rgb(', 'rgba(').replace(')', `, ${shadowOpacity})`)
+  } else {
+    shadowColorWithOpacity = `rgba(0, 0, 0, ${shadowOpacity})`;
   }
+  
+  // Generate the complete shadow string
+  const dynamicShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowSpread}px ${shadowColorWithOpacity}`;
+  
+  // Apply shadow variables to :root for global use
+  root.style.setProperty('--shadow', dynamicShadow);
+  root.style.setProperty('--shadow-sm', dynamicShadow);
+  root.style.setProperty('--shadow-md', dynamicShadow);
+  root.style.setProperty('--shadow-lg', dynamicShadow);
+  
+  // Add shadow CSS variables to scoped class as well
+  cssRules += `  --shadow: ${dynamicShadow};
+`;
+  cssRules += `  --shadow-sm: ${dynamicShadow};
+`;
+  cssRules += `  --shadow-md: ${dynamicShadow};
+`;
+  cssRules += `  --shadow-lg: ${dynamicShadow};
+`;
+
+  cssRules += `}
+`;
+  
+  // Add specific styles for dark mode if needed
+  if (isDark) {
+    cssRules += `.${themeClassName}.dark {
+`;
+    Object.entries(styles).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        cssRules += `  --${key}: ${value};
+`;
+      }
+    });
+    cssRules += `}
+`;
+  }
+  
+  // Apply the styles
+  styleElement.textContent = cssRules;
+  document.head.appendChild(styleElement);
+
+  // Emit a custom event to notify components about theme changes
+  window.dispatchEvent(new CustomEvent('theme-changed', {
+    detail: { themeId: theme.id, isDark }
+  }));
+
+  // Return the theme class name so it can be applied to the dashboard container
+  return themeClassName;
 }

@@ -294,9 +294,12 @@ export function KPICard({ widget, onUpdate, isEditing, onEditToggle }: KPICardPr
 
   return (
     <div 
-      className="relative w-full h-full flex flex-col justify-center border border-gray-600"
+      className="relative w-full h-full flex flex-col justify-center border"
       style={{
-        backgroundColor: defaultStyles.backgroundColor,
+        backgroundColor: 'var(--card)',
+        borderColor: 'var(--border)',
+        color: 'var(--card-foreground)',
+        boxShadow: 'var(--shadow)',
         padding: defaultStyles.padding,
         borderRadius: defaultStyles.borderRadius,
       }}

@@ -218,6 +218,9 @@ export interface ThemeStyleProps {
   "shadow-offset-x"?: string;
   "shadow-offset-y"?: string;
   
+  // Chart display options
+  "show-grid-lines"?: string; // "true" | "false" - stored as string for consistency
+  
   // Other properties
   "letter-spacing"?: string;
 }

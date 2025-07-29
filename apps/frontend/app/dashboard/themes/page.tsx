@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,7 +19,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import { Check } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -43,10 +56,13 @@ import {
   DollarSign,
   BarChart3,
   PieChart,
+  Upload,
 } from "lucide-react";
 import { Theme, ThemeStyleProps } from "@/db/schema";
 import { THEME_PRESETS } from "@/lib/theme-presets";
 import toast, { Toaster } from "react-hot-toast";
+import { ColorPicker } from "@/components/ui/color-picker";
+import { hexToOklch, getDisplayColor, isValidHexColor, oklchToHex, isOklchColor } from "@/lib/color-utils";
 import {
     SidebarHeader,
   SidebarInset,
@@ -54,9 +70,14 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { CSSImportDialog } from "@/components/theme/CSSImportDialog";
+import { FontSelector } from "@/components/ui/font-selector";
+import { preloadPopularFonts } from "@/lib/google-fonts";
 
 interface ThemeEditorState {
   selectedPresetId: string;
+  selectedUserTheme: Theme | null;
   customizedStyles: Partial<ThemeStyleProps>;
   isModified: boolean;
   previewMode: "light" | "dark";
@@ -103,6 +124,7 @@ const FONT_SIZES = [
 export default function ThemeGeneratorPage() {
   const [state, setState] = useState<ThemeEditorState>({
     selectedPresetId: "default",
+    selectedUserTheme: null,
     customizedStyles: {},
     isModified: false,
     previewMode: "light",
@@ -113,10 +135,19 @@ export default function ThemeGeneratorPage() {
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [themeName, setThemeName] = useState("");
   const [themeDescription, setThemeDescription] = useState("");
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Load user themes
   useEffect(() => {
     loadUserThemes();
+  }, []);
+
+  // Preload popular Google Fonts for better performance
+  useEffect(() => {
+    preloadPopularFonts().catch(error => {
+      console.warn('Failed to preload popular fonts:', error);
+    });
   }, []);
 
   // Apply theme styles to entire page
@@ -130,6 +161,50 @@ export default function ThemeGeneratorPage() {
         root.style.setProperty(`--${key}`, value);
       }
     });
+
+    // Create dynamic box-shadow from individual shadow properties
+    const shadowColor = currentStyles["shadow-color"] || "oklch(0 0 0)";
+    const shadowOpacity = parseFloat(currentStyles["shadow-opacity"] || "0.1");
+    const shadowBlur = currentStyles["shadow-blur"] || "3";
+    const shadowSpread = currentStyles["shadow-spread"] || "0";
+    const shadowOffsetX = currentStyles["shadow-offset-x"] || "0";
+    const shadowOffsetY = currentStyles["shadow-offset-y"] || "1";
+    
+    // Convert OKLCH color to rgba for better browser compatibility and opacity support
+    let shadowColorWithOpacity;
+    if (shadowColor.startsWith('oklch(')) {
+      // Extract OKLCH values and convert to a usable format
+      const match = shadowColor.match(/oklch\(([^)]+)\)/);
+      if (match) {
+        const values = match[1].split(' ');
+        const lightness = parseFloat(values[0]) || 0;
+        // Convert lightness to grayscale for shadow (0 = black, 1 = white)
+        const grayValue = Math.round(lightness * 255);
+        shadowColorWithOpacity = `rgba(${grayValue}, ${grayValue}, ${grayValue}, ${shadowOpacity})`;
+      } else {
+        shadowColorWithOpacity = `rgba(0, 0, 0, ${shadowOpacity})`;
+      }
+    } else if (shadowColor.startsWith('hsl(')) {
+      shadowColorWithOpacity = shadowColor.replace('hsl(', 'hsla(').replace(')', `, ${shadowOpacity})`);
+    } else if (shadowColor.startsWith('rgb(')) {
+      shadowColorWithOpacity = shadowColor.replace('rgb(', 'rgba(').replace(')', `, ${shadowOpacity})`);
+    } else {
+      // Fallback to black with opacity
+      shadowColorWithOpacity = `rgba(0, 0, 0, ${shadowOpacity})`;
+    }
+    
+    // Generate the box-shadow string (offset-x offset-y blur-radius spread-radius color)
+    const dynamicShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowSpread}px ${shadowColorWithOpacity}`;
+    
+    // Only set the preview shadow variable, don't override global shadows
+    root.style.setProperty('--preview-shadow', dynamicShadow);
+    
+    // Set individual shadow properties for the configurator preview
+    root.style.setProperty('--preview-shadow-color', shadowColorWithOpacity);
+    root.style.setProperty('--preview-shadow-blur', `${shadowBlur}px`);
+    root.style.setProperty('--preview-shadow-spread', `${shadowSpread}px`);
+    root.style.setProperty('--preview-shadow-offset-x', `${shadowOffsetX}px`);
+    root.style.setProperty('--preview-shadow-offset-y', `${shadowOffsetY}px`);
 
     // Set dark/light mode class
     if (state.previewMode === "dark") {
@@ -159,17 +234,26 @@ export default function ThemeGeneratorPage() {
     }
   };
 
-  // Get current preset
+  // Get current preset or user theme
   const currentPreset =
     THEME_PRESETS.find((p) => p.id === state.selectedPresetId) ||
     THEME_PRESETS[0];
 
   // Get current styles (base + customizations)
   const getCurrentStyles = useCallback((): ThemeStyleProps => {
-    const baseStyles =
-      state.previewMode === "dark"
+    let baseStyles;
+    
+    if (state.selectedUserTheme) {
+      // Use user theme styles
+      baseStyles = state.previewMode === "dark"
+        ? state.selectedUserTheme.styles.dark
+        : state.selectedUserTheme.styles.light;
+    } else {
+      // Use built-in preset styles
+      baseStyles = state.previewMode === "dark"
         ? currentPreset.styles.dark
         : currentPreset.styles.light;
+    }
 
     return { ...baseStyles, ...state.customizedStyles } as ThemeStyleProps;
   }, [state, currentPreset]);
@@ -185,6 +269,13 @@ export default function ThemeGeneratorPage() {
         },
         isModified: true,
       }));
+      
+      // Emit theme change event for immediate updates
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('theme-changed', {
+          detail: { key, value }
+        }));
+      }, 0);
     },
     []
   );
@@ -203,6 +294,18 @@ export default function ThemeGeneratorPage() {
     setState((prev) => ({
       ...prev,
       selectedPresetId: presetId,
+      selectedUserTheme: null, // Clear user theme when selecting preset
+      customizedStyles: {},
+      isModified: false,
+    }));
+  }, []);
+
+  // Change to user theme
+  const changeUserTheme = useCallback((theme: Theme) => {
+    setState((prev) => ({
+      ...prev,
+      selectedPresetId: "", // Clear preset when selecting user theme
+      selectedUserTheme: theme,
       customizedStyles: {},
       isModified: false,
     }));
@@ -215,19 +318,24 @@ export default function ThemeGeneratorPage() {
     try {
       const currentStyles = getCurrentStyles();
 
+      const baseName = state.selectedUserTheme ? state.selectedUserTheme.name : currentPreset.name;
       const themeData = {
-        name: themeName || `${currentPreset.name} Custom`,
+        name: themeName || `${baseName} Custom`,
         description:
-          themeDescription || `Customized version of ${currentPreset.name}`,
+          themeDescription || `Customized version of ${baseName}`,
         isDefault: false,
         styles: {
           light:
             state.previewMode === "light"
               ? currentStyles
+              : state.selectedUserTheme
+              ? { ...state.selectedUserTheme.styles.light, ...state.customizedStyles }
               : { ...currentPreset.styles.light, ...state.customizedStyles },
           dark:
             state.previewMode === "dark"
               ? currentStyles
+              : state.selectedUserTheme
+              ? { ...state.selectedUserTheme.styles.dark, ...state.customizedStyles }
               : { ...currentPreset.styles.dark, ...state.customizedStyles },
         },
       };
@@ -252,6 +360,41 @@ export default function ThemeGeneratorPage() {
     }
   };
 
+  // Handle CSS import
+  const handleCSSImport = async (importedTheme: {
+    name: string;
+    description: string;
+    styles: {
+      light: ThemeStyleProps;
+      dark: ThemeStyleProps;
+    };
+  }) => {
+    try {
+      const response = await fetch("/api/themes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...importedTheme,
+          isDefault: false,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to import theme");
+
+      toast.success("Theme imported successfully!");
+      await loadUserThemes();
+      
+      // Switch to the imported theme
+      const data = await response.json();
+      if (data.theme) {
+        changeUserTheme(data.theme);
+      }
+    } catch (error) {
+      console.error("Error importing theme:", error);
+      toast.error("Failed to import theme");
+    }
+  };
+
   return (
     <SidebarInset className="bg-transparent">
       <div className="flex flex-1 flex-col">
@@ -260,7 +403,6 @@ export default function ThemeGeneratorPage() {
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <div className="flex items-center gap-2 flex-1">
-            <Palette className="h-5 w-5" />
             <h1 className="font-semibold">Theme Generator</h1>
           </div>
           {state.isModified && (
@@ -333,48 +475,148 @@ export default function ThemeGeneratorPage() {
         <div className="flex flex-1 overflow-hidden">
           {/* Left Sidebar - Theme Controls */}
           <div className="w-80 border-r bg-background/50 overflow-y-auto hide-scrollbar">
-            <div className="p-4 space-y-6">
+            <div className="p-4 pb-8 space-y-6">
               {/* Preset Selection */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Theme Preset</Label>
-                <Select
-                  value={state.selectedPresetId}
-                  onValueChange={changePreset}
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={commandOpen}
+                  className="w-full justify-between rounded-lg"
+                  onClick={() => setCommandOpen(true)}
                 >
-                  <SelectTrigger className="rounded-lg">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-lg">
-                    {THEME_PRESETS.map((preset) => (
-                      <SelectItem
-                        key={preset.id}
-                        value={preset.id}
-                        className="rounded-md"
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-1">
-                            {[1, 2, 3].map((i) => (
-                              <div
-                                key={i}
-                                className="w-3 h-3 rounded-full border"
-                                style={{
-                                  backgroundColor:
-                                    preset.styles.light[
-                                      `chart-${i}` as keyof ThemeStyleProps
-                                    ] || "#000",
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      {[1, 2, 3].map((i) => {
+                        let chartColor;
+                        if (state.selectedUserTheme) {
+                          chartColor = state.selectedUserTheme.styles.light[`chart-${i}` as keyof ThemeStyleProps];
+                        } else {
+                          const selectedPreset = THEME_PRESETS.find(p => p.id === state.selectedPresetId) || THEME_PRESETS[0];
+                          chartColor = selectedPreset.styles.light[`chart-${i}` as keyof ThemeStyleProps];
+                        }
+                        return (
+                          <div
+                            key={i}
+                            className="w-3 h-3 rounded-full border"
+                            style={{
+                              backgroundColor: chartColor || "#000",
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                    <span>{state.selectedUserTheme ? state.selectedUserTheme.name : currentPreset.name}</span>
+                  </div>
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+                <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+                  <Command className="rounded-lg">
+                    <CommandInput placeholder="Search themes..." />
+                    <CommandList>
+                      <CommandEmpty>No theme found.</CommandEmpty>
+                      <CommandGroup heading="Built-in Themes">
+                        {THEME_PRESETS.map((preset) => (
+                          <CommandItem
+                            key={preset.id}
+                            value={preset.name}
+                            onSelect={() => {
+                              changePreset(preset.id);
+                              setCommandOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center gap-3">
+                                <div className="flex gap-1">
+                                  {[1, 2, 3].map((i) => (
+                                    <div
+                                      key={i}
+                                      className="w-3 h-3 rounded-full border"
+                                      style={{
+                                        backgroundColor:
+                                          preset.styles.light[
+                                            `chart-${i}` as keyof ThemeStyleProps
+                                          ] || "#000",
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                                <div>
+                                  <div className="font-medium">{preset.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {preset.description}
+                                  </div>
+                                </div>
+                              </div>
+                              {state.selectedPresetId === preset.id && (
+                                <Check className="h-4 w-4 text-primary" />
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                      {userThemes.length > 0 && (
+                        <>
+                          <CommandSeparator />
+                          <CommandGroup heading="Your Custom Themes">
+                            {userThemes.map((theme) => (
+                              <CommandItem
+                                key={theme.id}
+                                value={theme.name}
+                                onSelect={() => {
+                                  changeUserTheme(theme);
+                                  setCommandOpen(false);
                                 }}
-                              />
+                                className="cursor-pointer"
+                              >
+                                <div className="flex items-center justify-between w-full">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex gap-1">
+                                      {[1, 2, 3].map((i) => {
+                                        const chartColor = theme.styles?.light?.[`chart-${i}` as keyof ThemeStyleProps];
+                                        return (
+                                          <div
+                                            key={i}
+                                            className="w-3 h-3 rounded-full border"
+                                            style={{
+                                              backgroundColor: chartColor || "#000",
+                                            }}
+                                          />
+                                        );
+                                      })}
+                                    </div>
+                                    <div>
+                                      <div className="font-medium">{theme.name}</div>
+                                      {theme.description && (
+                                        <div className="text-xs text-muted-foreground">
+                                          {theme.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {state.selectedUserTheme?.id === theme.id && (
+                                    <Check className="h-4 w-4 text-primary" />
+                                  )}
+                                </div>
+                              </CommandItem>
                             ))}
-                          </div>
-                          <span>{preset.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {currentPreset.description}
-                </p>
+                          </CommandGroup>
+                        </>
+                      )}
+                    </CommandList>
+                  </Command>
+                </CommandDialog>
+                
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setImportDialogOpen(true)}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Import from CSS
+                </Button>
               </div>
 
               <Separator />
@@ -444,6 +686,40 @@ export default function ThemeGeneratorPage() {
 
               <Separator />
 
+              {/* Border Colors */}
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium text-sm hover:underline">
+                  Border Colors
+                  <ChevronDown className="h-4 w-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2">
+                  {(() => {
+                    const currentStyles = getCurrentStyles();
+                    return (
+                      <>
+                        <ColorInput
+                          label="Primary Border"
+                          value={currentStyles.border || ""}
+                          onChange={(value) => updateStyle("border", value)}
+                        />
+                        <ColorInput
+                          label="Input Border"
+                          value={currentStyles.input || ""}
+                          onChange={(value) => updateStyle("input", value)}
+                        />
+                        <ColorInput
+                          label="Focus Ring"
+                          value={currentStyles.ring || ""}
+                          onChange={(value) => updateStyle("ring", value)}
+                        />
+                      </>
+                    );
+                  })()}
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Separator />
+
               {/* Card Colors */}
               <Collapsible>
                 <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium text-sm hover:underline">
@@ -467,11 +743,41 @@ export default function ThemeGeneratorPage() {
                             updateStyle("card-foreground", value)
                           }
                         />
-                        <ColorInput
-                          label="Border"
-                          value={currentStyles.border || ""}
-                          onChange={(value) => updateStyle("border", value)}
-                        />
+                      </>
+                    );
+                  })()}
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Separator />
+
+              {/* Chart Display Options */}
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium text-sm hover:underline">
+                  Chart Display
+                  <ChevronDown className="h-4 w-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 pt-2">
+                  {(() => {
+                    const currentStyles = getCurrentStyles();
+                    const showGridLines = currentStyles["show-grid-lines"] !== "false";
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <Label className="text-xs font-medium">Show Grid Lines</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Display grid lines in charts for better readability
+                            </p>
+                          </div>
+                          <Switch
+                            checked={showGridLines}
+                            onCheckedChange={(checked) => 
+                              updateStyle("show-grid-lines", checked ? "true" : "false")
+                            }
+                          />
+                        </div>
                       </>
                     );
                   })()}
@@ -495,59 +801,47 @@ export default function ThemeGeneratorPage() {
                         <div className="space-y-3">
                           <div className="space-y-2">
                             <Label className="text-xs">Heading Font</Label>
-                            <Select
-                              value={
-                                currentStyles["font-serif"] ||
-                                "Playfair Display, serif"
-                              }
-                              onValueChange={(value) =>
-                                updateStyle("font-serif", value)
-                              }
-                            >
-                              <SelectTrigger className="text-xs rounded-lg">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="rounded-lg">
-                                {HEADING_FONT_FAMILIES.map((font) => (
-                                  <SelectItem
-                                    key={font.value}
-                                    value={font.value}
-                                    className="text-xs rounded-md"
-                                  >
-                                    <span style={{ fontFamily: font.value }}>
-                                      {font.label}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <FontSelector
+                              value={currentStyles["font-serif"]?.replace(/,.*$/, '') || "Playfair Display"}
+                              onChange={(value) => {
+                                const fontFamily = `${value}, serif`;
+                                updateStyle("font-serif", fontFamily);
+                              }}
+                              placeholder="Select heading font..."
+                              previewText="Heading Preview"
+                              categories={['serif', 'display', 'all']}
+                              className="text-xs"
+                            />
                           </div>
 
                           <div className="space-y-2">
                             <Label className="text-xs">Body Font</Label>
-                            <Select
-                              value={currentStyles["font-sans"]}
-                              onValueChange={(value) =>
-                                updateStyle("font-sans", value)
-                              }
-                            >
-                              <SelectTrigger className="text-xs rounded-lg">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="rounded-lg">
-                                {FONT_FAMILIES.map((font) => (
-                                  <SelectItem
-                                    key={font.value}
-                                    value={font.value}
-                                    className="text-xs rounded-md"
-                                  >
-                                    <span style={{ fontFamily: font.value }}>
-                                      {font.label}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            <FontSelector
+                              value={currentStyles["font-sans"]?.replace(/,.*$/, '') || "Inter"}
+                              onChange={(value) => {
+                                const fontFamily = `${value}, sans-serif`;
+                                updateStyle("font-sans", fontFamily);
+                              }}
+                              placeholder="Select body font..."
+                              previewText="Body text preview"
+                              categories={['sans-serif', 'all']}
+                              className="text-xs"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label className="text-xs">Monospace Font</Label>
+                            <FontSelector
+                              value={currentStyles["font-mono"]?.replace(/,.*$/, '') || "JetBrains Mono"}
+                              onChange={(value) => {
+                                const fontFamily = `${value}, monospace`;
+                                updateStyle("font-mono", fontFamily);
+                              }}
+                              placeholder="Select monospace font..."
+                              previewText="const code = 'preview';"
+                              categories={['monospace', 'all']}
+                              className="text-xs"
+                            />
                           </div>
                         </div>
 
@@ -674,6 +968,170 @@ export default function ThemeGeneratorPage() {
                   })()}
                 </CollapsibleContent>
               </Collapsible>
+
+              <Separator />
+
+              {/* Radius */}
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium text-sm hover:underline">
+                  Radius
+                  <ChevronDown className="h-4 w-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-3 py-2">
+                  {(() => {
+                    const currentStyles = getCurrentStyles();
+                    const radiusValue = parseFloat(currentStyles.radius?.replace('rem', '') || '0.5');
+                    return (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs font-medium">Radius</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {radiusValue.toFixed(3)} rem
+                          </span>
+                        </div>
+                        <Slider
+                          value={[radiusValue]}
+                          onValueChange={([value]) => updateStyle("radius", `${value}rem`)}
+                          max={2}
+                          min={0}
+                          step={0.125}
+                          className="w-full"
+                        />
+                      </div>
+                    );
+                  })()}
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Separator />
+
+              {/* Shadow */}
+              <Collapsible>
+                <CollapsibleTrigger className="flex w-full items-center justify-between py-2 font-medium text-sm hover:underline">
+                  Shadow
+                  <ChevronDown className="h-4 w-4" />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="space-y-4 py-2">
+                  {(() => {
+                    const currentStyles = getCurrentStyles();
+                    const shadowColor = currentStyles["shadow-color"] || "oklch(0 0 0)";
+                    const shadowOpacity = parseFloat(currentStyles["shadow-opacity"] || "0.1");
+                    const blurRadius = parseFloat(currentStyles["shadow-blur"] || "3");
+                    const shadowSpread = parseFloat(currentStyles["shadow-spread"] || "0");
+                    const offsetX = parseFloat(currentStyles["shadow-offset-x"] || "0");
+                    const offsetY = parseFloat(currentStyles["shadow-offset-y"] || "1");
+
+                    // Generate shadow preview for display
+                    const previewShadow = `${offsetX}px ${offsetY}px ${blurRadius}px ${shadowSpread}px rgba(0, 0, 0, ${shadowOpacity})`;
+
+                    return (
+                      <>
+                        {/* Shadow Preview */}
+                        <div className="space-y-2">
+                          <Label className="text-xs font-medium">Shadow Preview</Label>
+                          <div 
+                            className="w-full h-16 bg-card border rounded-lg flex items-center justify-center text-xs text-muted-foreground"
+                            style={{ boxShadow: `var(--preview-shadow, ${previewShadow})` }}
+                          >
+                            Preview Card
+                          </div>
+                        </div>
+
+                        <ColorInput
+                          label="Shadow Color"
+                          value={shadowColor}
+                          onChange={(value) => updateStyle("shadow-color", value)}
+                        />
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Shadow Opacity</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {(shadowOpacity * 100).toFixed(0)}%
+                            </span>
+                          </div>
+                          <Slider
+                            value={[shadowOpacity]}
+                            onValueChange={([value]) => updateStyle("shadow-opacity", value.toString())}
+                            max={1}
+                            min={0}
+                            step={0.05}
+                            className="w-full"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Blur Radius</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {blurRadius}px
+                            </span>
+                          </div>
+                          <Slider
+                            value={[blurRadius]}
+                            onValueChange={([value]) => updateStyle("shadow-blur", value.toString())}
+                            max={50}
+                            min={0}
+                            step={1}
+                            className="w-full"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Spread</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {shadowSpread}px
+                            </span>
+                          </div>
+                          <Slider
+                            value={[shadowSpread]}
+                            onValueChange={([value]) => updateStyle("shadow-spread", value.toString())}
+                            max={20}
+                            min={-20}
+                            step={1}
+                            className="w-full"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Offset X</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {offsetX}px
+                            </span>
+                          </div>
+                          <Slider
+                            value={[offsetX]}
+                            onValueChange={([value]) => updateStyle("shadow-offset-x", value.toString())}
+                            max={20}
+                            min={-20}
+                            step={1}
+                            className="w-full"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs font-medium">Offset Y</Label>
+                            <span className="text-xs text-muted-foreground">
+                              {offsetY}px
+                            </span>
+                          </div>
+                          <Slider
+                            value={[offsetY]}
+                            onValueChange={([value]) => updateStyle("shadow-offset-y", value.toString())}
+                            max={20}
+                            min={-20}
+                            step={1}
+                            className="w-full"
+                          />
+                        </div>
+                      </>
+                    );
+                  })()}
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </div>
 
@@ -709,11 +1167,17 @@ export default function ThemeGeneratorPage() {
       </div>
 
       <Toaster />
+      
+      <CSSImportDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onImport={handleCSSImport}
+      />
     </SidebarInset>
   );
 }
 
-// Color Input Component
+// Enhanced Color Input Component with Color Picker
 function ColorInput({
   label,
   value,
@@ -723,19 +1187,51 @@ function ColorInput({
   value: string;
   onChange: (value: string) => void;
 }) {
+  // Get the actual color to display in the picker
+  const displayColor = React.useMemo(() => {
+    if (isValidHexColor(value)) {
+      return value;
+    }
+    if (isOklchColor(value)) {
+      return oklchToHex(value);
+    }
+    // For CSS variables or other formats, use a default but show the actual value
+    return '#6366f1';
+  }, [value]);
+  
+  const handleColorPickerChange = (hexColor: string) => {
+    // Convert hex to OKLCH and update
+    const oklchColor = hexToOklch(hexColor);
+    onChange(oklchColor);
+  };
+  
+  const handleInputChange = (inputValue: string) => {
+    // If user enters a hex color, convert to OKLCH
+    if (isValidHexColor(inputValue)) {
+      const oklchColor = hexToOklch(inputValue);
+      onChange(oklchColor);
+    } else {
+      // Allow direct OKLCH or CSS variable input
+      onChange(inputValue);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Label className="text-xs font-medium">{label}</Label>
-      <div className="flex gap-2">
-        <div
-          className="w-8 h-8 rounded-lg border-2 border-border flex-shrink-0"
-          style={{ backgroundColor: value }}
-        />
+      <div className="flex gap-2 items-center">
+        <div className="flex-shrink-0">
+          <ColorPicker
+            label=""
+            color={displayColor}
+            onChange={handleColorPickerChange}
+          />
+        </div>
         <Input
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => handleInputChange(e.target.value)}
           placeholder="oklch(0.81 0.10 252)"
-          className="text-xs flex-1 rounded-lg"
+          className="text-xs flex-1 rounded-lg font-mono"
         />
       </div>
     </div>
@@ -757,7 +1253,10 @@ function DashboardPreview() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="rounded-xl">
+        <Card 
+          className="rounded-xl" 
+          style={{ boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))' }}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -770,7 +1269,10 @@ function DashboardPreview() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl">
+        <Card 
+          className="rounded-xl"
+          style={{ boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))' }}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Subscriptions</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -783,7 +1285,10 @@ function DashboardPreview() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl">
+        <Card 
+          className="rounded-xl"
+          style={{ boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))' }}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Sales</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -796,7 +1301,10 @@ function DashboardPreview() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-xl">
+        <Card 
+          className="rounded-xl"
+          style={{ boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))' }}
+        >
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Now</CardTitle>
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
@@ -811,10 +1319,17 @@ function DashboardPreview() {
       </div>
 
       {/* Line Chart */}
-      <Card className="rounded-xl">
+      <Card 
+        className="rounded-xl border"
+        style={{ 
+          boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))',
+          borderColor: 'var(--border)',
+          backgroundColor: 'var(--card)'
+        }}
+      >
         <CardHeader>
-          <CardTitle className="font-serif">Revenue Trend</CardTitle>
-          <CardDescription>
+          <CardTitle className="font-serif" style={{ color: 'var(--card-foreground)' }}>Revenue Trend</CardTitle>
+          <CardDescription style={{ color: 'var(--muted-foreground)' }}>
             Monthly revenue over the past 12 months
           </CardDescription>
         </CardHeader>
@@ -826,10 +1341,17 @@ function DashboardPreview() {
       </Card>
 
       {/* Area Chart */}
-      <Card className="rounded-xl">
+      <Card 
+        className="rounded-xl border"
+        style={{ 
+          boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))',
+          borderColor: 'var(--border)',
+          backgroundColor: 'var(--card)'
+        }}
+      >
         <CardHeader>
-          <CardTitle className="font-serif">User Growth</CardTitle>
-          <CardDescription>Active users and new registrations</CardDescription>
+          <CardTitle className="font-serif" style={{ color: 'var(--card-foreground)' }}>User Growth</CardTitle>
+          <CardDescription style={{ color: 'var(--muted-foreground)' }}>Active users and new registrations</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[200px] w-full">
@@ -838,11 +1360,67 @@ function DashboardPreview() {
         </CardContent>
       </Card>
 
-      {/* Bar Chart */}
-      <Card className="rounded-xl">
+      {/* Border Style Preview */}
+      <Card 
+        className="rounded-xl border-2"
+        style={{ 
+          boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))',
+          borderColor: 'var(--border)',
+          backgroundColor: 'var(--card)'
+        }}
+      >
         <CardHeader>
-          <CardTitle className="font-serif">Sales by Category</CardTitle>
-          <CardDescription>
+          <CardTitle className="font-serif" style={{ color: 'var(--card-foreground)' }}>Border Style Preview</CardTitle>
+          <CardDescription style={{ color: 'var(--muted-foreground)' }}>Example with thicker border to showcase border colors</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div 
+              className="h-16 rounded-lg border flex items-center justify-center text-sm"
+              style={{ 
+                borderColor: 'var(--border)',
+                backgroundColor: 'var(--muted)',
+                color: 'var(--muted-foreground)'
+              }}
+            >
+              Primary Border
+            </div>
+            <div 
+              className="h-16 rounded-lg border-2 flex items-center justify-center text-sm"
+              style={{ 
+                borderColor: 'var(--ring)',
+                backgroundColor: 'var(--muted)',
+                color: 'var(--muted-foreground)'
+              }}
+            >
+              Focus Ring
+            </div>
+            <div 
+              className="h-16 rounded-lg border-dashed border-2 flex items-center justify-center text-sm"
+              style={{ 
+                borderColor: 'var(--input)',
+                backgroundColor: 'var(--muted)',
+                color: 'var(--muted-foreground)'
+              }}
+            >
+              Input Border
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Bar Chart */}
+      <Card 
+        className="rounded-xl border"
+        style={{ 
+          boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))',
+          borderColor: 'var(--border)',
+          backgroundColor: 'var(--card)'
+        }}
+      >
+        <CardHeader>
+          <CardTitle className="font-serif" style={{ color: 'var(--card-foreground)' }}>Sales by Category</CardTitle>
+          <CardDescription style={{ color: 'var(--muted-foreground)' }}>
             Performance across different product categories
           </CardDescription>
         </CardHeader>
@@ -854,10 +1432,17 @@ function DashboardPreview() {
       </Card>
 
       {/* Pie Chart */}
-      <Card className="rounded-xl">
+      <Card 
+        className="rounded-xl border"
+        style={{ 
+          boxShadow: 'var(--preview-shadow, 0 1px 3px 0 rgb(0 0 0 / 0.1))',
+          borderColor: 'var(--border)',
+          backgroundColor: 'var(--card)'
+        }}
+      >
         <CardHeader>
-          <CardTitle className="font-serif">Traffic Sources</CardTitle>
-          <CardDescription>Website traffic breakdown by source</CardDescription>
+          <CardTitle className="font-serif" style={{ color: 'var(--card-foreground)' }}>Traffic Sources</CardTitle>
+          <CardDescription style={{ color: 'var(--muted-foreground)' }}>Website traffic breakdown by source</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[300px] w-full flex items-center justify-center">
@@ -871,6 +1456,16 @@ function DashboardPreview() {
 
 // Chart Components
 function LineChartComponent() {
+  const showGrid = (() => {
+    try {
+      const root = document.documentElement;
+      const showGridLines = root.style.getPropertyValue('--show-grid-lines');
+      return showGridLines !== 'false';
+    } catch {
+      return true; // Default to showing grid
+    }
+  })();
+
   return (
     <svg
       width="100%"
@@ -885,8 +1480,8 @@ function LineChartComponent() {
         </linearGradient>
       </defs>
 
-      {/* Grid lines */}
-      {[0, 1, 2, 3, 4].map((i) => (
+      {/* Grid lines - conditionally rendered */}
+      {showGrid && [0, 1, 2, 3, 4].map((i) => (
         <line
           key={i}
           x1="0"
@@ -970,6 +1565,16 @@ function AreaChartComponent() {
 function BarChartComponent() {
   const data = [45, 78, 62, 89, 56, 73, 91, 67];
   const maxValue = Math.max(...data);
+  
+  const showGrid = (() => {
+    try {
+      const root = document.documentElement;
+      const showGridLines = root.style.getPropertyValue('--show-grid-lines');
+      return showGridLines !== 'false';
+    } catch {
+      return true; // Default to showing grid
+    }
+  })();
 
   return (
     <svg
@@ -978,6 +1583,19 @@ function BarChartComponent() {
       viewBox="0 0 600 200"
       className="overflow-visible"
     >
+      {/* Grid lines - conditionally rendered */}
+      {showGrid && [0, 1, 2, 3, 4].map((i) => (
+        <line
+          key={`grid-${i}`}
+          x1="0"
+          y1={i * 40}
+          x2="600"
+          y2={i * 40}
+          stroke="var(--border)"
+          strokeWidth="1"
+          opacity="0.2"
+        />
+      ))}
       {data.map((value, i) => {
         const barHeight = (value / maxValue) * 160;
         const x = i * 70 + 20;

@@ -16,6 +16,7 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals"), 
   {
     files: ["**/*.ts", "**/*.tsx"],
+    ignores: ["**/*.test.tsx", "**/*.test.ts", "**/__tests__/**"],
     languageOptions: {
       parser: typescriptParser,
       parserOptions: {

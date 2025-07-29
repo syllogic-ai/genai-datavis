@@ -16,11 +16,11 @@ export function DragHandle({ isVisible, className = "" }: DragHandleProps) {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
-          className={`absolute -top-2 -left-2 w-7 h-7 md:w-6 md:h-6 bg-background border border-primary/20 z-40 hover:bg-secondary text-primary rounded-md flex items-center justify-center shadow-md transition-colors cursor-move touch-manipulation ${className}`}
+          className={`w-8 h-8 bg-background border border-primary/20 z-40 hover:bg-secondary text-primary rounded-md flex items-center justify-center shadow-md transition-colors cursor-move touch-manipulation ${className}`}
           style={{ zIndex: 30 }}
           title="Drag to reorder"
         >
-          <IconGripVertical className="w-4 h-4 md:w-3 md:h-3 text-primary/70" />
+          <IconGripVertical className="w-5 h-5 text-primary/70" />
         </motion.div>
       )}
     </AnimatePresence>

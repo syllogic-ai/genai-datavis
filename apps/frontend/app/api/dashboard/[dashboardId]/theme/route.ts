@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import db from "@/db";
-import { dashboards, themes } from "@/db/schema";
+import { dashboards, themes, ThemeStyleProps } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { THEME_PRESETS } from "@/lib/theme-presets";
 
 // GET /api/dashboard/[dashboardId]/theme - Get the active theme for a dashboard
 export async function GET(
@@ -34,9 +35,31 @@ export async function GET(
       return NextResponse.json({ error: "Dashboard not found" }, { status: 404 });
     }
 
+    const dashboard = result[0].dashboard;
+    let theme = result[0].theme;
+
+    // If no theme found in database, check if it's a preset theme
+    if (!theme && dashboard.activeThemeId) {
+      const presetTheme = THEME_PRESETS.find(p => p.id === dashboard.activeThemeId);
+      if (presetTheme) {
+        // Convert preset to theme format
+        theme = {
+          id: presetTheme.id,
+          userId: userId,
+          name: presetTheme.name,
+          description: presetTheme.description,
+          isDefault: false,
+          presetId: presetTheme.id,
+          styles: presetTheme.styles as { light: ThemeStyleProps; dark: ThemeStyleProps },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+      }
+    }
+
     return NextResponse.json({ 
-      dashboard: result[0].dashboard,
-      theme: result[0].theme 
+      dashboard,
+      theme 
     });
   } catch (error) {
     console.error("Error fetching dashboard theme:", error);
@@ -72,14 +95,19 @@ export async function PUT(
       return NextResponse.json({ error: "Dashboard not found" }, { status: 404 });
     }
 
-    // If themeId is provided, verify the theme exists and belongs to the user
+    // If themeId is provided, verify the theme exists (either in database or as preset)
     if (themeId) {
-      const theme = await db.select().from(themes)
+      // First check if it's a user theme
+      const userTheme = await db.select().from(themes)
         .where(and(eq(themes.id, themeId), eq(themes.userId, userId)))
         .limit(1);
 
-      if (!theme[0]) {
-        return NextResponse.json({ error: "Theme not found" }, { status: 404 });
+      // If not found, check if it's a preset theme
+      if (!userTheme[0]) {
+        const presetTheme = THEME_PRESETS.find(p => p.id === themeId);
+        if (!presetTheme) {
+          return NextResponse.json({ error: "Theme not found" }, { status: 404 });
+        }
       }
     }
 

@@ -9,11 +9,15 @@ import {
 import type { ChartSpec } from "@/types/chart-types";
 import moment from "moment";
 import { memo } from "react";
+import { useThemeGridLines } from "@/hooks/useThemeGridLines";
 
 /**
  * Specialized renderer for bar charts - memoized to prevent unnecessary re-renders
  */
 export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec: ChartSpec }) {
+  // Get theme setting for grid lines - must be called at the top level
+  const showGridLines = useThemeGridLines();
+
   if (spec.chartType !== 'bar') {
     console.error(`BarChartRenderer: Expected chart type 'bar', got '${spec.chartType}'`);
     return null;
@@ -67,10 +71,12 @@ export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec:
           barSize={spec.barConfig?.barSize}
           barCategoryGap={spec.barConfig?.barCategoryGap}
         >
-          <CartesianGrid 
-            vertical={isHorizontal} 
-            horizontal={!isHorizontal} 
-          />
+          {showGridLines && (
+            <CartesianGrid 
+              vertical={isHorizontal} 
+              horizontal={!isHorizontal} 
+            />
+          )}
           
           {/* The X and Y axes are functionally swapped in horizontal mode */}
           <XAxis

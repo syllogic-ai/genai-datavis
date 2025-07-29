@@ -80,6 +80,16 @@ export function AppSidebar({
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
+
+            {/* Theme Generator Button */}
+            <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/dashboard/themes" className={pathname === '/dashboard/themes' ? 'bg-secondary' : ''}>
+                <Palette className="size-4" />
+                <span>Themes</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           
           {/* Settings Button */}
           <SidebarMenuItem>
@@ -91,15 +101,7 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
           
-          {/* Theme Generator Button */}
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <Link href="/dashboard/themes" className={pathname === '/dashboard/themes' ? 'bg-secondary' : ''}>
-                <Palette className="size-4" />
-                <span>Theme Generator</span>
-              </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+        
         </SidebarMenu>
       </SidebarHeader>
       

@@ -168,14 +168,14 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   }
 
   return (
-    <div className="h-full flex flex-col  bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg  transition-all duration-200 p-4">
+    <div className="h-full flex flex-col border rounded-lg transition-all duration-200 p-4" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--card-foreground)', boxShadow: 'var(--shadow)' }}>
       {widget.config.title && (
         <div className="mb-1 flex-shrink-0">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-1">
+          <h3 className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--card-foreground)' }}>
             {widget.config.title}
           </h3>
           {widget.config.description && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+            <p className="text-xs line-clamp-1" style={{ color: 'var(--muted-foreground)' }}>
               {widget.config.description}
             </p>
           )}
