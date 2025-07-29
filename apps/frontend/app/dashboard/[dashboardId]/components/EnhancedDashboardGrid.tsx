@@ -7,9 +7,8 @@ import { v4 as uuidv4 } from "uuid";
 import { useResponsiveGrid } from "@/components/dashboard/LayoutContext";
 import { cn } from "@/lib/utils";
 
-// Import required CSS for react-grid-layout
+// Import required CSS for react-grid-layout (no resizable CSS - resize disabled)
 import "react-grid-layout/css/styles.css";
-import "react-resizable/css/styles.css";
 
 import { Widget, GRID_PROPS } from "@/types/enhanced-dashboard-types";
 import { WidgetWrapper } from "./WidgetWrapper";
@@ -273,7 +272,7 @@ export function EnhancedDashboardGrid({
     setIsDragging(false);
   }, []);
   
-  // Handle layout changes with recovery logic
+  // Handle layout changes with recovery logic and vertical-only constraint
   const handleLayoutChange = useCallback((currentLayout: Layout[], allLayouts: Layouts) => {
     // Skip updates during transitions to prevent layout jumps
     if (isTransitioning || isRecovering) return;
@@ -283,19 +282,25 @@ export function EnhancedDashboardGrid({
       const layoutItem = currentLayout.find((item) => item.i === widget.layout.i);
       if (!layoutItem) return widget;
       
-      // Check if layout actually changed
+      // Constrain to vertical-only movement by preserving original x position
+      // Only allow y position changes for reordering
+      const constrainedLayout = {
+        ...layoutItem,
+        x: widget.layout.x, // Keep original x position - no horizontal movement
+        w: widget.layout.w, // Keep original width - no horizontal resizing
+      };
+      
+      // Check if layout actually changed (only y position matters now)
       const hasChanged = 
-        layoutItem.x !== widget.layout.x ||
-        layoutItem.y !== widget.layout.y ||
-        layoutItem.w !== widget.layout.w ||
-        layoutItem.h !== widget.layout.h;
+        constrainedLayout.y !== widget.layout.y ||
+        constrainedLayout.h !== widget.layout.h;
       
       if (!hasChanged) return widget;
       
       return {
         ...widget,
         layout: {
-          ...layoutItem,
+          ...constrainedLayout,
           i: widget.layout.i, // Preserve the ID
         },
       };

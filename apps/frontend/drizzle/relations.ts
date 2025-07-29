@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { dashboards, files, users, chats, widgets, themes } from "./schema";
+import { dashboards, files, users, chats, widgets, themes } from "../db/schema";
 
 export const filesRelations = relations(files, ({one}) => ({
 	dashboard: one(dashboards, {
@@ -20,13 +20,17 @@ export const dashboardsRelations = relations(dashboards, ({one, many}) => ({
 	}),
 	chats: many(chats),
 	widgets: many(widgets),
-	themes: many(themes),
+	activeTheme: one(themes, {
+		fields: [dashboards.activeThemeId],
+		references: [themes.id]
+	}),
 }));
 
 export const usersRelations = relations(users, ({many}) => ({
 	files: many(files),
 	dashboards: many(dashboards),
 	chats: many(chats),
+	themes: many(themes),
 }));
 
 export const chatsRelations = relations(chats, ({one, many}) => ({
@@ -52,9 +56,10 @@ export const widgetsRelations = relations(widgets, ({one}) => ({
 	}),
 }));
 
-export const themesRelations = relations(themes, ({one}) => ({
-	dashboard: one(dashboards, {
-		fields: [themes.dashboardId],
-		references: [dashboards.id]
+export const themesRelations = relations(themes, ({one, many}) => ({
+	user: one(users, {
+		fields: [themes.userId],
+		references: [users.id]
 	}),
+	activeDashboards: many(dashboards),
 }));

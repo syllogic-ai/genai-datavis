@@ -1,9 +1,21 @@
-import { Layout } from "react-grid-layout";
+export interface Layout {
+  i: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  minW?: number;
+  maxW?: number;
+  minH?: number;
+  maxH?: number;
+  isResizable?: boolean;
+}
 
 export interface Widget {
   id: string;
   type: 'text' | 'chart' | 'kpi' | 'table';
-  layout: Layout;
+  layout?: Layout; // Legacy grid layout (for backward compatibility)
+  order?: number; // New order-based positioning
   config: Record<string, any>;
   data?: any;
   sql?: string | null;
@@ -15,26 +27,11 @@ export interface Widget {
 
 export interface DashboardState {
   widgets: Widget[];
-  layouts: { [key: string]: Layout[] };
 }
 
 export interface WidgetTypeConfig {
   type: Widget['type'];
   title: string;
   icon: React.ReactNode;
-  defaultLayout: { w: number; h: number };
   defaultConfig: Record<string, any>;
 }
-
-export const GRID_PROPS = {
-  className: "layout",
-  cols: { lg: 12, md: 8, sm: 4, xs: 2, xxs: 1 },
-  rowHeight: 100,
-  margin: [16, 16] as [number, number],
-  containerPadding: [16, 16] as [number, number],
-  compactType: "vertical" as const,
-  preventCollision: false,
-  isDraggable: true,
-  isResizable: false, // Disable built-in resizing completely
-  resizeHandles: [] as Array<'s' | 'w' | 'e' | 'n' | 'sw' | 'nw' | 'se' | 'ne'>,
-};

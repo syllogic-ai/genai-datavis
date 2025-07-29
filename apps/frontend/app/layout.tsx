@@ -4,7 +4,6 @@ import "./globals.css";
 
 import { Navbar } from "@/components/ui/navbar";
 import { ClerkProvider } from '@clerk/nextjs';
-
 const openSans = Open_Sans({
   variable: "--font-open-sans",
   subsets: ["latin"],

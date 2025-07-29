@@ -14,12 +14,13 @@ export default function SettingsLayout({
   const router = useRouter();
   
   const tabs = [
-    { value: "theme", label: "Theme", href: "/dashboard/settings/theme" },
+    { value: "themes", label: "Theme Generator", href: "/dashboard/themes" },
     { value: "account", label: "Account", href: "/dashboard/settings/account" },
     { value: "billing", label: "Billing", href: "/dashboard/settings/billing" },
   ];
 
-  const currentTab = tabs.find(tab => pathname === tab.href)?.value || "theme";
+  const currentTab = tabs.find(tab => pathname === tab.href)?.value || 
+                    (pathname === "/dashboard/themes" ? "themes" : "account");
 
   return (
     <>

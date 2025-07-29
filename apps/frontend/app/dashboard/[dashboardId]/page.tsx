@@ -1,9 +1,11 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
-import { EnhancedDashboardGrid } from "./components/EnhancedDashboardGrid";
+import { SimpleDashboardLayout } from "./components/SimpleDashboardLayout";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
 import { ChatSidebar } from "@/components/dashboard/chat-sidebar";
+import { TextEditorProvider } from "./components/TextEditorContext";
+import { DashboardToolbar } from "./components/DashboardToolbar";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { useDashboardState } from "./hooks/useDashboardState";
@@ -340,12 +342,13 @@ function EnhancedDashboardContent() {
 
   // Full Dashboard (Phase 3)
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col"
-    >
+    <TextEditorProvider>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.98 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col"
+      >
       {/* Header with Publish Button */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -357,6 +360,9 @@ function EnhancedDashboardContent() {
           dashboardId={dashboardId}
         />
       </motion.div>
+
+      {/* Text Editor Toolbar */}
+      <DashboardToolbar />
 
       {/* Main Content */}
       <motion.div 
@@ -373,7 +379,7 @@ function EnhancedDashboardContent() {
           }}
         >
           <div className="flex-1 overflow-auto" style={{ scrollbarWidth: 'none' }}>
-            <EnhancedDashboardGrid
+            <SimpleDashboardLayout
               widgets={widgets}
               onUpdateWidgets={handleUpdateWidgets}
               onAddWidget={(fn) => { addWidgetRef.current = fn; }}
@@ -534,6 +540,7 @@ function EnhancedDashboardContent() {
       </AnimatePresence>
 
     </motion.div>
+    </TextEditorProvider>
   );
 }
 

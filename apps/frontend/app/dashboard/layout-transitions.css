@@ -45,9 +45,19 @@
   border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Resize handle transitions */
+/* Resize handle transitions - COMPLETELY HIDDEN */
 .react-grid-item > .react-resizable-handle {
+  display: none !important; /* Hide all resize handles completely */
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
   transition: all var(--layout-transition-duration) var(--layout-transition-easing);
+}
+
+/* Additional safety to hide all resize handles */
+.react-resizable-handle {
+  display: none !important;
+  visibility: hidden !important;
 }
 
 /* Sidebar transitions */

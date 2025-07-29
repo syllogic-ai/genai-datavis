@@ -5,14 +5,10 @@ import { Theme, ThemeStyleProps } from "@/db/schema";
 
 interface DashboardThemeContextType {
   theme: Theme | null;
-  themes: Theme[];
   activeTheme: Theme | null;
   isLoading: boolean;
   error: string | null;
-  setActiveTheme: (themeId: string) => Promise<void>;
-  createTheme: (theme: Partial<Theme>) => Promise<void>;
-  updateTheme: (themeId: string, updates: Partial<Theme>) => Promise<void>;
-  deleteTheme: (themeId: string) => Promise<void>;
+  setActiveTheme: (themeId: string | null) => Promise<void>;
   getThemeStyles: () => ThemeStyleProps | null;
 }
 
@@ -25,7 +21,7 @@ export function DashboardThemeProvider({
   dashboardId: string;
   children: React.ReactNode;
 }) {
-  const [themes, setThemes] = useState<Theme[]>([]);
+  
   const [activeTheme, setActiveThemeState] = useState<Theme | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,9 +67,9 @@ export function DashboardThemeProvider({
     };
   }, []);
 
-  // Fetch themes for the dashboard
+  // Load dashboard theme on mount
   useEffect(() => {
-    fetchThemes();
+    loadDashboardTheme();
   }, [dashboardId]);
 
   // Apply active theme to CSS variables
@@ -92,86 +88,39 @@ export function DashboardThemeProvider({
     }
   }, [activeTheme, isDark]);
 
-  const fetchThemes = async () => {
+  const loadDashboardTheme = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/dashboard/${dashboardId}/themes`);
-      if (!response.ok) throw new Error("Failed to fetch themes");
+      setError(null);
+      
+      const response = await fetch(`/api/dashboard/${dashboardId}/theme`);
+      if (!response.ok) throw new Error('Failed to get dashboard theme');
       
       const data = await response.json();
-      console.log('Fetched themes:', data.themes);
-      setThemes(data.themes);
-      
-      // Set the active theme
-      const active = data.themes.find((t: Theme) => t.isActive);
-      console.log('Active theme:', active);
-      setActiveThemeState(active || null);
+      console.log('Dashboard theme:', data.theme);
+      setActiveThemeState(data.theme);
     } catch (err) {
-      console.error('Error fetching themes:', err);
-      setError(err instanceof Error ? err.message : "Failed to fetch themes");
+      console.error('Error loading dashboard theme:', err);
+      setError(err instanceof Error ? err.message : "Failed to load theme");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const setActiveTheme = async (themeId: string) => {
+  const setActiveTheme = async (themeId: string | null) => {
     try {
-      const response = await fetch(`/api/dashboard/${dashboardId}/themes/${themeId}/activate`, {
-        method: "POST",
+      const response = await fetch(`/api/dashboard/${dashboardId}/theme`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeId }),
       });
       
-      if (!response.ok) throw new Error("Failed to activate theme");
-      
-      // Refresh themes
-      await fetchThemes();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to activate theme");
-    }
-  };
+      if (!response.ok) throw new Error('Failed to set dashboard theme');
 
-  const createTheme = async (theme: Partial<Theme>) => {
-    try {
-      const response = await fetch(`/api/dashboard/${dashboardId}/themes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(theme),
-      });
-      
-      if (!response.ok) throw new Error("Failed to create theme");
-      
-      await fetchThemes();
+      // Reload the theme to get updated data
+      await loadDashboardTheme();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create theme");
-    }
-  };
-
-  const updateTheme = async (themeId: string, updates: Partial<Theme>) => {
-    try {
-      const response = await fetch(`/api/dashboard/${dashboardId}/themes/${themeId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
-      
-      if (!response.ok) throw new Error("Failed to update theme");
-      
-      await fetchThemes();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update theme");
-    }
-  };
-
-  const deleteTheme = async (themeId: string) => {
-    try {
-      const response = await fetch(`/api/dashboard/${dashboardId}/themes/${themeId}`, {
-        method: "DELETE",
-      });
-      
-      if (!response.ok) throw new Error("Failed to delete theme");
-      
-      await fetchThemes();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete theme");
+      setError(err instanceof Error ? err.message : "Failed to set theme");
     }
   };
 
@@ -182,14 +131,10 @@ export function DashboardThemeProvider({
 
   const value: DashboardThemeContextType = {
     theme: activeTheme,
-    themes,
     activeTheme,
     isLoading,
     error,
     setActiveTheme,
-    createTheme,
-    updateTheme,
-    deleteTheme,
     getThemeStyles,
   };
 

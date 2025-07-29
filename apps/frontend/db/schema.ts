@@ -33,6 +33,9 @@ export const dashboards = pgTable("dashboards", {
   // Setup state tracking
   setupCompleted: boolean("setup_completed").default(false).notNull(),
   
+  // Theme assignment - each dashboard can have one active theme
+  activeThemeId: text("active_theme_id").references(() => themes.id, { onDelete: "set null" }),
+  
   // Removed single file reference - now files reference dashboards instead
   
   createdAt: timestamp("created_at").defaultNow(),
@@ -59,8 +62,8 @@ export const widgets = pgTable("widgets", {
   // SQL query for the dashboard
   sql: text("sql"),
 
-  // React Grid Layout position
-  layout: jsonb("layout").notNull().$type<{
+  // React Grid Layout position (legacy - keep for backward compatibility)
+  layout: jsonb("layout").$type<{
     i: string;
     x: number;
     y: number;
@@ -72,6 +75,9 @@ export const widgets = pgTable("widgets", {
     maxH?: number;
     isResizable?: boolean;
   }>(),
+
+  // Simple order-based positioning (new system - optional for transition)
+  order: integer("order"),
   
   // Optional fields for enhanced functionality
   chatId: text("chat_id").references(() => chats.id), // If widget was created from chat
@@ -142,13 +148,13 @@ export const jobs = pgTable('jobs', {
   queueTimeMs: integer("queue_time_ms"),
 });
 
-// THEMES (dashboard-level theming system)
+// THEMES (global theme system - can be shared across dashboards)
 export const themes = pgTable("themes", {
   id: text("id").primaryKey(),
-  dashboardId: text("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   description: text("description"),
-  isActive: boolean("is_active").default(false).notNull(),
+  isDefault: boolean("is_default").default(false).notNull(), // Mark if this is a default/built-in theme
   
   // Complete theme styles for light/dark modes
   styles: jsonb("styles").$type<{

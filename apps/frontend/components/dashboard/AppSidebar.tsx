@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Command, Home, Plus, Settings } from "lucide-react";
+import { Command, Home, Plus, Settings, Palette } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import {
@@ -87,6 +87,16 @@ export function AppSidebar({
               <Link href="/dashboard/settings" className={pathname?.startsWith('/dashboard/settings') ? 'bg-secondary' : ''}>
                 <Settings className="size-4" />
                 <span>Settings</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          
+          {/* Theme Generator Button */}
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
+              <Link href="/dashboard/themes" className={pathname === '/dashboard/themes' ? 'bg-secondary' : ''}>
+                <Palette className="size-4" />
+                <span>Theme Generator</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

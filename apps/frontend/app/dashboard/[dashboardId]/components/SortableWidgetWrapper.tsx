@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { IconTrash } from "@tabler/icons-react";
 import {
   Dialog,
@@ -14,26 +16,37 @@ import {
 import { Button } from "@/components/ui/button";
 import { DragHandle } from "./shared/DragHandle";
 
-interface WidgetWrapperProps {
+interface SortableWidgetWrapperProps {
   children: React.ReactNode;
   onDelete: (id: string) => void;
   id: string;
   widgetType: string;
-  layout: any;
   isDragging: boolean;
 }
 
-export function WidgetWrapper({ 
+export function SortableWidgetWrapper({ 
   children, 
   onDelete, 
   id, 
   widgetType, 
-  layout, 
   isDragging
-}: WidgetWrapperProps) {
+}: SortableWidgetWrapperProps) {
   const [isHovered, setIsHovered] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging: isSortableDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
 
   const handleDelete = () => {
     setShowDeleteDialog(true);
@@ -48,7 +61,6 @@ export function WidgetWrapper({
     setShowDeleteDialog(false);
   };
 
-  // Force close dialog on unmount or when dragging starts
   const handleDialogOpenChange = (open: boolean) => {
     if (!open || isDragging) {
       setShowDeleteDialog(false);
@@ -70,17 +82,34 @@ export function WidgetWrapper({
   };
 
   return (
-    <div 
-      ref={containerRef}
-      className="relative h-full w-full group"
+    <motion.div
+      ref={setNodeRef}
+      style={style}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      layout={!isDragging}
+      className={`relative w-full group mb-2 ${
+        isSortableDragging ? 'z-50' : ''
+      }`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
       <AnimatePresence>
-        {/* Drag handle */}
-        <DragHandle 
-          isVisible={!isDragging && isHovered && !showDeleteDialog}
-        />
+        {/* Drag handle with drag listeners - positioned in middle for text blocks, top for others */}
+        <div
+          {...attributes}
+          {...listeners}
+          className={`absolute z-40 ${
+            widgetType === 'text' 
+              ? 'top-1/2 -translate-y-1/2 -left-2' 
+              : 'top-2 -left-2'
+          }`}
+        >
+          <DragHandle 
+            isVisible={!isDragging && isHovered && !showDeleteDialog}
+          />
+        </div>
         
         {/* Delete button */}
         {(!isDragging && isHovered && !showDeleteDialog) && (
@@ -98,12 +127,14 @@ export function WidgetWrapper({
         )}
       </AnimatePresence>
       
-      {/* Content wrapper - full size with no padding conflicts */}
-      <div className="h-full w-full overflow-hidden">
+      {/* Content wrapper with natural height - no borders for text blocks */}
+      <div className={`w-full bg-transparent rounded-lg transition-all ${
+        isSortableDragging ? 'opacity-50 scale-[0.98] shadow-lg' : ''
+      }`}>
         {children}
       </div>
 
-      {/* Delete confirmation dialog with proper state management */}
+      {/* Delete confirmation dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={handleDialogOpenChange}>
         <DialogContent onPointerDownOutside={(e) => e.preventDefault()} onEscapeKeyDown={cancelDelete}>
           <DialogHeader>
@@ -122,6 +153,6 @@ export function WidgetWrapper({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </motion.div>
   );
 }
