@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@clerk/nextjs';
 
 export interface JobHistoryItem {
@@ -56,7 +56,7 @@ export function useJobHistory(options: UseJobHistoryOptions = {}): UseJobHistory
     refreshInterval = 30000 // 30 seconds
   } = options;
 
-  const fetchJobHistory = async () => {
+  const fetchJobHistory = useCallback(async () => {
     if (!isSignedIn) return;
 
     try {
@@ -92,7 +92,7 @@ export function useJobHistory(options: UseJobHistoryOptions = {}): UseJobHistory
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [isSignedIn, dashboardId, limit]);
 
   useEffect(() => {
     fetchJobHistory();
@@ -101,7 +101,7 @@ export function useJobHistory(options: UseJobHistoryOptions = {}): UseJobHistory
       const interval = setInterval(fetchJobHistory, refreshInterval);
       return () => clearInterval(interval);
     }
-  }, [isSignedIn, dashboardId, limit, autoRefresh, refreshInterval]);
+  }, [isSignedIn, dashboardId, limit, autoRefresh, refreshInterval, fetchJobHistory]);
 
   return {
     jobs,

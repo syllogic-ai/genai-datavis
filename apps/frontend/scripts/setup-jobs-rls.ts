@@ -11,7 +11,7 @@ if (!DATABASE_URL) {
 }
 
 async function setupJobsRLS() {
-  const client = postgres(DATABASE_URL);
+  const client = postgres(DATABASE_URL!);
 
   try {
     console.log("🔒 Setting up RLS for jobs table...\n");

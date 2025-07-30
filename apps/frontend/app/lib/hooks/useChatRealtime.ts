@@ -122,7 +122,7 @@ export function useChatRealtime(
         channelRef.current = null;
       }
     };
-  }, [chatId, user?.id]);  // Only depend on these specific values
+  }, [chatId, user?.id, isSignedIn, options, user]);  // Only depend on these specific values
 
   // Clean up on unmount
   useEffect(() => {

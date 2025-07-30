@@ -9,6 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { SignOutButton } from "@clerk/nextjs";
+import Image from "next/image";
 
 import {
   DropdownMenu,
@@ -48,9 +49,11 @@ export function NavUser({ user }: NavUserProps) {
   const UserAvatar = ({ className }: { className?: string }) => (
     <div className={`h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center overflow-hidden ${className}`}>
       {user.avatar ? (
-        <img 
+        <Image 
           src={user.avatar} 
           alt={user.name}
+          width={32}
+          height={32}
           className="h-full w-full object-cover rounded-lg"
           onError={(e) => {
             // Fallback to initials on image error

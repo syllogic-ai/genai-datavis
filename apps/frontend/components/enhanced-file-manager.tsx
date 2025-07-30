@@ -214,10 +214,11 @@ export function EnhancedFileManager({
 
       processUploads();
     }
-  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, dashboardId, onFileAdded, onRefreshFiles]);
+  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, dashboardId, onFileAdded, onRefreshFiles, checkForDuplicates, uploadHook]);
 
   const getFileIcon = (type: string) => {
     if (!type) return <File className="w-4 h-4" />;
+    // eslint-disable-next-line jsx-a11y/alt-text
     if (type.startsWith('image/')) return <Image className="w-4 h-4" />;
     if (type.includes('csv') || type.includes('spreadsheet')) return <Table className="w-4 h-4" />;
     if (type.includes('json')) return <FileText className="w-4 h-4" />;

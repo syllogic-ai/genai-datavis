@@ -283,7 +283,11 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
     isSignedIn,
     userId,
     dashboardId,
-    enableCrossTabSync
+    enableCrossTabSync,
+    disconnect,
+    handleCrossTabSync,
+    handleDashboardChange,
+    handleWidgetChange
   ]);
 
   // Cleanup optimistic updates after timeout

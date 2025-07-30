@@ -75,7 +75,6 @@ export async function PUT(request: NextRequest) {
         .values({
           id: nanoid(),
           userId,
-          themeColors: themeColors || undefined,
           chartDefaults: chartDefaults || undefined,
           updatedAt: new Date()
         })
@@ -88,9 +87,7 @@ export async function PUT(request: NextRequest) {
         updatedAt: new Date()
       };
 
-      if (themeColors !== undefined) {
-        updateData.themeColors = themeColors;
-      }
+      // Note: themeColors is handled separately via themes table
       
       if (chartDefaults !== undefined) {
         updateData.chartDefaults = chartDefaults;

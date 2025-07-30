@@ -179,7 +179,8 @@ function EnhancedDashboardContent() {
     userId: '', // Will be filled by context
     description: null,
     icon: 'document-text',
-    fileId: null,
+    setupCompleted: true,
+    activeThemeId: null,
     createdAt: new Date('2024-01-01'), // Use fixed date to prevent infinite re-renders
     updatedAt: null,
   }), [dashboardId, dashboardName]);

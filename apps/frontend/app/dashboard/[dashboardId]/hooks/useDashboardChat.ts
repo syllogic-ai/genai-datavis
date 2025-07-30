@@ -60,7 +60,7 @@ export function useDashboardChat(dashboardId: string) {
     };
 
     getOrCreateChat();
-  }, [dashboardId, user?.id, isSignedIn]);
+  }, [dashboardId, user?.id, isSignedIn, user]);
 
   return {
     chatId,

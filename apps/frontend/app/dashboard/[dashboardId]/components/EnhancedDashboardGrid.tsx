@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { Responsive, WidthProvider, Layout, Layouts } from "react-grid-layout";
+import { Responsive, WidthProvider, Layout as GridLayout, Layouts } from "react-grid-layout";
 import { motion } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
 import { useResponsiveGrid } from "@/components/dashboard/LayoutContext";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 // Import required CSS for react-grid-layout (no resizable CSS - resize disabled)
 import "react-grid-layout/css/styles.css";
 
-import { Widget, GRID_PROPS } from "@/types/enhanced-dashboard-types";
+import { Widget, GRID_PROPS, Layout } from "@/types/enhanced-dashboard-types";
 import { WidgetWrapper } from "./WidgetWrapper";
 import { TextBlock } from "./widgets/TextBlock";
 import { ChartWidget } from "./widgets/ChartWidget";
@@ -110,7 +110,7 @@ export function EnhancedDashboardGrid({
     return () => clearTimeout(timeoutId);
   }, [availableWidth, effectiveBreakpoint]);
 
-  const calculateGridHeight = useCallback((layouts: Layout[]) => {
+  const calculateGridHeight = useCallback((layouts: GridLayout[]) => {
     if (layouts.length === 0) return 400; // Minimum height when empty
     
     // Filter out text widgets since they have h-fit and don't contribute to grid height
@@ -134,6 +134,7 @@ export function EnhancedDashboardGrid({
       // Sort widgets to maintain consistent order during recovery
       const sortedWidgets = [...widgets].sort((a, b) => {
         // First by y position, then by x position
+        if (!a.layout || !b.layout) return 0;
         if (a.layout.y !== b.layout.y) return a.layout.y - b.layout.y;
         return a.layout.x - b.layout.x;
       });
@@ -142,7 +143,14 @@ export function EnhancedDashboardGrid({
       const occupiedPositions: Array<{ x: number; y: number; w: number; h: number }> = [];
       
       layouts[breakpoint] = sortedWidgets.map(widget => {
-        const layout = { ...widget.layout };
+        const layout = { 
+          i: widget.id,
+          x: widget.layout?.x ?? 0,
+          y: widget.layout?.y ?? 0,
+          w: widget.layout?.w ?? 4,
+          h: widget.layout?.h ?? 4,
+          ...widget.layout 
+        };
         
         // Use intelligent adaptive sizing based on widget type and available space
         const optimalSize = getOptimalWidgetSize(widget.type, colsForBreakpoint, breakpoint);
@@ -184,10 +192,10 @@ export function EnhancedDashboardGrid({
 
   const findNextAvailablePosition = useCallback((newWidget: { w: number; h: number }, widgetType: string) => {
     const existingLayouts = widgets.map(w => ({ 
-      x: w.layout.x, 
-      y: w.layout.y, 
-      w: w.layout.w, 
-      h: w.type === 'text' && w.layout.h === 0 ? 1 : w.layout.h 
+      x: w.layout?.x ?? 0, 
+      y: w.layout?.y ?? 0, 
+      w: w.layout?.w ?? 4, 
+      h: w.type === 'text' && (w.layout?.h ?? 4) === 0 ? 1 : (w.layout?.h ?? 4)
     }));
     
     // Use current effective grid columns
@@ -279,8 +287,8 @@ export function EnhancedDashboardGrid({
     
     // Update widget layouts only if they've actually changed
     const updatedWidgets = widgets.map((widget, index) => {
-      const layoutItem = currentLayout.find((item) => item.i === widget.layout.i);
-      if (!layoutItem) return widget;
+      const layoutItem = currentLayout.find((item) => item.i === widget.id);
+      if (!layoutItem || !widget.layout) return widget;
       
       // Constrain to vertical-only movement by preserving original x position
       // Only allow y position changes for reordering
@@ -350,7 +358,7 @@ export function EnhancedDashboardGrid({
     }
   }, [onAddWidget, handleAddWidget]);
 
-  const gridHeight = calculateGridHeight(widgets.map(w => w.layout));
+  const gridHeight = calculateGridHeight(widgets.map(w => w.layout).filter((layout): layout is GridLayout => layout !== undefined));
 
   return (
     <>
@@ -413,11 +421,11 @@ export function EnhancedDashboardGrid({
             {widgets.map((widget, index) => {
               return (
                 <div 
-                  key={widget.layout.i} // Use only layout.i as key to prevent duplicates
+                  key={widget.id} // Use widget.id as key
                   className="react-grid-item-content bg-transparent h-full cursor-move overflow-visible "
                   data-widget-type={widget.type}
-                  onMouseEnter={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: true }))}
-                  onMouseLeave={() => setHoveredItems(prev => ({ ...prev, [widget.layout.i]: false }))}
+                  onMouseEnter={() => setHoveredItems(prev => ({ ...prev, [widget.id]: true }))}
+                  onMouseLeave={() => setHoveredItems(prev => ({ ...prev, [widget.id]: false }))}
                 >
                   <WidgetWrapper 
                     onDelete={handleDeleteWidget} 

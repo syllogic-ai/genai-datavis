@@ -12,7 +12,7 @@ if (!DATABASE_URL) {
 }
 
 async function setupJobsTable() {
-  const client = postgres(DATABASE_URL);
+  const client = postgres(DATABASE_URL!);
   const db = drizzle(client);
 
   try {

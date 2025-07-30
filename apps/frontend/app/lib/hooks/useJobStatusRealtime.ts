@@ -129,7 +129,7 @@ export function useJobStatusRealtime(
         }, (retryCount + 1) * 1000);
       }
     }
-  }, [jobId, userId, onStatusChange, onComplete, onError, hasCompleted]);
+  }, [jobId, userId, onStatusChange, onComplete, onError, hasCompleted, onProgress]);
 
   useEffect(() => {
     if (!jobId || !isSignedIn || !userId || hasCompleted) {
@@ -216,7 +216,7 @@ export function useJobStatusRealtime(
     return () => {
       disconnect();
     };
-  }, [jobId, isSignedIn, userId, hasCompleted]);
+  }, [jobId, isSignedIn, userId, hasCompleted, disconnect, fetchInitialJob, onComplete, onError, onProgress, onStatusChange]);
 
   return {
     job,

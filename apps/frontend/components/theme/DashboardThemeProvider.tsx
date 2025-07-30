@@ -151,8 +151,7 @@ export function DashboardThemeProvider({
       if (styleElement) {
         styleElement.remove();
       }
-      // Clean up global CSS variables when switching themes or unmounting
-      cleanupGlobalTheme();
+      // No need to clean up global variables since we don't apply them globally anymore
     };
   }, [activeTheme, isDark, dashboardId]);
 
@@ -203,7 +202,7 @@ export function useDashboardTheme() {
   return context;
 }
 
-// Apply theme styles to CSS variables - SCOPED TO DASHBOARD ONLY
+// Apply theme styles to CSS variables - SCOPED TO DASHBOARD CONTENT ONLY
 function applyThemeToDOM(theme: Theme, isDark: boolean, dashboardId: string) {
   const styles = isDark ? theme.styles.dark : theme.styles.light;
   
@@ -219,23 +218,13 @@ function applyThemeToDOM(theme: Theme, isDark: boolean, dashboardId: string) {
     existingStyle.remove();
   }
 
-  // Apply theme variables to global :root so they override default styles
-  const root = document.documentElement;
-  
-  // Apply all theme styles as CSS variables to :root
-  Object.entries(styles).forEach(([key, value]) => {
-    if (typeof value === 'string') {
-      root.style.setProperty(`--${key}`, value);
-    }
-  });
-
-  // Create a new style element with scoped CSS variables for cleanup
+  // Create a new style element with scoped CSS variables - NO GLOBAL APPLICATION
   const styleElement = document.createElement('style');
   styleElement.id = `theme-${dashboardId}`;
   
   let cssRules = `.${themeClassName} {\n`;
 
-  // Also add the variables to the scoped class for completeness
+  // Apply all theme styles as CSS variables to the scoped class only
   Object.entries(styles).forEach(([key, value]) => {
     if (typeof value === 'string') {
       cssRules += `  --${key}: ${value};
@@ -274,13 +263,7 @@ function applyThemeToDOM(theme: Theme, isDark: boolean, dashboardId: string) {
   // Generate the complete shadow string
   const dynamicShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowSpread}px ${shadowColorWithOpacity}`;
   
-  // Apply shadow variables to :root for global use
-  root.style.setProperty('--shadow', dynamicShadow);
-  root.style.setProperty('--shadow-sm', dynamicShadow);
-  root.style.setProperty('--shadow-md', dynamicShadow);
-  root.style.setProperty('--shadow-lg', dynamicShadow);
-  
-  // Add shadow CSS variables to scoped class as well
+  // Add shadow CSS variables to scoped class only (no global application)
   cssRules += `  --shadow: ${dynamicShadow};
 `;
   cssRules += `  --shadow-sm: ${dynamicShadow};

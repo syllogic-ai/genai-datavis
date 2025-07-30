@@ -33,5 +33,14 @@ export interface WidgetTypeConfig {
   type: Widget['type'];
   title: string;
   icon: React.ReactNode;
+  defaultLayout?: { w: number; h: number };
   defaultConfig: Record<string, any>;
 }
+
+export const GRID_PROPS = {
+  rowHeight: 60,
+  margin: [12, 12] as [number, number],
+  cols: 12,
+  breakpoints: { lg: 1200, md: 996, sm: 768, xs: 480, xxs: 0 },
+  colsForBreakpoints: { lg: 12, md: 10, sm: 6, xs: 4, xxs: 2 }
+};

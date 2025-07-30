@@ -1,5 +1,5 @@
-import { migrate } from 'drizzle-orm/neon-http/migrator';
-import { db } from '@/db';
+import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import db from '@/db';
 import { config } from 'dotenv';
 
 // Load environment variables

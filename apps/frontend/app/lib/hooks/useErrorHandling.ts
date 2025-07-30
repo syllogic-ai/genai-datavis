@@ -117,11 +117,8 @@ export function useErrorHandling(
 
       if (newError.recoverable) {
         toast.error(
-          `${message} ${newError.retryCount < maxRetries ? '(Click to retry)' : ''}`,
-          {
-            ...toastOptions,
-            onClick: newError.retryCount < maxRetries ? () => retryError(errorId) : undefined,
-          }
+          `${message} ${(newError.retryCount ?? 0) < maxRetries ? '(Click to retry)' : ''}`,
+          toastOptions
         );
       } else {
         toast.error(message, toastOptions);
@@ -129,10 +126,10 @@ export function useErrorHandling(
     }
 
     // Auto-retry if enabled and error is recoverable
-    if (autoRetry && newError.recoverable && newError.retryCount < maxRetries) {
+    if (autoRetry && newError.recoverable && (newError.retryCount ?? 0) < maxRetries) {
       const timer = setTimeout(() => {
         retryError(errorId);
-      }, retryDelay * Math.pow(2, newError.retryCount)); // Exponential backoff
+      }, retryDelay * Math.pow(2, newError.retryCount ?? 0)); // Exponential backoff
 
       retryTimersRef.current.set(errorId, timer);
     }
@@ -181,7 +178,7 @@ export function useErrorHandling(
   // Retry a specific error
   const retryError = useCallback(async (errorId: string) => {
     const error = errors.find(e => e.id === errorId);
-    if (!error || !error.recoverable || error.retryCount >= maxRetries) {
+    if (!error || !error.recoverable || (error.retryCount ?? 0) >= maxRetries) {
       return;
     }
 

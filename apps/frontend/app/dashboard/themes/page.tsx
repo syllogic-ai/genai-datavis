@@ -43,6 +43,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -57,6 +67,7 @@ import {
   BarChart3,
   PieChart,
   Upload,
+  Trash2,
 } from "lucide-react";
 import { Theme, ThemeStyleProps } from "@/db/schema";
 import { THEME_PRESETS } from "@/lib/theme-presets";
@@ -134,9 +145,9 @@ export default function ThemeGeneratorPage() {
   const [loading, setLoading] = useState(true);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [themeName, setThemeName] = useState("");
-  const [themeDescription, setThemeDescription] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   // Load user themes
   useEffect(() => {
@@ -150,17 +161,15 @@ export default function ThemeGeneratorPage() {
     });
   }, []);
 
-  // Apply theme styles to entire page
+  // Apply theme styles only to preview container
   useEffect(() => {
     const currentStyles = getCurrentStyles();
-    const root = document.documentElement;
-
-    // Apply all theme styles to root
-    Object.entries(currentStyles).forEach(([key, value]) => {
-      if (typeof value === "string") {
-        root.style.setProperty(`--${key}`, value);
-      }
-    });
+    
+    // Remove any existing preview theme styles
+    const existingStyle = document.getElementById('theme-preview-styles');
+    if (existingStyle) {
+      existingStyle.remove();
+    }
 
     // Create dynamic box-shadow from individual shadow properties
     const shadowColor = currentStyles["shadow-color"] || "oklch(0 0 0)";
@@ -196,27 +205,43 @@ export default function ThemeGeneratorPage() {
     // Generate the box-shadow string (offset-x offset-y blur-radius spread-radius color)
     const dynamicShadow = `${shadowOffsetX}px ${shadowOffsetY}px ${shadowBlur}px ${shadowSpread}px ${shadowColorWithOpacity}`;
     
-    // Only set the preview shadow variable, don't override global shadows
-    root.style.setProperty('--preview-shadow', dynamicShadow);
+    // Create scoped CSS for preview container only
+    const styleElement = document.createElement('style');
+    styleElement.id = 'theme-preview-styles';
     
-    // Set individual shadow properties for the configurator preview
-    root.style.setProperty('--preview-shadow-color', shadowColorWithOpacity);
-    root.style.setProperty('--preview-shadow-blur', `${shadowBlur}px`);
-    root.style.setProperty('--preview-shadow-spread', `${shadowSpread}px`);
-    root.style.setProperty('--preview-shadow-offset-x', `${shadowOffsetX}px`);
-    root.style.setProperty('--preview-shadow-offset-y', `${shadowOffsetY}px`);
-
-    // Set dark/light mode class
+    let cssRules = `.theme-preview-container {\n`;
+    
+    // Apply all theme styles as CSS variables to the preview container
+    Object.entries(currentStyles).forEach(([key, value]) => {
+      if (typeof value === "string") {
+        cssRules += `  --${key}: ${value};\n`;
+      }
+    });
+    
+    // Add the dynamic shadow properties
+    cssRules += `  --preview-shadow: ${dynamicShadow};\n`;
+    cssRules += `  --preview-shadow-color: ${shadowColorWithOpacity};\n`;
+    cssRules += `  --preview-shadow-blur: ${shadowBlur}px;\n`;
+    cssRules += `  --preview-shadow-spread: ${shadowSpread}px;\n`;
+    cssRules += `  --preview-shadow-offset-x: ${shadowOffsetX}px;\n`;
+    cssRules += `  --preview-shadow-offset-y: ${shadowOffsetY}px;\n`;
+    
+    // Apply background and text styles to preview container
+    cssRules += `  background-color: ${currentStyles.background};\n`;
+    cssRules += `  color: ${currentStyles.foreground};\n`;
+    cssRules += `  font-family: ${currentStyles["font-sans"]};\n`;
+    
+    cssRules += `}\n`;
+    
+    // Add dark mode support for preview container
     if (state.previewMode === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
+      cssRules += `.theme-preview-container.dark {\n`;
+      cssRules += `  color-scheme: dark;\n`;
+      cssRules += `}\n`;
     }
-
-    // Apply background to body
-    document.body.style.backgroundColor = currentStyles.background;
-    document.body.style.color = currentStyles.foreground;
-    document.body.style.fontFamily = currentStyles["font-sans"];
+    
+    styleElement.textContent = cssRules;
+    document.head.appendChild(styleElement);
   }, [state]);
 
   const loadUserThemes = async () => {
@@ -225,7 +250,26 @@ export default function ThemeGeneratorPage() {
       const response = await fetch("/api/themes");
       if (!response.ok) throw new Error("Failed to load themes");
       const data = await response.json();
-      setUserThemes(data.themes);
+      
+      // Filter out themes that are actually built-in presets
+      const builtInPresetIds = THEME_PRESETS.map(preset => preset.id);
+      const builtInPresetNames = THEME_PRESETS.map(preset => preset.name);
+      
+      const customThemes = data.themes.filter((theme: Theme) => {
+        // Exclude if theme ID matches a built-in preset ID
+        if (builtInPresetIds.includes(theme.id)) {
+          console.log(`Filtering out built-in theme by ID: ${theme.name} (${theme.id})`);
+          return false;
+        }
+        // Exclude if theme name matches a built-in preset name (case-insensitive)
+        if (builtInPresetNames.some(name => name.toLowerCase() === theme.name.toLowerCase())) {
+          console.log(`Filtering out built-in theme by name: ${theme.name}`);
+          return false;
+        }
+        return true;
+      });
+      
+      setUserThemes(customThemes);
     } catch (error) {
       console.error("Error loading themes:", error);
       toast.error("Failed to load themes");
@@ -321,9 +365,8 @@ export default function ThemeGeneratorPage() {
       const baseName = state.selectedUserTheme ? state.selectedUserTheme.name : currentPreset.name;
       const themeData = {
         name: themeName || `${baseName} Custom`,
-        description:
-          themeDescription || `Customized version of ${baseName}`,
-        isDefault: false,
+        description: `Customized version of ${baseName}`,
+        isDefault: false, // Ensure custom themes are never default
         styles: {
           light:
             state.previewMode === "light"
@@ -351,7 +394,6 @@ export default function ThemeGeneratorPage() {
       toast.success("Theme saved successfully!");
       setSaveDialogOpen(false);
       setThemeName("");
-      setThemeDescription("");
       loadUserThemes();
       setState((prev) => ({ ...prev, isModified: false }));
     } catch (error) {
@@ -392,6 +434,75 @@ export default function ThemeGeneratorPage() {
     } catch (error) {
       console.error("Error importing theme:", error);
       toast.error("Failed to import theme");
+    }
+  };
+
+  // Show delete confirmation dialog
+  const confirmDeleteTheme = () => {
+    if (!state.selectedUserTheme) return;
+    setDeleteDialogOpen(true);
+  };
+
+  // Delete current user theme
+  const deleteCurrentTheme = async () => {
+    if (!state.selectedUserTheme) return;
+
+    try {
+      console.log("Attempting to delete theme:", state.selectedUserTheme.id, state.selectedUserTheme.name);
+      
+      const response = await fetch(`/api/themes/${state.selectedUserTheme.id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        let errorMessage = "Failed to delete theme";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response isn't JSON, use status text
+          errorMessage = response.statusText || errorMessage;
+        }
+        
+        console.error("Delete theme error:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorMessage,
+          themeId: state.selectedUserTheme.id,
+          themeName: state.selectedUserTheme.name,
+          isDefault: state.selectedUserTheme.isDefault
+        });
+        
+        if (response.status === 403) {
+          toast.error("Cannot delete this theme - it may be a default theme");
+        } else if (response.status === 404) {
+          toast.error("Theme not found or access denied");
+        } else {
+          toast.error(errorMessage);
+        }
+        return;
+      }
+
+      toast.success("Theme deleted successfully!");
+      
+      // Switch to default preset
+      setState((prev) => ({
+        ...prev,
+        selectedPresetId: "default",
+        selectedUserTheme: null,
+        customizedStyles: {},
+        isModified: false,
+      }));
+      
+      setDeleteDialogOpen(false);
+      await loadUserThemes();
+    } catch (error) {
+      console.error("Error deleting theme:", error);
+      toast.error("Failed to delete theme");
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -438,18 +549,7 @@ export default function ThemeGeneratorPage() {
                         className="rounded-lg"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="theme-description">
-                        Description (optional)
-                      </Label>
-                      <Input
-                        id="theme-description"
-                        placeholder="A beautiful custom theme"
-                        value={themeDescription}
-                        onChange={(e) => setThemeDescription(e.target.value)}
-                        className="rounded-lg"
-                      />
-                    </div>
+
                   </div>
                   <DialogFooter>
                     <Button
@@ -516,6 +616,45 @@ export default function ThemeGeneratorPage() {
                     <CommandInput placeholder="Search themes..." />
                     <CommandList>
                       <CommandEmpty>No theme found.</CommandEmpty>
+                      {userThemes.length > 0 && (
+                        <CommandGroup heading="Your Custom Themes">
+                          {userThemes.map((theme) => (
+                            <CommandItem
+                              key={theme.id}
+                              value={theme.name}
+                              onSelect={() => {
+                                changeUserTheme(theme);
+                                setCommandOpen(false);
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <div className="flex items-center justify-between w-full">
+                                <div className="flex items-center gap-3">
+                                  <div className="flex gap-1">
+                                    {[1, 2, 3].map((i) => {
+                                      const chartColor = theme.styles?.light?.[`chart-${i}` as keyof ThemeStyleProps];
+                                      return (
+                                        <div
+                                          key={i}
+                                          className="w-3 h-3 rounded-full border"
+                                          style={{
+                                            backgroundColor: chartColor || "#000",
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="font-medium">{theme.name}</div>
+                                </div>
+                                {state.selectedUserTheme?.id === theme.id && (
+                                  <Check className="h-4 w-4 text-primary" />
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                      {userThemes.length > 0 && <CommandSeparator />}
                       <CommandGroup heading="Built-in Themes">
                         {THEME_PRESETS.map((preset) => (
                           <CommandItem
@@ -543,12 +682,7 @@ export default function ThemeGeneratorPage() {
                                     />
                                   ))}
                                 </div>
-                                <div>
-                                  <div className="font-medium">{preset.name}</div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {preset.description}
-                                  </div>
-                                </div>
+                                <div className="font-medium">{preset.name}</div>
                               </div>
                               {state.selectedPresetId === preset.id && (
                                 <Check className="h-4 w-4 text-primary" />
@@ -557,54 +691,6 @@ export default function ThemeGeneratorPage() {
                           </CommandItem>
                         ))}
                       </CommandGroup>
-                      {userThemes.length > 0 && (
-                        <>
-                          <CommandSeparator />
-                          <CommandGroup heading="Your Custom Themes">
-                            {userThemes.map((theme) => (
-                              <CommandItem
-                                key={theme.id}
-                                value={theme.name}
-                                onSelect={() => {
-                                  changeUserTheme(theme);
-                                  setCommandOpen(false);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <div className="flex items-center justify-between w-full">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex gap-1">
-                                      {[1, 2, 3].map((i) => {
-                                        const chartColor = theme.styles?.light?.[`chart-${i}` as keyof ThemeStyleProps];
-                                        return (
-                                          <div
-                                            key={i}
-                                            className="w-3 h-3 rounded-full border"
-                                            style={{
-                                              backgroundColor: chartColor || "#000",
-                                            }}
-                                          />
-                                        );
-                                      })}
-                                    </div>
-                                    <div>
-                                      <div className="font-medium">{theme.name}</div>
-                                      {theme.description && (
-                                        <div className="text-xs text-muted-foreground">
-                                          {theme.description}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  {state.selectedUserTheme?.id === theme.id && (
-                                    <Check className="h-4 w-4 text-primary" />
-                                  )}
-                                </div>
-                              </CommandItem>
-                            ))}
-                          </CommandGroup>
-                        </>
-                      )}
                     </CommandList>
                   </Command>
                 </CommandDialog>
@@ -617,6 +703,17 @@ export default function ThemeGeneratorPage() {
                   <Upload className="h-4 w-4 mr-2" />
                   Import from CSS
                 </Button>
+                
+                {state.selectedUserTheme && (
+                  <Button
+                    variant="outline"
+                    className="w-full text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                    onClick={confirmDeleteTheme}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Theme
+                  </Button>
+                )}
               </div>
 
               <Separator />
@@ -1159,7 +1256,7 @@ export default function ThemeGeneratorPage() {
             </div>
 
             {/* Preview Content */}
-            <div className="flex-1 overflow-y-auto p-6 hide-scrollbar">
+            <div className={`theme-preview-container flex-1 overflow-y-auto p-6 hide-scrollbar ${state.previewMode === "dark" ? "dark" : ""}`}>
               <DashboardPreview />
             </div>
           </div>
@@ -1173,6 +1270,26 @@ export default function ThemeGeneratorPage() {
         onOpenChange={setImportDialogOpen}
         onImport={handleCSSImport}
       />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Theme</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{state.selectedUserTheme?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteCurrentTheme}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarInset>
   );
 }

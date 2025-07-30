@@ -56,12 +56,13 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
       const resolvedConfig: any = {};
       Object.entries(widget.config.chartConfig).forEach(([key, config], index) => {
         // Convert hex colors to theme references for existing widgets
-        const colorToResolve = config.color?.startsWith('#') 
-          ? convertHexToThemeReference(config.color)
-          : config.color;
+        const configItem = config as any;
+        const colorToResolve = configItem.color?.startsWith('#') 
+          ? convertHexToThemeReference(configItem.color)
+          : configItem.color;
           
         resolvedConfig[key] = {
-          ...config,
+          ...configItem,
           color: resolveWidgetColor(colorToResolve, index)
         };
       });

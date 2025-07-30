@@ -32,7 +32,6 @@ interface CSSImportDialogProps {
 
 export function CSSImportDialog({ open, onOpenChange, onImport }: CSSImportDialogProps) {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
   const [cssContent, setCSSContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -67,7 +66,7 @@ export function CSSImportDialog({ open, onOpenChange, onImport }: CSSImportDialo
       // Create the theme
       const theme = createThemeFromCSS(
         name.trim(),
-        description.trim() || `Imported theme: ${name.trim()}`,
+        `Imported theme: ${name.trim()}`,
         parsedCSS
       );
 
@@ -78,7 +77,6 @@ export function CSSImportDialog({ open, onOpenChange, onImport }: CSSImportDialo
 
       // Reset form
       setName("");
-      setDescription("");
       setCSSContent("");
       onOpenChange(false);
     } catch (err) {
@@ -91,7 +89,6 @@ export function CSSImportDialog({ open, onOpenChange, onImport }: CSSImportDialo
 
   const handleCancel = () => {
     setName("");
-    setDescription("");
     setCSSContent("");
     setError(null);
     onOpenChange(false);
@@ -125,16 +122,6 @@ export function CSSImportDialog({ open, onOpenChange, onImport }: CSSImportDialo
               placeholder="e.g., My Custom Theme"
               value={name}
               onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="theme-description">Description (optional)</Label>
-            <Input
-              id="theme-description"
-              placeholder="e.g., A beautiful dark theme with blue accents"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
 
