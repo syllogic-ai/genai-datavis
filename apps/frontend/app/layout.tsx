@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { Navbar } from "@/components/ui/navbar";
 import { ClerkProvider } from '@clerk/nextjs';
+import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
 const openSans = Open_Sans({
   variable: "--font-open-sans",
   subsets: ["latin"],
@@ -28,6 +29,7 @@ export default function RootLayout({
           className={`${openSans.variable} antialiased font-sans`}
           style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
         >
+          <GoogleFontsLoader />
           {/* <Navbar /> */}
           {children}
         </body>

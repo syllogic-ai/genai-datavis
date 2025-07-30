@@ -4,12 +4,12 @@ import { useTextEditor } from "./TextEditorContext";
 import { SimpleEditorToolbar } from "@/components/tiptap/SimpleEditorToolbar";
 
 export function DashboardToolbar() {
-  const { activeEditor, isToolbarVisible } = useTextEditor();
+  const { activeEditor } = useTextEditor();
 
   return (
     <SimpleEditorToolbar 
       editor={activeEditor} 
-      isVisible={isToolbarVisible} 
+      isVisible={true} // Always visible
     />
   );
 }

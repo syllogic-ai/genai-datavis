@@ -8,6 +8,8 @@ import Underline from "@tiptap/extension-underline";
 import Typography from "@tiptap/extension-typography";
 import Link from "@tiptap/extension-link";
 import TextAlign from "@tiptap/extension-text-align";
+import FontFamily from "@tiptap/extension-font-family";
+import { TextStyle } from "@tiptap/extension-text-style";
 import { Widget } from "@/types/enhanced-dashboard-types";
 import { useTextEditor } from "../TextEditorContext";
 
@@ -79,6 +81,10 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
         alignments: ['left', 'center', 'right'],
         defaultAlignment: 'left',
       }),
+      TextStyle.configure(),
+      FontFamily.configure({
+        types: ['textStyle'],
+      }),
     ],
     content: widget.config.content || "",
     immediatelyRender: false, // Fix SSR hydration mismatch
@@ -90,11 +96,19 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
       setActiveEditor(editor);
       showToolbar();
     },
+    onSelectionUpdate: ({ editor }) => {
+      // Immediately update active editor on selection changes for faster toolbar updates
+      if (editor.isFocused) {
+        setActiveEditor(editor);
+      }
+    },
     onBlur: ({ editor }) => {
-      // Small delay to prevent toolbar from hiding when clicking toolbar buttons
+      // Keep the editor active even when blurred for persistent toolbar
+      // Only clear if another editor becomes active
       setTimeout(() => {
         if (!editor.isFocused) {
-          hideToolbar();
+          // Don't hide toolbar since it's always visible now
+          // hideToolbar();
         }
       }, 100);
     },

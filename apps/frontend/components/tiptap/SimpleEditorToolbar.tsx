@@ -2,6 +2,7 @@
 
 import { Editor } from "@tiptap/react";
 import { motion, AnimatePresence } from "motion/react";
+import { useEffect, useState } from "react";
 import {
   Bold,
   Italic,
@@ -23,6 +24,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { GOOGLE_FONTS, loadGoogleFont } from "./GoogleFonts";
 
 interface SimpleEditorToolbarProps {
   editor: Editor | null;
@@ -30,6 +39,27 @@ interface SimpleEditorToolbarProps {
 }
 
 export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarProps) {
+  const [editorState, setEditorState] = useState({});
+
+  // Force toolbar state updates on editor changes
+  useEffect(() => {
+    if (!editor) return;
+
+    const updateState = () => {
+      // Force a re-render by updating state
+      setEditorState({});
+    };
+
+    // Listen to editor updates
+    editor.on('selectionUpdate', updateState);
+    editor.on('transaction', updateState);
+    
+    return () => {
+      editor.off('selectionUpdate', updateState);
+      editor.off('transaction', updateState);
+    };
+  }, [editor]);
+
   if (!editor || !isVisible) {
     return null;
   }
@@ -52,6 +82,25 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
 
     // update link
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+  };
+
+  const handleFontChange = (fontFamily: string) => {
+    if (fontFamily === "default" || !fontFamily) {
+      editor.chain().focus().unsetFontFamily().run();
+    } else {
+      loadGoogleFont(fontFamily);
+      editor.chain().focus().setFontFamily(fontFamily).run();
+    }
+  };
+
+  const getCurrentFont = () => {
+    const fontFamily = editor.getAttributes('textStyle').fontFamily;
+    if (!fontFamily) return "default";
+    
+    const matchingFont = GOOGLE_FONTS.find(font => 
+      font.value === fontFamily || font.name.toLowerCase() === fontFamily.toLowerCase()
+    );
+    return matchingFont ? fontFamily : "default";
   };
 
   return (
@@ -128,6 +177,23 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
           >
             <Code className="h-4 w-4" />
           </Button>
+
+          <Separator orientation="vertical" className="mx-1 h-6 border-border" />
+
+          {/* Font Family Selector */}
+          <Select value={getCurrentFont()} onValueChange={handleFontChange}>
+            <SelectTrigger className="w-[140px] h-8">
+              <SelectValue placeholder="Font" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">Default</SelectItem>
+              {GOOGLE_FONTS.map((font) => (
+                <SelectItem key={font.value} value={font.value}>
+                  <span style={{ fontFamily: font.value }}>{font.name}</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 
