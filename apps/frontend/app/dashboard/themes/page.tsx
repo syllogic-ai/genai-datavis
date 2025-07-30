@@ -507,15 +507,18 @@ export default function ThemeGeneratorPage() {
   };
 
   return (
-    <SidebarInset className="bg-transparent">
-      <div className="flex flex-1 flex-col">
+    <SidebarInset className="bg-transparent overflow-hidden">
+      <div className="flex flex-col h-full">
         {/* Sidebar Header */}
-        <SidebarHeader className="flex-row h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <div className="flex items-center gap-2 flex-1">
-            <h1 className="font-semibold">Theme Generator</h1>
-          </div>
+        <SidebarHeader className="flex-row shrink-0 items-center gap-2 border-b px-4">
+        <SidebarTrigger className="-ml-1" />
+          <Separator
+            orientation="vertical"
+            className="mx-2 data-[orientation=vertical]:h-4"
+          />
+          <h1 className="text-base font-medium">
+            Theme Generator
+          </h1>
           {state.isModified && (
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="animate-pulse text-xs">
@@ -571,11 +574,12 @@ export default function ThemeGeneratorPage() {
 
         
 
-        {/* Main Content - Full height with flex */}
-        <div className="flex flex-1 overflow-hidden">
+        {/* Main Content - Grid layout with explicit height */}
+        <div className="grid grid-cols-[320px_1fr] h-[calc(100vh-4rem)] overflow-hidden">
           {/* Left Sidebar - Theme Controls */}
-          <div className="w-80 border-r bg-background/50 overflow-y-auto hide-scrollbar">
-            <div className="p-4 pb-8 space-y-6">
+          <div className="border-r bg-background/50 overflow-hidden">
+            <div className="h-full overflow-auto hide-scrollbar">
+              <div className="p-4 pb-8 space-y-6">
               {/* Preset Selection */}
               <div className="space-y-3">
                 <Label className="text-sm font-medium">Theme Preset</Label>
@@ -1229,13 +1233,14 @@ export default function ThemeGeneratorPage() {
                   })()}
                 </CollapsibleContent>
               </Collapsible>
+                </div>
             </div>
           </div>
 
           {/* Right Content - Preview */}
-          <div className="flex-1 flex flex-col overflow-hidden bg-background">
-            {/* Preview Header */}
-            <div className="border-b p-4 bg-background">
+          <div className="flex flex-col bg-background overflow-hidden">
+            {/* Preview Header - Fixed */}
+            <div className="border-b p-4 bg-background h-fit shrink-0">
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Preview</h2>
                 <Button
@@ -1255,9 +1260,13 @@ export default function ThemeGeneratorPage() {
               </div>
             </div>
 
-            {/* Preview Content */}
-            <div className={`theme-preview-container flex-1 overflow-y-auto p-6 hide-scrollbar ${state.previewMode === "dark" ? "dark" : ""}`}>
-              <DashboardPreview />
+            {/* Preview Content - Scrollable */}
+            <div className="h-[calc(100vh-8rem)] overflow-hidden">
+              <div className="h-full overflow-auto hide-scrollbar">
+                <div className={`theme-preview-container p-6 ${state.previewMode === "dark" ? "dark" : ""}`}>
+                  <DashboardPreview />
+                </div>
+              </div>
             </div>
           </div>
         </div>
