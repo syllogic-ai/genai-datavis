@@ -1,5 +1,28 @@
 import { relations } from "drizzle-orm/relations";
-import { dashboards, files, users, chats, widgets, themes } from "../db/schema";
+import { users, userPreferences, themes, dashboards, files, chats, widgets } from "./schema";
+
+export const userPreferencesRelations = relations(userPreferences, ({one}) => ({
+	user: one(users, {
+		fields: [userPreferences.userId],
+		references: [users.id]
+	}),
+}));
+
+export const usersRelations = relations(users, ({many}) => ({
+	userPreferences: many(userPreferences),
+	themes: many(themes),
+	files: many(files),
+	dashboards: many(dashboards),
+	chats: many(chats),
+}));
+
+export const themesRelations = relations(themes, ({one, many}) => ({
+	user: one(users, {
+		fields: [themes.userId],
+		references: [users.id]
+	}),
+	dashboards: many(dashboards),
+}));
 
 export const filesRelations = relations(files, ({one}) => ({
 	dashboard: one(dashboards, {
@@ -14,35 +37,16 @@ export const filesRelations = relations(files, ({one}) => ({
 
 export const dashboardsRelations = relations(dashboards, ({one, many}) => ({
 	files: many(files),
+	widgets: many(widgets),
+	theme: one(themes, {
+		fields: [dashboards.activeThemeId],
+		references: [themes.id]
+	}),
 	user: one(users, {
 		fields: [dashboards.userId],
 		references: [users.id]
 	}),
 	chats: many(chats),
-	widgets: many(widgets),
-	activeTheme: one(themes, {
-		fields: [dashboards.activeThemeId],
-		references: [themes.id]
-	}),
-}));
-
-export const usersRelations = relations(users, ({many}) => ({
-	files: many(files),
-	dashboards: many(dashboards),
-	chats: many(chats),
-	themes: many(themes),
-}));
-
-export const chatsRelations = relations(chats, ({one, many}) => ({
-	dashboard: one(dashboards, {
-		fields: [chats.dashboardId],
-		references: [dashboards.id]
-	}),
-	user: one(users, {
-		fields: [chats.userId],
-		references: [users.id]
-	}),
-	widgets: many(widgets),
 }));
 
 export const widgetsRelations = relations(widgets, ({one}) => ({
@@ -56,10 +60,14 @@ export const widgetsRelations = relations(widgets, ({one}) => ({
 	}),
 }));
 
-export const themesRelations = relations(themes, ({one, many}) => ({
+export const chatsRelations = relations(chats, ({one, many}) => ({
+	widgets: many(widgets),
+	dashboard: one(dashboards, {
+		fields: [chats.dashboardId],
+		references: [dashboards.id]
+	}),
 	user: one(users, {
-		fields: [themes.userId],
+		fields: [chats.userId],
 		references: [users.id]
 	}),
-	activeDashboards: many(dashboards),
 }));

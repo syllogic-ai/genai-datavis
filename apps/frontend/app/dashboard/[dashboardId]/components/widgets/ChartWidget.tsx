@@ -88,8 +88,8 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
 
   const chartSpec: ChartSpec = {
     chartType: chartType as any,
-    title: widget.config.title || "Sample Chart",
-    description: widget.config.description || "Sample chart description",
+    title: "",  // Remove title from chart display
+    description: "",  // Remove description from chart display
     data: widget.data || sampleData,
     xAxisConfig: widget.config.xAxisConfig || {
       dataKey: "name",
@@ -109,7 +109,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+              className="w-full px-3 py-1 text-sm border rounded bg-background"
               placeholder="Enter chart title"
             />
           </div>
@@ -122,7 +122,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+              className="w-full px-3 py-1 text-sm border rounded bg-background"
               placeholder="Enter chart description"
             />
           </div>
@@ -134,7 +134,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
             <select
               value={chartType}
               onChange={(e) => setChartType(e.target.value)}
-              className="w-full px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+              className="w-full px-3 py-1 text-sm border rounded bg-background"
             >
               <option value="bar">Bar Chart</option>
               <option value="line">Line Chart</option>
@@ -152,7 +152,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
             </button>
             <button
               onClick={handleCancel}
-              className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+              className="px-3 py-1 bg-secondary text-secondary-foreground text-sm rounded hover:bg-secondary/80"
             >
               Cancel
             </button>
@@ -161,7 +161,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
 
         <div className="flex-1 min-h-0">
           <div className="h-full border border-gray-200 dark:border-gray-700 rounded p-2">
-            <ChartRenderer spec={{ ...chartSpec, chartType: chartType as any, title, description }} />
+            <ChartRenderer spec={{ ...chartSpec, chartType: chartType as any }} />
           </div>
         </div>
       </div>
@@ -169,20 +169,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   }
 
   return (
-    <div className="h-full flex flex-col border rounded-lg transition-all duration-200 p-4" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--card-foreground)', boxShadow: 'var(--shadow)' }}>
-      {widget.config.title && (
-        <div className="mb-1 flex-shrink-0">
-          <h3 className="text-sm font-semibold line-clamp-1" style={{ color: 'var(--card-foreground)' }}>
-            {widget.config.title}
-          </h3>
-          {widget.config.description && (
-            <p className="text-xs line-clamp-1" style={{ color: 'var(--muted-foreground)' }}>
-              {widget.config.description}
-            </p>
-          )}
-        </div>
-      )}
-      
+    <div className="h-[300px] flex flex-col border rounded-lg transition-all duration-200 p-3" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--card-foreground)', boxShadow: 'var(--shadow)' }}>
       <div className="flex-1 min-h-0 overflow-hidden">
         {widget.data || sampleData ? (
           <ChartRenderer spec={chartSpec} />

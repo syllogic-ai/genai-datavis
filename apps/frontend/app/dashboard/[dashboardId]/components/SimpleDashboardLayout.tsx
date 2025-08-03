@@ -1,18 +1,19 @@
 "use client";
 
 import React, { useState, useCallback, useMemo } from "react";
-import { motion, AnimatePresence } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
-import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+
+// Import @hello-pangea/dnd components
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import type { DropResult } from '@hello-pangea/dnd';
 
 import { Widget } from "@/types/enhanced-dashboard-types";
-import { SortableWidgetWrapper } from "./SortableWidgetWrapper";
 import { TextBlock } from "./widgets/TextBlock";
 import { ChartWidget } from "./widgets/ChartWidget";
 import { KPICard } from "./widgets/KPICard";
 import { TableWidget } from "./widgets/TableWidget";
+import { IconTrash, IconGripVertical } from "@tabler/icons-react";
+import { Button } from "@/components/ui/button";
 
 interface SimpleDashboardLayoutProps {
   widgets: Widget[];
@@ -46,25 +47,95 @@ const defaultConfigs = {
   },
 };
 
+// Memoized widget list for performance optimization
+const WidgetList = React.memo(function WidgetList({ 
+  widgets, 
+  hoveredWidget, 
+  setHoveredWidget, 
+  handleDeleteWidget, 
+  renderWidget 
+}: { 
+  widgets: Widget[]; 
+  hoveredWidget: string | null; 
+  setHoveredWidget: (id: string | null) => void; 
+  handleDeleteWidget: (id: string) => void; 
+  renderWidget: (widget: Widget) => React.ReactNode; 
+}) {
+  return (
+    <>
+      {widgets.map((widget, index) => (
+        <Draggable
+          key={widget.id}
+          draggableId={widget.id}
+          index={index}
+        >
+          {(provided, snapshot) => (
+            <div
+              ref={provided.innerRef}
+              {...provided.draggableProps}
+              className={`flex items-start gap-2 mb-4 group ${
+                snapshot.isDragging ? 'z-50' : ''
+              }`}
+              onMouseEnter={() => setHoveredWidget(widget.id)}
+              onMouseLeave={() => setHoveredWidget(null)}
+              style={provided.draggableProps.style}
+            >
+              {/* Left-side drag handle - inside the draggable container */}
+              <div
+                {...provided.dragHandleProps}
+                className={`flex flex-col gap-1 mt-2 transition-opacity duration-200 cursor-grab active:cursor-grabbing ${
+                  hoveredWidget === widget.id || snapshot.isDragging
+                    ? 'opacity-100' 
+                    : 'opacity-30 group-hover:opacity-60'
+                }`}
+              >
+                <div className="h-8 w-8 p-0 shadow-sm border border-dashed rounded flex items-center justify-center">
+                  <IconGripVertical className="h-4 w-4" />
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteWidget(widget.id);
+                  }}
+                  className="h-8 w-8 p-0 shadow-sm"
+                  title="Delete widget"
+                >
+                  <IconTrash className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Widget Content - inherits background colors */}
+              <div className={`flex-1 rounded-lg overflow-hidden transition-all duration-200 ${
+                widget.type === 'text' 
+                  ? '' // No border or shadow for text blocks
+                  : `border shadow-sm ${
+                      snapshot.isDragging 
+                        ? 'rotate-1 shadow-xl ring-2 ring-blue-500/50' 
+                        : snapshot.isDropAnimating 
+                          ? 'shadow-lg' 
+                          : 'hover:shadow-md'
+                    }`
+              }`}>
+                {renderWidget(widget)}
+              </div>
+            </div>
+          )}
+        </Draggable>
+      ))}
+    </>
+  );
+});
+
 export function SimpleDashboardLayout({ 
   widgets, 
   onUpdateWidgets,
   onAddWidget,
   isLoading = false,
 }: SimpleDashboardLayoutProps) {
+  const [hoveredWidget, setHoveredWidget] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeWidget, setActiveWidget] = useState<Widget | null>(null);
-  
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // 8px movement required to start dragging
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
 
   // Sort widgets by order for consistent rendering (with backward compatibility)
   const sortedWidgets = useMemo(() => {
@@ -185,40 +256,67 @@ export function SimpleDashboardLayout({
     onUpdateWidgets(remainingWidgets);
   }, [widgets, onUpdateWidgets, getWidgetOrder]);
 
-  const handleDragStart = useCallback((event: any) => {
-    const activeWidget = sortedWidgets.find(widget => widget.id === event.active.id);
-    setActiveWidget(activeWidget || null);
+  const handleDragStart = useCallback((start: any) => {
+    console.log('=== DRAG START ===');
+    console.log('Drag started with:', start);
+    console.log('Dragging widget:', start.draggableId);
+    console.log('From index:', start.source.index);
     setIsDragging(true);
-  }, [sortedWidgets]);
+  }, []);
 
-  const handleDragEnd = useCallback((event: any) => {
-    const { active, over } = event;
+  const handleDragEnd = useCallback((result: DropResult) => {
+    console.log('=== DRAG END ===');
+    console.log('Full result:', result);
+    console.log('Source:', result.source);
+    console.log('Destination:', result.destination);
+    console.log('DraggableId:', result.draggableId);
+    console.log('Current widgets:', sortedWidgets.map(w => ({ id: w.id, order: w.order })));
+    
     setIsDragging(false);
-    setActiveWidget(null);
+    
+    const { destination, source, draggableId } = result;
 
-    if (active.id !== over?.id) {
-      const oldIndex = sortedWidgets.findIndex((widget) => widget.id === active.id);
-      const newIndex = sortedWidgets.findIndex((widget) => widget.id === over?.id);
-
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const reorderedWidgets = arrayMove(sortedWidgets, oldIndex, newIndex);
-        
-        // Update the order property for all widgets
-        const updatedWidgets = reorderedWidgets.map((widget, index) => ({
-          ...widget,
-          order: index,
-        }));
-
-        onUpdateWidgets(updatedWidgets);
-      }
+    // If dropped outside the list or in the same place, do nothing  
+    if (!destination || 
+        (destination.droppableId === source.droppableId && 
+         destination.index === source.index)) {
+      console.log('No valid destination or same position');
+      return;
     }
+
+    console.log('Moving from index', source.index, 'to', destination.index);
+
+    // Reorder widgets based on drag result
+    const reorderedWidgets = [...sortedWidgets];
+    const [movedWidget] = reorderedWidgets.splice(source.index, 1);
+    reorderedWidgets.splice(destination.index, 0, movedWidget);
+
+    console.log('Reordered widgets:', reorderedWidgets.map(w => ({ id: w.id, order: w.order })));
+
+    // Update the order property for all widgets to match new positions
+    const updatedWidgets = reorderedWidgets.map((widget, index) => ({
+      ...widget,
+      order: index,
+      // Update layout.y for backward compatibility
+      layout: widget.layout ? { ...widget.layout, y: index } : undefined
+    }));
+
+    console.log('Updated widgets:', updatedWidgets.map(w => ({ id: w.id, order: w.order })));
+    console.log('Calling onUpdateWidgets with:', updatedWidgets);
+    onUpdateWidgets(updatedWidgets);
   }, [sortedWidgets, onUpdateWidgets]);
 
   const handleUpdateWidget = useCallback((widgetId: string, updates: Partial<Widget>) => {
+    // Prevent state updates during drag operations
+    if (isDragging) {
+      console.log('Ignoring widget update during drag operation');
+      return;
+    }
+    
     onUpdateWidgets(widgets.map(widget =>
       widget.id === widgetId ? { ...widget, ...updates } : widget
     ));
-  }, [widgets, onUpdateWidgets]);
+  }, [widgets, onUpdateWidgets, isDragging]);
 
   const renderWidget = useCallback((widget: Widget) => {
     const props = {
@@ -250,65 +348,52 @@ export function SimpleDashboardLayout({
   }, [onAddWidget, handleAddWidget]);
 
   return (
-    <div className="w-full px-12 pt-8 pb-4 transition-all duration-300 ease-out min-h-screen">
-      {widgets.length === 0 && !isLoading && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-center h-96"
-        >
-          <div className="w-full max-w-2xl mx-auto">
-            <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center bg-gray-50/50 dark:bg-gray-800/50">
-              <div className="text-4xl mb-4 text-gray-400">📊</div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-                No widgets inside
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm mb-8">
-                Use the floating dock below to add widgets to your dashboard.
-                Widgets will automatically stack vertically and expand as needed.
-              </p>
+    <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="w-full px-12 pt-8 pb-4 transition-all duration-300 ease-out min-h-screen">
+        {widgets.length === 0 && !isLoading && (
+          <div className="flex items-center justify-center h-96">
+            <div className="w-full max-w-2xl mx-auto">
+              <div className="border-2 border-dashed border-muted rounded-lg p-12 text-center bg-muted/10">
+                <div className="text-4xl mb-4 text-muted-foreground">📊</div>
+                <h3 className="text-lg font-medium text-foreground mb-2">
+                  No widgets inside
+                </h3>
+                <p className="text-muted-foreground text-sm mb-8">
+                  Use the floating dock below to add widgets to your dashboard.
+                  Widgets will automatically stack vertically and expand as needed.
+                </p>
+              </div>
             </div>
           </div>
-        </motion.div>
-      )}
+        )}
 
-      {widgets.length > 0 && (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          modifiers={[restrictToVerticalAxis]}
-        >
-          <SortableContext 
-            items={sortedWidgets.map(w => w.id)} 
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="flex flex-col gap-2">
-              <AnimatePresence mode="popLayout">
-                {sortedWidgets.map((widget) => (
-                  <SortableWidgetWrapper
-                    key={widget.id}
-                    id={widget.id}
-                    widgetType={widget.type}
-                    onDelete={handleDeleteWidget}
-                    isDragging={isDragging}
-                  >
-                    {renderWidget(widget)}
-                  </SortableWidgetWrapper>
-                ))}
-              </AnimatePresence>
-            </div>
-          </SortableContext>
-          <DragOverlay adjustScale={false}>
-            {activeWidget ? (
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl opacity-90 border border-gray-200 dark:border-gray-700">
-                {renderWidget(activeWidget)}
+        {widgets.length > 0 && (
+          <Droppable droppableId="dashboard-widgets">
+            {(provided, snapshot) => (
+              <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className="flex flex-col min-h-24"
+              >
+                <WidgetList
+                  widgets={sortedWidgets}
+                  hoveredWidget={hoveredWidget}
+                  setHoveredWidget={setHoveredWidget}
+                  handleDeleteWidget={handleDeleteWidget}
+                  renderWidget={renderWidget}
+                />
+                {provided.placeholder}
               </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      )}
-    </div>
+            )}
+          </Droppable>
+        )}
+
+        {isLoading && (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        )}
+      </div>
+    </DragDropContext>
   );
 }

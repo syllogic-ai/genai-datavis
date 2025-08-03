@@ -146,7 +146,7 @@ export function KPICard({ widget, onUpdate, isEditing, onEditToggle }: KPICardPr
       case "decrease":
         return "[color:var(--chart-4)] bg-red-50/50 dark:bg-red-900/30";
       default:
-        return "[color:var(--muted-foreground)] bg-gray-50/50 dark:bg-gray-900/30";
+        return "[color:var(--muted-foreground)] bg-muted/30";
     }
   };
 

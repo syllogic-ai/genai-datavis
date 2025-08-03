@@ -1,7 +1,40 @@
-import { pgTable, index, pgPolicy, text, integer, timestamp, foreignKey, boolean, jsonb, real } from "drizzle-orm/pg-core"
+import { pgTable, foreignKey, unique, text, jsonb, timestamp, boolean, integer, index, real } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 
+
+export const userPreferences = pgTable("user_preferences", {
+	id: text().primaryKey().notNull(),
+	userId: text("user_id").notNull(),
+	chartDefaults: jsonb("chart_defaults").default({"showGrid":true,"animation":true,"showLegend":true}),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+}, (table) => [
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "user_preferences_user_id_users_id_fk"
+		}),
+	unique("user_preferences_user_id_unique").on(table.userId),
+]);
+
+export const themes = pgTable("themes", {
+	id: text().primaryKey().notNull(),
+	name: text().notNull(),
+	description: text(),
+	styles: jsonb().notNull(),
+	presetId: text("preset_id"),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	userId: text("user_id").notNull(),
+	isDefault: boolean("is_default").default(false).notNull(),
+}, (table) => [
+	foreignKey({
+			columns: [table.userId],
+			foreignColumns: [users.id],
+			name: "themes_user_id_users_id_fk"
+		}).onDelete("cascade"),
+]);
 
 export const jobs = pgTable("jobs", {
 	id: text().primaryKey().notNull(),
@@ -15,14 +48,7 @@ export const jobs = pgTable("jobs", {
 	completedAt: timestamp("completed_at", { mode: 'string' }),
 	processingTimeMs: integer("processing_time_ms"),
 	queueTimeMs: integer("queue_time_ms"),
-}, (table) => [
-	index("idx_jobs_created_at").using("btree", table.createdAt.asc().nullsLast().op("timestamp_ops")),
-	index("idx_jobs_dashboard_id").using("btree", table.dashboardId.asc().nullsLast().op("text_ops")),
-	index("idx_jobs_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
-	index("idx_jobs_user_id").using("btree", table.userId.asc().nullsLast().op("text_ops")),
-	pgPolicy("Anyone can read jobs", { as: "permissive", for: "select", to: ["public"], using: sql`true` }),
-	pgPolicy("Service role full access", { as: "permissive", for: "all", to: ["public"] }),
-]);
+});
 
 export const files = pgTable("files", {
 	id: text().primaryKey().notNull(),
@@ -40,13 +66,46 @@ export const files = pgTable("files", {
 	foreignKey({
 			columns: [table.dashboardId],
 			foreignColumns: [dashboards.id],
-			name: "files_dashboard_id_fkey"
+			name: "files_dashboard_id_dashboards_id_fk"
 		}).onDelete("cascade"),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
-			name: "files_user_id_fkey"
+			name: "files_user_id_users_id_fk"
 		}),
+]);
+
+export const widgets = pgTable("widgets", {
+	id: text().primaryKey().notNull(),
+	dashboardId: text("dashboard_id").notNull(),
+	title: text().notNull(),
+	type: text().notNull(),
+	config: jsonb().notNull(),
+	data: jsonb(),
+	sql: text(),
+	layout: jsonb(),
+	chatId: text("chat_id"),
+	isConfigured: boolean("is_configured").default(false),
+	cacheKey: text("cache_key"),
+	lastDataFetch: timestamp("last_data_fetch", { mode: 'string' }),
+	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
+	order: integer(),
+	layoutId: text("layout_id"),
+	columnIndex: integer("column_index"),
+	orderInColumn: integer("order_in_column"),
+}, (table) => [
+	index("idx_widgets_layout_id").using("btree", table.layoutId.asc().nullsLast().op("text_ops")),
+	foreignKey({
+			columns: [table.chatId],
+			foreignColumns: [chats.id],
+			name: "widgets_chat_id_chats_id_fk"
+		}),
+	foreignKey({
+			columns: [table.dashboardId],
+			foreignColumns: [dashboards.id],
+			name: "widgets_dashboard_id_dashboards_id_fk"
+		}).onDelete("cascade"),
 ]);
 
 export const dashboards = pgTable("dashboards", {
@@ -58,11 +117,17 @@ export const dashboards = pgTable("dashboards", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 	setupCompleted: boolean("setup_completed").default(false).notNull(),
+	activeThemeId: text("active_theme_id"),
 }, (table) => [
+	foreignKey({
+			columns: [table.activeThemeId],
+			foreignColumns: [themes.id],
+			name: "dashboards_active_theme_id_themes_id_fk"
+		}).onDelete("set null"),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
-			name: "dashboards_user_id_fkey"
+			name: "dashboards_user_id_users_id_fk"
 		}),
 ]);
 
@@ -84,58 +149,12 @@ export const chats = pgTable("chats", {
 	foreignKey({
 			columns: [table.dashboardId],
 			foreignColumns: [dashboards.id],
-			name: "chats_dashboard_id_fkey"
+			name: "chats_dashboard_id_dashboards_id_fk"
 		}).onDelete("cascade"),
 	foreignKey({
 			columns: [table.userId],
 			foreignColumns: [users.id],
-			name: "chats_user_id_fkey"
-		}),
-]);
-
-export const widgets = pgTable("widgets", {
-	id: text().primaryKey().notNull(),
-	dashboardId: text("dashboard_id").notNull(),
-	title: text().notNull(),
-	type: text().notNull(),
-	config: jsonb().notNull(),
-	data: jsonb(),
-	sql: text(),
-	layout: jsonb().notNull(),
-	chatId: text("chat_id"),
-	isConfigured: boolean("is_configured").default(false),
-	cacheKey: text("cache_key"),
-	lastDataFetch: timestamp("last_data_fetch", { mode: 'string' }),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-}, (table) => [
-	foreignKey({
-			columns: [table.chatId],
-			foreignColumns: [chats.id],
-			name: "widgets_chat_id_fkey"
-		}),
-	foreignKey({
-			columns: [table.dashboardId],
-			foreignColumns: [dashboards.id],
-			name: "widgets_dashboard_id_fkey"
-		}).onDelete("cascade"),
-]);
-
-export const colorPalettes = pgTable("color_palettes", {
-	id: text().primaryKey().notNull(),
-	userId: text("user_id").notNull(),
-	name: text().notNull(),
-	description: text(),
-	isDefault: boolean("is_default").default(false).notNull(),
-	chartColors: jsonb("chart_colors").notNull(),
-	brandColors: jsonb("brand_colors"),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
-}, (table) => [
-	foreignKey({
-			columns: [table.userId],
-			foreignColumns: [users.id],
-			name: "color_palettes_user_id_users_id_fk"
+			name: "chats_user_id_users_id_fk"
 		}),
 ]);
 
@@ -150,8 +169,4 @@ export const llmUsage = pgTable("llm_usage", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	requestId: text("request_id"),
 	dashboardId: text("dashboard_id"),
-}, (table) => [
-	index("idx_llm_usage_chat_id").using("btree", table.chatId.asc().nullsLast().op("text_ops")),
-	index("idx_llm_usage_dashboard_id").using("btree", table.dashboardId.asc().nullsLast().op("text_ops")),
-	index("idx_llm_usage_request_id").using("btree", table.requestId.asc().nullsLast().op("text_ops")),
-]);
+});

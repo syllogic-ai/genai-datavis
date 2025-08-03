@@ -88,7 +88,7 @@ export function TableWidget({ widget, onUpdate, isEditing, onEditToggle }: Table
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+              className="w-full px-3 py-1 text-sm border rounded bg-background"
               placeholder="Enter table title"
             />
           </div>
@@ -134,7 +134,7 @@ export function TableWidget({ widget, onUpdate, isEditing, onEditToggle }: Table
             </button>
             <button
               onClick={handleCancel}
-              className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
+              className="px-3 py-1 bg-secondary text-secondary-foreground text-sm rounded hover:bg-secondary/80"
             >
               Cancel
             </button>
