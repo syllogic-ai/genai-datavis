@@ -33,8 +33,14 @@ export const dashboards = pgTable("dashboards", {
   // Setup state tracking
   setupCompleted: boolean("setup_completed").default(false).notNull(),
   
+  // Public sharing
+  isPublic: boolean("is_public").default(false).notNull(),
+  
   // Theme assignment - each dashboard can have one active theme
   activeThemeId: text("active_theme_id").references(() => themes.id, { onDelete: "set null" }),
+  
+  // Dashboard layout settings
+  width: text("width").default("full").notNull(), // 'full' | 'constrained'
   
   // Removed single file reference - now files reference dashboards instead
   

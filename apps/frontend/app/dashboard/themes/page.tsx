@@ -242,6 +242,7 @@ export default function ThemeGeneratorPage() {
     
     styleElement.textContent = cssRules;
     document.head.appendChild(styleElement);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state]);
 
   const loadUserThemes = async () => {
@@ -1285,7 +1286,7 @@ export default function ThemeGeneratorPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Theme</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{state.selectedUserTheme?.name}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{state.selectedUserTheme?.name}&quot;? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

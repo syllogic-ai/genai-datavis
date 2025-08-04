@@ -49,10 +49,10 @@ export async function PATCH(
 
     const { dashboardId } = await context.params;
     const body = await request.json();
-    const { name, description, icon, setupCompleted } = body;
+    const { name, description, icon, setupCompleted, width } = body;
 
     // Validate that at least one field is being updated
-    if (!name && !description && !icon && setupCompleted === undefined) {
+    if (!name && !description && !icon && setupCompleted === undefined && !width) {
       return NextResponse.json(
         { error: 'At least one field must be provided for update' }, 
         { status: 400 }
@@ -60,11 +60,12 @@ export async function PATCH(
     }
 
     // Prepare updates object
-    const updates: { name?: string; description?: string; icon?: string; setupCompleted?: boolean } = {};
+    const updates: { name?: string; description?: string; icon?: string; setupCompleted?: boolean; width?: string } = {};
     if (name) updates.name = name;
     if (description !== undefined) updates.description = description;
     if (icon) updates.icon = icon;
     if (setupCompleted !== undefined) updates.setupCompleted = setupCompleted;
+    if (width) updates.width = width;
 
     // Update dashboard
     const result = await updateDashboard(dashboardId, userId, updates);

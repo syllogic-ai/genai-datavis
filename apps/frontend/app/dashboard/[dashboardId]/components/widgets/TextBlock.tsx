@@ -136,7 +136,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
   if (!editor) {
     return (
       <div className="h-full w-full bg-transparent flex items-center justify-center p-4">
-        <div className="text-gray-500 dark:text-gray-400 text-center">
+        <div className="text-center" style={{ color: 'var(--muted-foreground)' }}>
           <div className="text-2xl mb-2">📝</div>
           <p className="text-sm">Loading editor...</p>
         </div>

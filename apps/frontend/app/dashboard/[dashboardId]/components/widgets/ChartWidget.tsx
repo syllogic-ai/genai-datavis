@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { Widget } from "@/types/enhanced-dashboard-types";
 import { ChartRenderer } from "@/components/charts/ChartRenderer";
 import { ChartSpec } from "@/types/chart-types";
-import { useDashboardChartColors } from "@/hooks/useDashboardChartColors";
+import { useDashboardChartColorsCompat as useDashboardChartColors } from "@/hooks/useDashboardChartColorsCompat";
 import { convertHexToThemeReference } from "@/lib/update-widget-colors";
 
 interface ChartWidgetProps {
@@ -100,7 +100,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   if (isEditing) {
     return (
       <div className="h-full flex flex-col">
-        <div className="space-y-3 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="space-y-3 mb-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Chart Title
@@ -160,7 +160,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
         </div>
 
         <div className="flex-1 min-h-0">
-          <div className="h-full border border-gray-200 dark:border-gray-700 rounded p-2">
+          <div className="h-full rounded p-2" style={{ border: '1px solid var(--border)' }}>
             <ChartRenderer spec={{ ...chartSpec, chartType: chartType as any }} />
           </div>
         </div>
@@ -174,7 +174,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
         {widget.data || sampleData ? (
           <ChartRenderer spec={chartSpec} />
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+          <div className="h-full flex items-center justify-center" style={{ color: 'var(--muted-foreground)' }}>
             <div className="text-center">
               <div className="text-2xl mb-1">📊</div>
               <p className="text-xs">No chart data available</p>

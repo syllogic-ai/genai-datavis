@@ -18,6 +18,7 @@ export function useDashboardState(dashboardId: string) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [isPublished, setIsPublished] = useState(false);
+  const [isPublishLoading, setIsPublishLoading] = useState(false);
 
   // Reference to the grid component's add widget function
   const addWidgetRef = useRef<((type: string) => void) | null>(null);
@@ -25,7 +26,7 @@ export function useDashboardState(dashboardId: string) {
   // Widget persistence manager
   const widgetPersistenceRef = useRef<WidgetPersistence | null>(null);
 
-  // Initialize widget persistence
+  // Initialize widget persistence and dashboard data
   useEffect(() => {
     if (!userId) return;
     
@@ -43,10 +44,31 @@ export function useDashboardState(dashboardId: string) {
 
     widgetPersistenceRef.current = persistenceManager;
     
-    // Load initial widgets
-    persistenceManager.loadWidgets().then((loadedWidgets) => {
-      console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
-      setWidgets(loadedWidgets);
+    // Load dashboard data and widgets concurrently
+    Promise.all([
+      // Load dashboard information (including is_public status)
+      fetch(`/api/dashboards/${dashboardId}`)
+        .then(res => res.ok ? res.json() : null)
+        .then(dashboard => {
+          if (dashboard) {
+            console.log(`[useDashboardState] Loaded dashboard info:`, { 
+              id: dashboard.id, 
+              name: dashboard.name, 
+              isPublic: dashboard.isPublic 
+            });
+            setDashboardName(dashboard.name || "My Dashboard");
+            setIsPublished(dashboard.isPublic || false);
+          }
+        })
+        .catch(err => console.warn('[useDashboardState] Failed to load dashboard info:', err)),
+      
+      // Load widgets
+      persistenceManager.loadWidgets().then((loadedWidgets) => {
+        console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
+        setWidgets(loadedWidgets);
+        return loadedWidgets;
+      })
+    ]).finally(() => {
       setIsLoading(false);
     });
 
@@ -84,7 +106,6 @@ export function useDashboardState(dashboardId: string) {
       
       console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets`);
       setWidgets(loadedWidgets);
-      setIsPublished(loadedWidgets.length > 0);
       
       // Show success toast based on context
       if (loadedWidgets.length > 0) {
@@ -163,7 +184,7 @@ export function useDashboardState(dashboardId: string) {
     });
     
     setWidgets(newWidgets);
-    setIsPublished(false);
+    // Note: Keep existing published status - changes don't unpublish automatically
 
     if (!widgetPersistenceRef.current) {
       console.log(`[useDashboardState] No widget persistence manager available`);
@@ -215,7 +236,7 @@ export function useDashboardState(dashboardId: string) {
   const handleAddWidget = useCallback((type: string) => {
     if (addWidgetRef.current) {
       addWidgetRef.current(type);
-      setIsPublished(false); // Mark as unpublished when widget is added
+      // Note: Keep existing published status - new widgets don't unpublish automatically
       
       // Show a quick toast for widget creation
       toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} widget added!`, {
@@ -245,6 +266,58 @@ export function useDashboardState(dashboardId: string) {
     handleUpdateWidgets(updatedWidgets);
   }, [widgets, handleUpdateWidgets]);
 
+  const publishDashboard = useCallback(async () => {
+    setIsPublishLoading(true);
+    try {
+      const response = await fetch(`/api/dashboard/${dashboardId}/publish`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to publish dashboard');
+      }
+
+      const result = await response.json();
+      setIsPublished(result.isPublic);
+      
+      return result;
+    } catch (error) {
+      console.error('Error publishing dashboard:', error);
+      throw error;
+    } finally {
+      setIsPublishLoading(false);
+    }
+  }, [dashboardId]);
+
+  const unpublishDashboard = useCallback(async () => {
+    setIsPublishLoading(true);
+    try {
+      const response = await fetch(`/api/dashboard/${dashboardId}/publish`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to unpublish dashboard');
+      }
+
+      const result = await response.json();
+      setIsPublished(result.isPublic);
+      
+      return result;
+    } catch (error) {
+      console.error('Error unpublishing dashboard:', error);
+      throw error;
+    } finally {
+      setIsPublishLoading(false);
+    }
+  }, [dashboardId]);
+
   return {
     // State
     widgets,
@@ -256,6 +329,7 @@ export function useDashboardState(dashboardId: string) {
     error,
     dashboardId,
     isPublished,
+    isPublishLoading,
     
     // Handlers
     handleUpdateWidgets,
@@ -269,6 +343,10 @@ export function useDashboardState(dashboardId: string) {
     // Persistence
     saveWidgets,
     loadWidgets,
+    
+    // Publishing
+    publishDashboard,
+    unpublishDashboard,
     
     // Refs
     addWidgetRef,

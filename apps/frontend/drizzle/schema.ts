@@ -117,6 +117,7 @@ export const dashboards = pgTable("dashboards", {
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow(),
 	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow(),
 	setupCompleted: boolean("setup_completed").default(false).notNull(),
+	isPublic: boolean("is_public").default(false).notNull(),
 	activeThemeId: text("active_theme_id"),
 }, (table) => [
 	foreignKey({

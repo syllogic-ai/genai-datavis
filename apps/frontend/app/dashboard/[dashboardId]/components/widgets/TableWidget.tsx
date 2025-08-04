@@ -79,7 +79,7 @@ export function TableWidget({ widget, onUpdate, isEditing, onEditToggle }: Table
   if (isEditing) {
     return (
       <div className="h-full flex flex-col">
-        <div className="space-y-3 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
+        <div className="space-y-3 mb-4 pb-3" style={{ borderBottom: '1px solid var(--border)' }}>
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Table Title
@@ -152,7 +152,7 @@ export function TableWidget({ widget, onUpdate, isEditing, onEditToggle }: Table
     <div className="h-full flex flex-col border rounded-lg transition-all duration-200 p-4" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--card-foreground)', boxShadow: 'var(--shadow)' }}>
       {widget.config.title && (
         <div className="mb-3">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          <h3 className="text-lg font-semibold" style={{ color: 'var(--foreground)' }}>
             {widget.config.title}
           </h3>
         </div>
@@ -162,7 +162,7 @@ export function TableWidget({ widget, onUpdate, isEditing, onEditToggle }: Table
         {widget.data || sampleData ? (
           <TableRenderer spec={tableSpec} />
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
+          <div className="h-full flex items-center justify-center" style={{ color: 'var(--muted-foreground)' }}>
             <div className="text-center">
               <div className="text-3xl mb-2">📋</div>
               <p className="text-sm">No table data available</p>

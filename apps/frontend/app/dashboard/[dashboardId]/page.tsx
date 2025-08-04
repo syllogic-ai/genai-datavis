@@ -26,6 +26,7 @@ import { useDashboardRealtime } from "@/app/lib/hooks/useDashboardRealtime";
 import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardUpdates";
 import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
 import { DashboardThemeProvider, useDashboardTheme } from "@/components/theme/DashboardThemeProvider";
+import { useDashboardSettings } from "./hooks/useDashboardSettings";
 
 function EnhancedDashboardContent() {
   const params = useParams();
@@ -46,6 +47,13 @@ function EnhancedDashboardContent() {
   // Initialize modal cleanup to prevent overlay issues
   const { manualCleanup } = useModalCleanup();
 
+  // Dashboard settings management
+  const {
+    settings: dashboardSettings,
+    isLoading: isSettingsLoading,
+    setWidth: setDashboardWidth
+  } = useDashboardSettings(dashboardId);
+
   // Dashboard state management (load widgets first)
   const {
     widgets,
@@ -55,10 +63,13 @@ function EnhancedDashboardContent() {
     saveStatus,
     error,
     isPublished,
+    isPublishLoading,
     handleUpdateWidgets,
     handleAddWidget,
     saveWidgets,
     loadWidgets,
+    publishDashboard,
+    unpublishDashboard,
     addWidgetRef,
   } = useDashboardState(dashboardId);
 
@@ -180,10 +191,12 @@ function EnhancedDashboardContent() {
     description: null,
     icon: 'document-text',
     setupCompleted: true,
+    isPublic: isPublished,
     activeThemeId: null,
+    width: dashboardSettings.width || 'full',
     createdAt: new Date('2024-01-01'), // Use fixed date to prevent infinite re-renders
     updatedAt: null,
-  }), [dashboardId, dashboardName]);
+  }), [dashboardId, dashboardName, isPublished, dashboardSettings.width]);
 
   // Update the dashboard context whenever widgets change
   useEffect(() => {
@@ -364,6 +377,12 @@ function EnhancedDashboardContent() {
         <DashboardHeader 
           dashboardTitle={dashboardName} 
           dashboardId={dashboardId}
+          dashboardWidth={dashboardSettings.width}
+          onWidthChange={setDashboardWidth}
+          isPublic={isPublished}
+          onPublish={publishDashboard}
+          onUnpublish={unpublishDashboard}
+          isPublishLoading={isPublishLoading}
         />
       </motion.div>
 
@@ -392,6 +411,7 @@ function EnhancedDashboardContent() {
               onUpdateWidgets={handleUpdateWidgets}
               onAddWidget={(fn) => { addWidgetRef.current = fn; }}
               isLoading={isLoading}
+              width={dashboardSettings.width}
             />
           </div>
 

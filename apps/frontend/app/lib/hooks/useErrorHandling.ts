@@ -135,6 +135,7 @@ export function useErrorHandling(
     }
 
     return errorId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     classifyError,
     generateFriendlyMessage,

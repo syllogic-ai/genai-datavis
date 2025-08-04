@@ -8,6 +8,7 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 
 import { Widget } from "@/types/enhanced-dashboard-types";
+import { DashboardWidth } from "@/components/dashboard/DashboardSettings";
 import { TextBlock } from "./widgets/TextBlock";
 import { ChartWidget } from "./widgets/ChartWidget";
 import { KPICard } from "./widgets/KPICard";
@@ -20,6 +21,7 @@ interface SimpleDashboardLayoutProps {
   onUpdateWidgets: (widgets: Widget[]) => void;
   onAddWidget?: (addWidgetFn: (type: string, insertIndex?: number) => void) => void;
   isLoading?: boolean;
+  width?: DashboardWidth;
 }
 
 const defaultConfigs = {
@@ -133,6 +135,7 @@ export function SimpleDashboardLayout({
   onUpdateWidgets,
   onAddWidget,
   isLoading = false,
+  width = 'full',
 }: SimpleDashboardLayoutProps) {
   const [hoveredWidget, setHoveredWidget] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -347,9 +350,14 @@ export function SimpleDashboardLayout({
     }
   }, [onAddWidget, handleAddWidget]);
 
+  // Get container styles based on width setting
+  const containerStyles = width === 'constrained' 
+    ? "w-full max-w-4xl mx-auto px-8 pt-8 pb-4 transition-all duration-300 ease-out min-h-screen"
+    : "w-full px-12 pt-8 pb-4 transition-all duration-300 ease-out min-h-screen";
+
   return (
     <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="w-full px-12 pt-8 pb-4 transition-all duration-300 ease-out min-h-screen">
+      <div className={containerStyles}>
         {widgets.length === 0 && !isLoading && (
           <div className="flex items-center justify-center h-96">
             <div className="w-full max-w-2xl mx-auto">
