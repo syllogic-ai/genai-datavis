@@ -489,7 +489,7 @@ export function ChatSidebar({
         </div>
 
         {/* Chat History - with bottom padding for fixed input */}
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative bg-background">
           <ScrollArea className="h-full" ref={scrollAreaRef}>
             <div className="p-4 space-y-4 pb-56"> {/* Further increased bottom padding for chat input to ensure all messages are visible */}
               {chatLoading && chatHistory.length === 0 ? (

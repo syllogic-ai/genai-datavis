@@ -27,6 +27,7 @@ import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardU
 import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
 import { DashboardThemeProvider, useDashboardTheme } from "@/components/theme/DashboardThemeProvider";
 import { useDashboardSettings } from "./hooks/useDashboardSettings";
+import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
 
 function EnhancedDashboardContent() {
   const params = useParams();
@@ -362,6 +363,7 @@ function EnhancedDashboardContent() {
   // Full Dashboard (Phase 3)
   return (
     <TextEditorProvider>
+      <GoogleFontsLoader />
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}

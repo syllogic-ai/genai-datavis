@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { createChat } from '@/app/lib/chatActions';
-import { supabase } from '@/app/lib/supabase';
 
 /**
  * Hook to manage the main chat session for a dashboard
@@ -16,7 +15,13 @@ export function useDashboardChat(dashboardId: string) {
   const { user, isSignedIn } = useUser();
 
   useEffect(() => {
-    if (!dashboardId || !isSignedIn || !user) {
+    if (!dashboardId || !isSignedIn || !user?.id) {
+      setIsLoading(false);
+      return;
+    }
+
+    // Skip if we already have a chatId to prevent unnecessary re-initialization
+    if (chatId) {
       setIsLoading(false);
       return;
     }
@@ -27,21 +32,18 @@ export function useDashboardChat(dashboardId: string) {
         setError(null);
 
         // First, try to find an existing chat for this dashboard
-        const { data: existingChats, error: fetchError } = await supabase
-          .from('chats')
-          .select('id')
-          .eq('dashboard_id', dashboardId)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (fetchError) {
-          throw fetchError;
+        const response = await fetch(`/api/dashboard/${dashboardId}/chat/latest`);
+        
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          throw new Error(errorData.details || errorData.error || `HTTP ${response.status}: Failed to fetch existing chat`);
         }
+        
+        const { chat: existingChat } = await response.json();
 
-        if (existingChats && existingChats.length > 0) {
+        if (existingChat) {
           // Use the most recent chat for this dashboard
-          setChatId(existingChats[0].id);
+          setChatId(existingChat.id);
         } else {
           // Create a new chat for this dashboard
           const newChat = await createChat(
@@ -60,7 +62,7 @@ export function useDashboardChat(dashboardId: string) {
     };
 
     getOrCreateChat();
-  }, [dashboardId, user?.id, isSignedIn, user]);
+  }, [dashboardId, user?.id, isSignedIn, chatId]);
 
   return {
     chatId,

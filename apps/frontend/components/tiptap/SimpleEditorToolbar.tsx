@@ -20,7 +20,9 @@ import {
   Pilcrow,
   AlignLeft,
   AlignCenter,
-  AlignRight
+  AlignRight,
+  Plus,
+  Minus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -31,7 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { GOOGLE_FONTS, loadGoogleFont } from "./GoogleFonts";
+import { GOOGLE_FONTS, FONT_WEIGHTS, loadGoogleFont, getAvailableWeights } from "./GoogleFonts";
 
 interface SimpleEditorToolbarProps {
   editor: Editor | null;
@@ -86,10 +88,25 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
 
   const handleFontChange = (fontFamily: string) => {
     if (fontFamily === "default" || !fontFamily) {
-      editor.chain().focus().unsetFontFamily().run();
+      // Remove font family by updating textStyle without fontFamily
+      const currentAttrs = editor.getAttributes('textStyle');
+      const { fontFamily: _, ...restAttrs } = currentAttrs;
+      if (Object.keys(restAttrs).length > 0) {
+        editor.chain().focus().setMark('textStyle', restAttrs).run();
+      } else {
+        editor.chain().focus().unsetMark('textStyle').run();
+      }
     } else {
       loadGoogleFont(fontFamily);
-      editor.chain().focus().setFontFamily(fontFamily).run();
+      // Get current attributes and merge with new font family
+      const currentAttrs = editor.getAttributes('textStyle');
+      
+      // Ensure we're setting the font family value correctly
+      // The fontFamily from GOOGLE_FONTS already includes quotes where needed
+      editor.chain().focus().setMark('textStyle', { 
+        ...currentAttrs, 
+        fontFamily 
+      }).run();
     }
   };
 
@@ -97,10 +114,90 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
     const fontFamily = editor.getAttributes('textStyle').fontFamily;
     if (!fontFamily) return "default";
     
-    const matchingFont = GOOGLE_FONTS.find(font => 
-      font.value === fontFamily || font.name.toLowerCase() === fontFamily.toLowerCase()
-    );
-    return matchingFont ? fontFamily : "default";
+    // Normalize the font family for comparison
+    // Remove extra quotes and spaces
+    const normalizedFontFamily = fontFamily.replace(/['"]/g, '').trim();
+    
+    const matchingFont = GOOGLE_FONTS.find(font => {
+      const normalizedFontValue = font.value.replace(/['"]/g, '').trim();
+      return normalizedFontValue === normalizedFontFamily || 
+             font.value === fontFamily ||
+             font.name.toLowerCase() === normalizedFontFamily.toLowerCase();
+    });
+    
+    return matchingFont ? matchingFont.value : "default";
+  };
+
+  const handleFontWeightChange = (fontWeight: string) => {
+    if (fontWeight === "default" || !fontWeight) {
+      // Remove font weight by updating textStyle without fontWeight
+      const currentAttrs = editor.getAttributes('textStyle');
+      const { fontWeight: _, ...restAttrs } = currentAttrs;
+      if (Object.keys(restAttrs).length > 0) {
+        editor.chain().focus().setMark('textStyle', restAttrs).run();
+      } else {
+        editor.chain().focus().unsetMark('textStyle').run();
+      }
+    } else {
+      // Get current attributes and merge with new font weight
+      const currentAttrs = editor.getAttributes('textStyle');
+      editor.chain().focus().setMark('textStyle', { 
+        ...currentAttrs, 
+        fontWeight 
+      }).run();
+    }
+  };
+
+  const getCurrentFontWeight = () => {
+    const attrs = editor.getAttributes('textStyle');
+    return attrs.fontWeight || "400";
+  };
+
+  const getAvailableWeightsForCurrentFont = () => {
+    const fontFamily = editor.getAttributes('textStyle').fontFamily;
+    if (!fontFamily) return getAvailableWeights("default");
+    
+    // Find the matching font to get its weights
+    const normalizedFontFamily = fontFamily.replace(/['"]/g, '').trim();
+    const matchingFont = GOOGLE_FONTS.find(font => {
+      const normalizedFontValue = font.value.replace(/['"]/g, '').trim();
+      return normalizedFontValue === normalizedFontFamily || 
+             font.value === fontFamily ||
+             font.name.toLowerCase() === normalizedFontFamily.toLowerCase();
+    });
+    
+    return matchingFont ? matchingFont.weights : ["400", "700"];
+  };
+
+  const getCurrentFontSize = () => {
+    const attrs = editor.getAttributes('textStyle');
+    return attrs.fontSize || "16px";
+  };
+
+  const increaseFontSize = () => {
+    const currentSize = getCurrentFontSize();
+    const sizeValue = parseFloat(currentSize.replace('px', '')) || 16;
+    const newSize = Math.min(sizeValue + 2, 72); // Max 72px
+    
+    // Get current attributes and merge with new font size
+    const currentAttrs = editor.getAttributes('textStyle');
+    editor.chain().focus().setMark('textStyle', { 
+      ...currentAttrs, 
+      fontSize: `${newSize}px` 
+    }).run();
+  };
+
+  const decreaseFontSize = () => {
+    const currentSize = getCurrentFontSize();
+    const sizeValue = parseFloat(currentSize.replace('px', '')) || 16;
+    const newSize = Math.max(sizeValue - 2, 8); // Min 8px
+    
+    // Get current attributes and merge with new font size
+    const currentAttrs = editor.getAttributes('textStyle');
+    editor.chain().focus().setMark('textStyle', { 
+      ...currentAttrs, 
+      fontSize: `${newSize}px` 
+    }).run();
   };
 
   return (
@@ -194,6 +291,48 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
               ))}
             </SelectContent>
           </Select>
+
+          {/* Font Weight Selector */}
+          <Select value={getCurrentFontWeight()} onValueChange={handleFontWeightChange}>
+            <SelectTrigger className="w-[120px] h-8">
+              <SelectValue placeholder="Weight" />
+            </SelectTrigger>
+            <SelectContent>
+              {getAvailableWeightsForCurrentFont().map((weight) => {
+                const weightName = FONT_WEIGHTS.find(w => w.value === weight)?.name || weight;
+                return (
+                  <SelectItem key={weight} value={weight}>
+                    <span style={{ fontWeight: weight }}>{weightName}</span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+
+          {/* Font Size Controls */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={decreaseFontSize}
+            className="h-8 w-8 p-0"
+            title="Decrease font size"
+          >
+            <Minus className="h-4 w-4" />
+          </Button>
+          <span className="text-xs text-muted-foreground min-w-[32px] text-center">
+            {getCurrentFontSize().replace('px', '')}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={increaseFontSize}
+            className="h-8 w-8 p-0"
+            title="Increase font size"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
 
           <Separator orientation="vertical" className="mx-1 h-6 border-border" />
 

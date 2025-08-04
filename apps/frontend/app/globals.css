@@ -157,7 +157,6 @@ body {
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    font-family: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
   }
   body {
     @apply bg-background text-foreground;
@@ -166,6 +165,7 @@ body {
   html {
     font-family: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
   }
+  
 }
 
 /* FilePond custom styles */

@@ -14,6 +14,7 @@ import { SyllogicBadge } from "@/components/dashboard/SyllogicBadge";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
 
 interface PublicDashboardData {
   dashboard: Dashboard & { width?: 'full' | 'constrained' };
@@ -205,6 +206,7 @@ export default function PublicDashboardPage() {
   return (
     <PublicDashboardThemeProvider dashboardId={dashboardId} theme={data.theme}>
       <TextEditorProvider>
+        <GoogleFontsLoader />
         <PublicDashboardContent data={data} sortedWidgets={sortedWidgets} />
       </TextEditorProvider>
     </PublicDashboardThemeProvider>

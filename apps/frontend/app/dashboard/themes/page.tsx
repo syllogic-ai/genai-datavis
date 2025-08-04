@@ -83,8 +83,8 @@ import {
 import { AppSidebar } from "@/components/dashboard/AppSidebar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CSSImportDialog } from "@/components/theme/CSSImportDialog";
-import { FontSelector } from "@/components/ui/font-selector";
 import { preloadPopularFonts } from "@/lib/google-fonts";
+import { GOOGLE_FONTS, loadGoogleFont } from "@/components/tiptap/GoogleFonts";
 
 interface ThemeEditorState {
   selectedPresetId: string;
@@ -94,28 +94,45 @@ interface ThemeEditorState {
   previewMode: "light" | "dark";
 }
 
-// Font family options
-const FONT_FAMILIES = [
-  { value: "Inter, sans-serif", label: "Inter" },
-  { value: "Roboto, sans-serif", label: "Roboto" },
-  { value: "Open Sans, sans-serif", label: "Open Sans" },
-  { value: "Poppins, sans-serif", label: "Poppins" },
-  { value: "Lato, sans-serif", label: "Lato" },
-  { value: "Montserrat, sans-serif", label: "Montserrat" },
-  { value: "Source Sans 3, sans-serif", label: "Source Sans 3" },
-  { value: "system-ui, sans-serif", label: "System UI" },
-];
+// Helper function to get font type from font-family string
+const getFontType = (fontFamily: string): string => {
+  if (fontFamily.includes('serif') && !fontFamily.includes('sans-serif')) {
+    return 'Serif';
+  }
+  if (fontFamily.includes('monospace')) {
+    return 'Mono';
+  }
+  return 'Sans';
+};
 
-const HEADING_FONT_FAMILIES = [
-  { value: "Inter, sans-serif", label: "Inter" },
-  { value: "Playfair Display, serif", label: "Playfair Display" },
-  { value: "Merriweather, serif", label: "Merriweather" },
-  { value: "Source Serif 4, serif", label: "Source Serif 4" },
-  { value: "Crimson Text, serif", label: "Crimson Text" },
-  { value: "Lora, serif", label: "Lora" },
-  { value: "Poppins, sans-serif", label: "Poppins" },
-  { value: "Montserrat, sans-serif", label: "Montserrat" },
-];
+// Create formatted font lists from Google Fonts
+const SANS_SERIF_FONTS = GOOGLE_FONTS
+  .filter(font => getFontType(font.value) === 'Sans')
+  .map(font => ({
+    value: font.value,
+    label: `${font.name} (Sans)`,
+    name: font.name
+  }));
+
+const SERIF_FONTS = GOOGLE_FONTS
+  .filter(font => getFontType(font.value) === 'Serif')
+  .map(font => ({
+    value: font.value,
+    label: `${font.name} (Serif)`,
+    name: font.name
+  }));
+
+const MONO_FONTS = GOOGLE_FONTS
+  .filter(font => getFontType(font.value) === 'Mono')
+  .map(font => ({
+    value: font.value,
+    label: `${font.name} (Mono)`,
+    name: font.name
+  }));
+
+// Combined lists for different use cases
+const ALL_FONTS = [...SANS_SERIF_FONTS, ...SERIF_FONTS, ...MONO_FONTS];
+const HEADING_FONTS = [...SERIF_FONTS, ...SANS_SERIF_FONTS]; // Prefer serif for headings, but include sans as options
 
 // Font size options
 const FONT_SIZES = [
@@ -233,10 +250,47 @@ export default function ThemeGeneratorPage() {
     
     cssRules += `}\n`;
     
+    // Ensure TipTap editor inherits theme colors correctly within the preview
+    cssRules += `.theme-preview-container .ProseMirror {\n`;
+    cssRules += `  color: ${currentStyles.foreground} !important;\n`;
+    cssRules += `}\n`;
+    
+    cssRules += `.theme-preview-container .ProseMirror h1,\n`;
+    cssRules += `.theme-preview-container .ProseMirror h2,\n`;
+    cssRules += `.theme-preview-container .ProseMirror h3,\n`;
+    cssRules += `.theme-preview-container .ProseMirror h4,\n`;
+    cssRules += `.theme-preview-container .ProseMirror h5,\n`;
+    cssRules += `.theme-preview-container .ProseMirror h6 {\n`;
+    cssRules += `  color: ${currentStyles.foreground} !important;\n`;
+    cssRules += `}\n`;
+    
+    cssRules += `.theme-preview-container .ProseMirror p,\n`;
+    cssRules += `.theme-preview-container .ProseMirror li {\n`;
+    cssRules += `  color: ${currentStyles.foreground} !important;\n`;
+    cssRules += `}\n`;
+    
     // Add dark mode support for preview container
     if (state.previewMode === "dark") {
       cssRules += `.theme-preview-container.dark {\n`;
       cssRules += `  color-scheme: dark;\n`;
+      cssRules += `}\n`;
+      
+      cssRules += `.theme-preview-container.dark .ProseMirror {\n`;
+      cssRules += `  color: ${currentStyles.foreground} !important;\n`;
+      cssRules += `}\n`;
+      
+      cssRules += `.theme-preview-container.dark .ProseMirror h1,\n`;
+      cssRules += `.theme-preview-container.dark .ProseMirror h2,\n`;
+      cssRules += `.theme-preview-container.dark .ProseMirror h3,\n`;
+      cssRules += `.theme-preview-container.dark .ProseMirror h4,\n`;
+      cssRules += `.theme-preview-container.dark .ProseMirror h5,\n`;
+      cssRules += `.theme-preview-container.dark .ProseMirror h6 {\n`;
+      cssRules += `  color: ${currentStyles.foreground} !important;\n`;
+      cssRules += `}\n`;
+      
+      cssRules += `.theme-preview-container.dark .ProseMirror p,\n`;
+      cssRules += `.theme-preview-container.dark .ProseMirror li {\n`;
+      cssRules += `  color: ${currentStyles.foreground} !important;\n`;
       cssRules += `}\n`;
     }
     
@@ -249,7 +303,16 @@ export default function ThemeGeneratorPage() {
     try {
       setLoading(true);
       const response = await fetch("/api/themes");
-      if (!response.ok) throw new Error("Failed to load themes");
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.warn("User not authenticated, skipping theme loading");
+          setUserThemes([]);
+          return;
+        }
+        throw new Error("Failed to load themes");
+      }
+      
       const data = await response.json();
       
       // Filter out themes that are actually built-in presets
@@ -390,7 +453,14 @@ export default function ThemeGeneratorPage() {
         body: JSON.stringify(themeData),
       });
 
-      if (!response.ok) throw new Error("Failed to save theme");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        if (response.status === 401) {
+          toast.error("Authentication required. Please sign in and try again.");
+          return;
+        }
+        throw new Error(errorData.error || "Failed to save theme");
+      }
 
       toast.success("Theme saved successfully!");
       setSaveDialogOpen(false);
@@ -399,7 +469,8 @@ export default function ThemeGeneratorPage() {
       setState((prev) => ({ ...prev, isModified: false }));
     } catch (error) {
       console.error("Error saving theme:", error);
-      toast.error("Failed to save theme");
+      const errorMessage = error instanceof Error ? error.message : "Failed to save theme";
+      toast.error(errorMessage);
     }
   };
 
@@ -422,7 +493,14 @@ export default function ThemeGeneratorPage() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to import theme");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: "Unknown error" }));
+        if (response.status === 401) {
+          toast.error("Authentication required. Please sign in and try again.");
+          return;
+        }
+        throw new Error(errorData.error || "Failed to import theme");
+      }
 
       toast.success("Theme imported successfully!");
       await loadUserThemes();
@@ -434,7 +512,8 @@ export default function ThemeGeneratorPage() {
       }
     } catch (error) {
       console.error("Error importing theme:", error);
-      toast.error("Failed to import theme");
+      const errorMessage = error instanceof Error ? error.message : "Failed to import theme";
+      toast.error(errorMessage);
     }
   };
 
@@ -903,47 +982,86 @@ export default function ThemeGeneratorPage() {
                         <div className="space-y-3">
                           <div className="space-y-2">
                             <Label className="text-xs">Heading Font</Label>
-                            <FontSelector
-                              value={currentStyles["font-serif"]?.replace(/,.*$/, '') || "Playfair Display"}
-                              onChange={(value) => {
-                                const fontFamily = `${value}, serif`;
-                                updateStyle("font-serif", fontFamily);
+                            <Select
+                              value={currentStyles["font-serif"] || SERIF_FONTS[0]?.value}
+                              onValueChange={(value) => {
+                                loadGoogleFont(value);
+                                updateStyle("font-serif", value);
                               }}
-                              placeholder="Select heading font..."
-                              previewText="Heading Preview"
-                              categories={['serif', 'display', 'all']}
-                              className="text-xs"
-                            />
+                            >
+                              <SelectTrigger className="text-xs rounded-lg">
+                                <SelectValue placeholder="Select heading font..." />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-lg max-h-80">
+                                {HEADING_FONTS.map((font) => (
+                                  <SelectItem
+                                    key={font.value}
+                                    value={font.value}
+                                    className="text-xs rounded-md"
+                                  >
+                                    <span style={{ fontFamily: font.value }}>
+                                      {font.label}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
 
                           <div className="space-y-2">
                             <Label className="text-xs">Body Font</Label>
-                            <FontSelector
-                              value={currentStyles["font-sans"]?.replace(/,.*$/, '') || "Inter"}
-                              onChange={(value) => {
-                                const fontFamily = `${value}, sans-serif`;
-                                updateStyle("font-sans", fontFamily);
+                            <Select
+                              value={currentStyles["font-sans"] || SANS_SERIF_FONTS[0]?.value}
+                              onValueChange={(value) => {
+                                loadGoogleFont(value);
+                                updateStyle("font-sans", value);
                               }}
-                              placeholder="Select body font..."
-                              previewText="Body text preview"
-                              categories={['sans-serif', 'all']}
-                              className="text-xs"
-                            />
+                            >
+                              <SelectTrigger className="text-xs rounded-lg">
+                                <SelectValue placeholder="Select body font..." />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-lg max-h-80">
+                                {SANS_SERIF_FONTS.map((font) => (
+                                  <SelectItem
+                                    key={font.value}
+                                    value={font.value}
+                                    className="text-xs rounded-md"
+                                  >
+                                    <span style={{ fontFamily: font.value }}>
+                                      {font.label}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
 
                           <div className="space-y-2">
                             <Label className="text-xs">Monospace Font</Label>
-                            <FontSelector
-                              value={currentStyles["font-mono"]?.replace(/,.*$/, '') || "JetBrains Mono"}
-                              onChange={(value) => {
-                                const fontFamily = `${value}, monospace`;
-                                updateStyle("font-mono", fontFamily);
+                            <Select
+                              value={currentStyles["font-mono"] || MONO_FONTS[0]?.value}
+                              onValueChange={(value) => {
+                                loadGoogleFont(value);
+                                updateStyle("font-mono", value);
                               }}
-                              placeholder="Select monospace font..."
-                              previewText="const code = 'preview';"
-                              categories={['monospace', 'all']}
-                              className="text-xs"
-                            />
+                            >
+                              <SelectTrigger className="text-xs rounded-lg">
+                                <SelectValue placeholder="Select monospace font..." />
+                              </SelectTrigger>
+                              <SelectContent className="rounded-lg max-h-80">
+                                {MONO_FONTS.map((font) => (
+                                  <SelectItem
+                                    key={font.value}
+                                    value={font.value}
+                                    className="text-xs rounded-md"
+                                  >
+                                    <span style={{ fontFamily: font.value }}>
+                                      {font.label}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                         </div>
 

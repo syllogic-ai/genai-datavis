@@ -57,7 +57,7 @@ export function DashboardSettings({ currentWidth, onWidthChange }: DashboardSett
         >
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            <span>Constrained (Notion-style)</span>
+            <span>Blog Layout</span>
           </div>
           {currentWidth === 'constrained' && <Check className="h-4 w-4" />}
         </DropdownMenuItem>

@@ -139,6 +139,7 @@ export function SimpleDashboardLayout({
 }: SimpleDashboardLayoutProps) {
   const [hoveredWidget, setHoveredWidget] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [editingWidgets, setEditingWidgets] = useState<Set<string>>(new Set());
 
   // Sort widgets by order for consistent rendering (with backward compatibility)
   const sortedWidgets = useMemo(() => {
@@ -321,12 +322,25 @@ export function SimpleDashboardLayout({
     ));
   }, [widgets, onUpdateWidgets, isDragging]);
 
+  const handleEditToggle = useCallback((widgetId: string) => {
+    setEditingWidgets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(widgetId)) {
+        newSet.delete(widgetId);
+      } else {
+        newSet.add(widgetId);
+      }
+      return newSet;
+    });
+  }, []);
+
   const renderWidget = useCallback((widget: Widget) => {
+    const isEditing = editingWidgets.has(widget.id);
     const props = {
       widget,
       onUpdate: handleUpdateWidget,
-      isEditing: false,
-      onEditToggle: () => {},
+      isEditing: widget.type === 'text' ? true : false, // TextBlock always editable, others not in editing mode by default
+      onEditToggle: () => handleEditToggle(widget.id),
     };
 
     switch (widget.type) {
@@ -341,7 +355,7 @@ export function SimpleDashboardLayout({
       default:
         return <div>Unknown widget type</div>;
     }
-  }, [handleUpdateWidget]);
+  }, [handleUpdateWidget, editingWidgets, handleEditToggle]);
 
   // Expose handleAddWidget to parent component
   React.useEffect(() => {

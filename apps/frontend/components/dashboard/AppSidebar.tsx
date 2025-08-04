@@ -29,8 +29,13 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
   
   // Extract active dashboard ID from pathname
   const activeChatId =
@@ -74,7 +79,7 @@ export function AppSidebar({
           {/* Home Button */}
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link href="/dashboard" className={pathname === '/dashboard' ? 'bg-secondary' : ''}>
+              <Link href="/dashboard" className={mounted && pathname === '/dashboard' ? 'bg-secondary' : ''}>
                 <Home className="size-4" />
                 <span>Home</span>
               </Link>
@@ -84,7 +89,7 @@ export function AppSidebar({
             {/* Theme Generator Button */}
             <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link href="/dashboard/themes" className={pathname === '/dashboard/themes' ? 'bg-secondary' : ''}>
+              <Link href="/dashboard/themes" className={mounted && pathname === '/dashboard/themes' ? 'bg-secondary' : ''}>
                 <Palette className="size-4" />
                 <span>Themes</span>
               </Link>
@@ -94,7 +99,7 @@ export function AppSidebar({
           {/* Settings Button */}
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link href="/dashboard/settings" className={pathname?.startsWith('/dashboard/settings') ? 'bg-secondary' : ''}>
+              <Link href="/dashboard/settings" className={mounted && pathname?.startsWith('/dashboard/settings') ? 'bg-secondary' : ''}>
                 <Settings className="size-4" />
                 <span>Settings</span>
               </Link>
@@ -118,8 +123,8 @@ export function AppSidebar({
       
       <SidebarFooter>
         <SidebarMenu>
-          {/* User Profile */}
-          {user && (
+          {/* User Profile - Only render after mount and when user is loaded */}
+          {mounted && isLoaded && user && (
             <SidebarMenuItem>
               <SidebarMenuButton size="lg">
                 <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
