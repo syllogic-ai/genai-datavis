@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { IconTrash } from "@tabler/icons-react";
+import { IconTrash, IconGripVertical } from "@tabler/icons-react";
 import {
   Dialog,
   DialogContent,
@@ -77,24 +77,45 @@ export function WidgetWrapper({
       onMouseLeave={handleMouseLeave}
     >
       <AnimatePresence>
-        {/* Drag handle */}
-        <DragHandle 
-          isVisible={!isDragging && isHovered && !showDeleteDialog}
-        />
-        
-        {/* Delete button */}
+        {/* Widget controls - centered overlay */}
         {(!isDragging && isHovered && !showDeleteDialog) && (
-          <motion.button
-            key={`delete-${id}`}
+          <motion.div
+            key={`controls-${id}`}
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            onClick={handleDelete}
-            className="absolute -top-4 -right-4 w-9 h-9 md:w-8 md:h-8 bg-background border border-primary/10 z-40 hover:bg-secondary text-primary rounded-full flex items-center justify-center shadow-lg transition-colors touch-manipulation"
+            className="absolute inset-0 flex items-center justify-center z-40 pointer-events-none"
             style={{ zIndex: 30 }}
           >
-            <IconTrash className="w-4 h-4 text-primary" />
-          </motion.button>
+            {/* Semi-transparent overlay */}
+            <div className="absolute inset-0 bg-background/20 backdrop-blur-sm rounded-lg" />
+            
+            {/* Controls container */}
+            <div className="relative flex items-center gap-3 pointer-events-auto">
+              {/* Drag handle */}
+              <motion.div
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                className="w-10 h-10 bg-background border border-primary/20 hover:bg-secondary text-primary rounded-lg flex items-center justify-center shadow-lg transition-colors cursor-move touch-manipulation"
+                title="Drag to reorder"
+              >
+                <IconGripVertical className="w-5 h-5 text-primary/70" />
+              </motion.div>
+              
+              {/* Delete button */}
+              <motion.button
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10 }}
+                onClick={handleDelete}
+                className="w-10 h-10 bg-background border border-destructive/20 hover:bg-destructive hover:text-destructive-foreground text-destructive rounded-lg flex items-center justify-center shadow-lg transition-colors touch-manipulation"
+                title="Delete widget"
+              >
+                <IconTrash className="w-5 h-5" />
+              </motion.button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
       

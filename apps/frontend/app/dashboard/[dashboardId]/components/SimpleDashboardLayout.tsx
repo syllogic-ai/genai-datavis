@@ -75,53 +75,68 @@ const WidgetList = React.memo(function WidgetList({
             <div
               ref={provided.innerRef}
               {...provided.draggableProps}
-              className={`flex items-start gap-2 mb-4 group ${
+              {...provided.dragHandleProps}
+              className={`relative mb-4 group cursor-move ${
                 snapshot.isDragging ? 'z-50' : ''
               }`}
-              onMouseEnter={() => setHoveredWidget(widget.id)}
-              onMouseLeave={() => setHoveredWidget(null)}
               style={provided.draggableProps.style}
             >
-              {/* Left-side drag handle - inside the draggable container */}
-              <div
-                {...provided.dragHandleProps}
-                className={`flex flex-col gap-1 mt-2 transition-opacity duration-200 cursor-grab active:cursor-grabbing ${
-                  hoveredWidget === widget.id || snapshot.isDragging
-                    ? 'opacity-100' 
-                    : 'opacity-30 group-hover:opacity-60'
+              {/* Extended hover area that includes controls */}
+              <div 
+                className="absolute -left-14 top-0 w-14 h-full z-30"
+                onMouseEnter={() => setHoveredWidget(widget.id)}
+                onMouseLeave={() => setHoveredWidget(null)}
+              />
+              
+              {/* Widget Content */}
+              <div 
+                className={`rounded-lg overflow-hidden transition-all duration-200 ${
+                  widget.type === 'text' 
+                    ? '' // No border or shadow for text blocks
+                    : `border shadow-sm ${
+                        snapshot.isDragging 
+                          ? 'rotate-1 shadow-xl ring-2 ring-blue-500/50' 
+                          : snapshot.isDropAnimating 
+                            ? 'shadow-lg' 
+                            : 'hover:shadow-md'
+                      }`
                 }`}
+                onMouseEnter={() => setHoveredWidget(widget.id)}
+                onMouseLeave={() => setHoveredWidget(null)}
               >
-                <div className="h-8 w-8 p-0 shadow-sm border border-dashed rounded flex items-center justify-center">
-                  <IconGripVertical className="h-4 w-4" />
-                </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDeleteWidget(widget.id);
-                  }}
-                  className="h-8 w-8 p-0 shadow-sm"
-                  title="Delete widget"
-                >
-                  <IconTrash className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Widget Content - inherits background colors */}
-              <div className={`flex-1 rounded-lg overflow-hidden transition-all duration-200 ${
-                widget.type === 'text' 
-                  ? '' // No border or shadow for text blocks
-                  : `border shadow-sm ${
-                      snapshot.isDragging 
-                        ? 'rotate-1 shadow-xl ring-2 ring-blue-500/50' 
-                        : snapshot.isDropAnimating 
-                          ? 'shadow-lg' 
-                          : 'hover:shadow-md'
-                    }`
-              }`}>
                 {renderWidget(widget)}
               </div>
+
+              {/* Left side controls - only show on hover */}
+              {(hoveredWidget === widget.id && !snapshot.isDragging) && (
+                <div 
+                  className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-12 z-40 flex flex-col gap-2 pointer-events-auto"
+                  onMouseEnter={() => setHoveredWidget(widget.id)}
+                  onMouseLeave={() => setHoveredWidget(null)}
+                >
+                  {/* Visual drag handle indicator */}
+                  <div
+                    className="w-10 h-10 bg-background border border-primary/20 hover:bg-secondary text-primary rounded-lg flex items-center justify-center shadow-lg transition-colors cursor-move touch-manipulation"
+                    title="Drag to reorder"
+                  >
+                    <IconGripVertical className="w-5 h-5 text-primary/70" />
+                  </div>
+                  
+                  {/* Delete button */}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteWidget(widget.id);
+                    }}
+                    className="w-10 h-10 p-0 shadow-lg"
+                    title="Delete widget"
+                  >
+                    <IconTrash className="w-5 h-5" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </Draggable>

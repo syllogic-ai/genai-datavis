@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Command, Home, Plus, Settings, Palette } from "lucide-react";
+import { Command, Home, Plus, Settings, Palette, ChevronsUpDown, LogOut, HelpCircle, Moon, Sun } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useUser, SignOutButton } from "@clerk/nextjs";
 import {
   Sidebar,
   SidebarContent,
@@ -12,7 +12,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NavMain } from "@/components/dashboard/NavMain";
 import { Dashboard } from "@/db/schema";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
@@ -30,12 +40,43 @@ export function AppSidebar({
   const pathname = usePathname();
   const router = useRouter();
   const { user, isLoaded } = useUser();
+  const { isMobile } = useSidebar();
   const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
   const [mounted, setMounted] = React.useState(false);
+  const [isDarkMode, setIsDarkMode] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Theme management
+  React.useEffect(() => {
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+
+    checkDarkMode();
+    
+    // Listen for class changes on html element
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, { 
+      attributes: true, 
+      attributeFilter: ['class'] 
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  const toggleTheme = () => {
+    const htmlElement = document.documentElement;
+    if (htmlElement.classList.contains('dark')) {
+      htmlElement.classList.remove('dark');
+      setIsDarkMode(false);
+    } else {
+      htmlElement.classList.add('dark');
+      setIsDarkMode(true);
+    }
+  };
   
   // Extract active dashboard ID from pathname
   const activeChatId =
@@ -123,24 +164,76 @@ export function AppSidebar({
       
       <SidebarFooter>
         <SidebarMenu>
-          {/* User Profile - Only render after mount and when user is loaded */}
+          {/* User Profile with Dropdown Menu - Only render after mount and when user is loaded */}
           {mounted && isLoaded && user && (
             <SidebarMenuItem>
-              <SidebarMenuButton size="lg">
-                <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
-                  <span className="text-sm font-medium">
-                    {user.firstName?.[0] || user.emailAddresses[0]?.emailAddress[0] || "U"}
-                  </span>
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">
-                    {user.fullName || user.firstName || "User"}
-                  </span>
-                  <span className="truncate text-xs">
-                    {user.emailAddresses[0]?.emailAddress || ""}
-                  </span>
-                </div>
-              </SidebarMenuButton>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                  >
+                    <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
+                      <span className="text-sm font-medium">
+                        {user.firstName?.[0] || user.emailAddresses[0]?.emailAddress[0] || "U"}
+                      </span>
+                    </div>
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-medium">
+                        {user.fullName || user.firstName || "User"}
+                      </span>
+                      <span className="truncate text-xs">
+                        {user.emailAddresses[0]?.emailAddress || ""}
+                      </span>
+                    </div>
+                    <ChevronsUpDown className="ml-auto size-4" />
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                  side={isMobile ? "bottom" : "right"}
+                  align="end"
+                  sideOffset={4}
+                >
+                  <DropdownMenuLabel className="p-0 font-normal">
+                    <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                      <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
+                        <span className="text-sm font-medium">
+                          {user.firstName?.[0] || user.emailAddresses[0]?.emailAddress[0] || "U"}
+                        </span>
+                      </div>
+                      <div className="grid flex-1 text-left text-sm leading-tight">
+                        <span className="truncate font-medium">
+                          {user.fullName || user.firstName || "User"}
+                        </span>
+                        <span className="truncate text-xs">
+                          {user.emailAddresses[0]?.emailAddress || ""}
+                        </span>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem onClick={toggleTheme}>
+                      {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="mailto:giannis@syllogic.ai" className="flex items-center">
+                        <HelpCircle />
+                        Help & Support
+                      </a>
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <SignOutButton>
+                    <DropdownMenuItem>
+                      <LogOut />
+                      Log out
+                    </DropdownMenuItem>
+                  </SignOutButton>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </SidebarMenuItem>
           )}
         </SidebarMenu>

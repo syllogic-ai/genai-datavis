@@ -412,9 +412,7 @@ export function NavMain({
                 <SidebarMenuItem key={dashboard.id}>
                   <Collapsible key={dashboard.id} open={expandedDashboards.has(dashboard.id)}>
                     <div 
-                      className={`relative group rounded-md transition-all duration-200 ${
-                        dashboard.isActive ? 'bg-secondary' : ''
-                      }`}
+                      className="relative group"
                       onMouseEnter={() => {
                         setHoveredDashboard(dashboard.id);
                         // Lazy load widget count when user hovers over dashboard
@@ -425,56 +423,51 @@ export function NavMain({
                       onMouseLeave={() => setHoveredDashboard(null)}
                     >
                       {/* Main Dashboard Button */}
-                      <div className={`relative flex items-center w-full h-8 rounded-md transition-colors ${
-                        dashboard.isActive 
-                          ? 'bg-secondary hover:bg-secondary' 
-                          : 'hover:bg-secondary'
-                      } ${hoveredDashboard === dashboard.id && !dashboard.isActive ? 'bg-secondary' : ''}`}>
-                        {/* Chevron - positioned absolutely to avoid flex conflicts */}
-                        <CollapsibleTrigger
-                          className="absolute left-2 h-4 w-4 p-0 transition-all duration-200 data-[state=open]:rotate-90 hover:bg-primary/30 z-30 flex items-center justify-center rounded-sm pointer-events-auto"
-                          onClick={() => {
-                            console.log('[NavMain] Chevron clicked for dashboard:', dashboard.id);
-                            toggleDashboardExpansion(dashboard.id);
-                          }}
-                          onMouseEnter={() => {
-                            console.log('[NavMain] Chevron mouse enter for dashboard:', dashboard.id);
-                          }}
-                          onMouseLeave={() => {
-                            console.log('[NavMain] Chevron mouse leave for dashboard:', dashboard.id);
-                          }}
-                        >
-                          {dashboard.widgets.length > 0 ? (
-                            <ChevronRight className={`h-3 w-3 transition-opacity duration-200 ${
-                              hoveredDashboard === dashboard.id 
-                                ? 'opacity-100' 
-                                : 'opacity-30'
-                            }`} />
-                          ) : (
-                            <>
-                              {/* Dashboard Icon - visible when not hovered */}
-                              <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
-                                hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
-                              }`}>
-                                <IconRenderer
-                                  className="size-4 text-sidebar-foreground"
-                                  icon={dashboard.icon}
-                                />
-                              </div>
-                              {/* Chevron - visible on hover */}
-                              <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
-                                hoveredDashboard === dashboard.id ? 'opacity-100' : 'opacity-0'
-                              }`}>
-                                <ChevronRight className="h-3 w-3 text-sidebar-foreground/50" />
-                              </div>
-                            </>
-                          )}
-                          <span className="sr-only">Toggle widgets</span>
-                        </CollapsibleTrigger>
+                      <div className={`relative flex items-center w-full h-8 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground-foreground ${
+                        dashboard.isActive ? 'bg-primary text-primary-foreground hover:text-sidebar-foreground-foreground' : ''
+                      }`}>
                         
-                        {/* Dashboard name - positioned to not overlap chevron */}
+                        {/* Dashboard Icon - visible when not hovered */}
+                        <div className={`absolute left-2 h-4 w-4 flex items-center justify-center z-20 transition-opacity duration-200 ${
+                          hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
+                        }`}>
+                          <IconRenderer
+                            className={`size-4 transition-colors ${dashboard.isActive ? 'text-primary-foreground group-hover:text-sidebar-foreground' : 'text-sidebar-foreground'}`}
+                            icon={dashboard.icon}
+                          />
+                        </div>
+
+                        {/* Chevron - visible on hover */}
+                        <div className={`absolute left-2 h-4 w-4 flex items-center justify-center z-30 transition-opacity duration-200 ${
+                          hoveredDashboard === dashboard.id ? 'opacity-100' : 'opacity-0'
+                        }`}>
+                          {dashboard.widgets.length > 0 ? (
+                            <CollapsibleTrigger
+                              className={`h-4 w-4 p-0 transition-all duration-200 flex items-center justify-center rounded-sm pointer-events-auto hover:bg-primary/30 ${
+                                expandedDashboards.has(dashboard.id) ? 'rotate-90' : ''
+                              }`}
+                              onClick={() => {
+                                console.log('[NavMain] Chevron clicked for dashboard:', dashboard.id);
+                                toggleDashboardExpansion(dashboard.id);
+                              }}
+                              onMouseEnter={() => {
+                                console.log('[NavMain] Chevron mouse enter for dashboard:', dashboard.id);
+                              }}
+                              onMouseLeave={() => {
+                                console.log('[NavMain] Chevron mouse leave for dashboard:', dashboard.id);
+                              }}
+                            >
+                              <ChevronRight className="h-3 w-3 text-sidebar-foreground-foreground" />
+                              <span className="sr-only">Toggle widgets</span>
+                            </CollapsibleTrigger>
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-sidebar-foreground-foreground/50" />
+                          )}
+                        </div>
+                        
+                        {/* Dashboard name - positioned to not overlap icons */}
                         <Link href={`/dashboard/${dashboard.id}`} className="absolute left-8 right-10 py-1 truncate">
-                          <span className="truncate text-sm">{dashboard.name}</span>
+                          <span className={`truncate text-sm transition-colors ${dashboard.isActive ? 'text-primary-foreground group-hover:text-sidebar-foreground' : ''}`}>{dashboard.name}</span>
                         </Link>
                       </div>
 

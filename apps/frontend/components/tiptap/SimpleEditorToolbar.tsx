@@ -2,7 +2,7 @@
 
 import { Editor } from "@tiptap/react";
 import { motion, AnimatePresence } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Bold,
   Italic,
@@ -43,13 +43,27 @@ interface SimpleEditorToolbarProps {
 export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarProps) {
   const [editorState, setEditorState] = useState({});
 
+  // Helper function to check if editor is still valid
+  const isEditorValid = useCallback((editor: Editor | null): editor is Editor => {
+    if (!editor) return false;
+    try {
+      // Try to access a property that requires the editor to be mounted
+      editor.isDestroyed;
+      return !editor.isDestroyed && editor.view && editor.view.dom;
+    } catch (error) {
+      return false;
+    }
+  }, []);
+
   // Force toolbar state updates on editor changes
   useEffect(() => {
-    if (!editor) return;
+    if (!isEditorValid(editor)) return;
 
     const updateState = () => {
-      // Force a re-render by updating state
-      setEditorState({});
+      // Only update if editor is still valid
+      if (isEditorValid(editor)) {
+        setEditorState({});
+      }
     };
 
     // Listen to editor updates
@@ -57,36 +71,48 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
     editor.on('transaction', updateState);
     
     return () => {
-      editor.off('selectionUpdate', updateState);
-      editor.off('transaction', updateState);
+      if (isEditorValid(editor)) {
+        editor.off('selectionUpdate', updateState);
+        editor.off('transaction', updateState);
+      }
     };
-  }, [editor]);
+  }, [editor, isEditorValid]);
 
-  if (!editor || !isVisible) {
+  if (!isEditorValid(editor) || !isVisible) {
     return null;
   }
 
   const toggleLink = () => {
+    if (!isEditorValid(editor)) return;
+    
     const previousUrl = editor.getAttributes('link').href;
     const url = window.prompt('URL', previousUrl);
 
     // cancelled
     if (url === null) {
-      editor.chain().focus().run();
+      if (isEditorValid(editor)) {
+        editor.chain().focus().run();
+      }
       return;
     }
 
     // empty
     if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      if (isEditorValid(editor)) {
+        editor.chain().focus().extendMarkRange('link').unsetLink().run();
+      }
       return;
     }
 
     // update link
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    if (isEditorValid(editor)) {
+      editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+    }
   };
 
   const handleFontChange = (fontFamily: string) => {
+    if (!isEditorValid(editor)) return;
+    
     if (fontFamily === "default" || !fontFamily) {
       // Remove font family by updating textStyle without fontFamily
       const currentAttrs = editor.getAttributes('textStyle');
@@ -111,6 +137,8 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
   };
 
   const getCurrentFont = () => {
+    if (!isEditorValid(editor)) return "default";
+    
     const fontFamily = editor.getAttributes('textStyle').fontFamily;
     if (!fontFamily) return "default";
     
@@ -129,6 +157,8 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
   };
 
   const handleFontWeightChange = (fontWeight: string) => {
+    if (!isEditorValid(editor)) return;
+    
     if (fontWeight === "default" || !fontWeight) {
       // Remove font weight by updating textStyle without fontWeight
       const currentAttrs = editor.getAttributes('textStyle');
@@ -149,11 +179,14 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
   };
 
   const getCurrentFontWeight = () => {
+    if (!isEditorValid(editor)) return "400";
     const attrs = editor.getAttributes('textStyle');
     return attrs.fontWeight || "400";
   };
 
   const getAvailableWeightsForCurrentFont = () => {
+    if (!isEditorValid(editor)) return getAvailableWeights("default");
+    
     const fontFamily = editor.getAttributes('textStyle').fontFamily;
     if (!fontFamily) return getAvailableWeights("default");
     
@@ -170,11 +203,14 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
   };
 
   const getCurrentFontSize = () => {
+    if (!isEditorValid(editor)) return "16px";
     const attrs = editor.getAttributes('textStyle');
     return attrs.fontSize || "16px";
   };
 
   const increaseFontSize = () => {
+    if (!isEditorValid(editor)) return;
+    
     const currentSize = getCurrentFontSize();
     const sizeValue = parseFloat(currentSize.replace('px', '')) || 16;
     const newSize = Math.min(sizeValue + 2, 72); // Max 72px
@@ -188,6 +224,8 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
   };
 
   const decreaseFontSize = () => {
+    if (!isEditorValid(editor)) return;
+    
     const currentSize = getCurrentFontSize();
     const sizeValue = parseFloat(currentSize.replace('px', '')) || 16;
     const newSize = Math.max(sizeValue - 2, 8); // Min 8px
