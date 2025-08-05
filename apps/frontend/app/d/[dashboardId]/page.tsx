@@ -204,7 +204,11 @@ export default function PublicDashboardPage() {
   });
 
   return (
-    <PublicDashboardThemeProvider dashboardId={dashboardId} theme={data.theme}>
+    <PublicDashboardThemeProvider 
+      dashboardId={dashboardId} 
+      theme={data.theme}
+      dashboardData={data.dashboard}
+    >
       <TextEditorProvider>
         <GoogleFontsLoader />
         <PublicDashboardContent data={data} sortedWidgets={sortedWidgets} />

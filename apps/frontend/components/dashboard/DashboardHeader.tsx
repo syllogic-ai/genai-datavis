@@ -9,11 +9,14 @@ import {
   Database,
   Globe,
   Lock,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { ThemeSelector } from "./ThemeSelector";
 import { DashboardSettings, DashboardWidth } from "./DashboardSettings";
 import { PublishDashboardModal } from "./PublishDashboardModal";
+import { useDashboardTheme } from "@/components/theme/DashboardThemeProvider";
 
 export function DashboardHeader({
   dashboardTitle,
@@ -36,6 +39,13 @@ export function DashboardHeader({
 }) {
   const router = useRouter();
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const { themeMode, isDark, setThemeMode } = useDashboardTheme();
+
+  const handleThemeToggle = async () => {
+    // Toggle between light and dark mode only, ignoring system mode for this button
+    const newMode = isDark ? 'light' : 'dark';
+    await setThemeMode(newMode);
+  };
 
   return (
     <header className="group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 flex h-12 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear">
@@ -52,6 +62,23 @@ export function DashboardHeader({
         </div>
         
         <div className="flex items-center gap-3">
+
+            {/* Dark/Light Mode Toggle */}
+            <Button
+            variant="outline"
+            size="icon"
+            onClick={handleThemeToggle}
+            className="h-fit py-1.5 px-4 rounded-lg text-sm font-medium gap-2"
+          >
+            {isDark ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
+
+
           {/* Dashboard Settings */}
           {dashboardId && onWidthChange && (
             <DashboardSettings 
@@ -63,6 +90,7 @@ export function DashboardHeader({
           {/* Theme Selector */}
           {dashboardId && <ThemeSelector dashboardId={dashboardId} />}
 
+        
           {/* Sources Button */}
           <Button 
             variant="outline" 
@@ -89,7 +117,7 @@ export function DashboardHeader({
           >
             {isPublic ? (
               <div className="group flex items-center gap-2">
-                <div className="flex items-center justify-center size-4 group-hover:bg-green-200 rounded-full group-hover:animate-pulse">
+                <div className="flex items-center justify-center size-4 group-hover:bg-green-100/30 rounded-full group-hover:animate-pulse">
                   <div className="size-2 bg-green-600 rounded-full"></div>
                 </div>
                 Published

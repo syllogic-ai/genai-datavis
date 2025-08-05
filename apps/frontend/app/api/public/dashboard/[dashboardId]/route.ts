@@ -80,6 +80,7 @@ export async function GET(
       description: dashboard.description,
       icon: dashboard.icon,
       width: dashboard.width || 'full', // Include width setting for layout
+      themeMode: dashboard.themeMode || 'light', // Include theme mode for public dashboards
       createdAt: dashboard.createdAt,
       updatedAt: dashboard.updatedAt,
       // Exclude: userId, setupCompleted, activeThemeId

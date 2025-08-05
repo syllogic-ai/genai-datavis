@@ -10,8 +10,11 @@ interface DashboardThemeContextType {
   isLoading: boolean;
   error: string | null;
   setActiveTheme: (themeId: string | null) => Promise<void>;
+  setThemeMode: (mode: 'light' | 'dark' | 'system') => Promise<void>;
   getThemeStyles: () => ThemeStyleProps | null;
   themeClassName: string;
+  themeMode: 'light' | 'dark' | 'system';
+  isDark: boolean;
 }
 
 const DashboardThemeContext = createContext<DashboardThemeContextType | undefined>(undefined);
@@ -50,43 +53,55 @@ export function DashboardThemeProvider({
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
   const [themeClassName, setThemeClassName] = useState<string>('');
+  const [themeMode, setThemeModeState] = useState<'light' | 'dark' | 'system'>('system');
+  const [dashboardData, setDashboardData] = useState<any>(null);
 
-  // Detect dark mode
+  // Determine dark mode based on dashboard theme mode preference
   useEffect(() => {
-    const checkDarkMode = () => {
-      const hasClass = document.documentElement.classList.contains('dark');
-      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const isDarkMode = hasClass || systemDark;
+    const updateDarkMode = () => {
+      let shouldBeDark = false;
       
-      console.log('Dark mode check:', {
-        hasClass,
-        systemDark,
-        isDarkMode,
+      if (themeMode === 'dark') {
+        shouldBeDark = true;
+      } else if (themeMode === 'light') {
+        shouldBeDark = false;
+      } else if (themeMode === 'system') {
+        // For system mode, check both HTML class and system preference
+        const hasClass = document.documentElement.classList.contains('dark');
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        shouldBeDark = hasClass || systemDark;
+      }
+      
+      console.log('Dashboard theme mode check:', {
+        themeMode,
+        shouldBeDark,
         htmlClasses: document.documentElement.className
       });
       
-      // Respect the global theme state instead of forcing light mode
-      setIsDark(isDarkMode);
+      setIsDark(shouldBeDark);
     };
 
-    checkDarkMode();
+    updateDarkMode();
     
-    // Listen for class changes on html element
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, { 
-      attributes: true, 
-      attributeFilter: ['class'] 
-    });
+    // Only listen for system changes if mode is 'system'
+    if (themeMode === 'system') {
+      // Listen for class changes on html element
+      const observer = new MutationObserver(updateDarkMode);
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
 
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', checkDarkMode);
+      // Listen for system theme changes
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      mediaQuery.addEventListener('change', updateDarkMode);
 
-    return () => {
-      observer.disconnect();
-      mediaQuery.removeEventListener('change', checkDarkMode);
-    };
-  }, []);
+      return () => {
+        observer.disconnect();
+        mediaQuery.removeEventListener('change', updateDarkMode);
+      };
+    }
+  }, [themeMode]);
 
   const loadDashboardTheme = useCallback(async () => {
     try {
@@ -97,8 +112,11 @@ export function DashboardThemeProvider({
       if (!response.ok) throw new Error('Failed to get dashboard theme');
       
       const data = await response.json();
-      console.log('Dashboard theme:', data.theme);
+      console.log('Dashboard data:', data);
       setActiveThemeState(data.theme);
+      setDashboardData(data.dashboard);
+      // Set theme mode from dashboard data, default to 'system' if not available
+      setThemeModeState(data.dashboard?.themeMode || 'system');
     } catch (err) {
       console.error('Error loading dashboard theme:', err);
       setError(err instanceof Error ? err.message : "Failed to load theme");
@@ -169,6 +187,26 @@ export function DashboardThemeProvider({
     }
   };
 
+  const setThemeMode = async (mode: 'light' | 'dark' | 'system') => {
+    try {
+      const response = await fetch(`/api/dashboard/${dashboardId}/theme`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ themeMode: mode }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to set dashboard theme mode');
+
+      // Update local state immediately for better UX
+      setThemeModeState(mode);
+      
+      // Reload the theme to get updated data
+      await loadDashboardTheme();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to set theme mode");
+    }
+  };
+
   const getThemeStyles = (): ThemeStyleProps | null => {
     if (!activeTheme) return null;
     return isDark ? activeTheme.styles.dark : activeTheme.styles.light;
@@ -180,8 +218,11 @@ export function DashboardThemeProvider({
     isLoading,
     error,
     setActiveTheme,
+    setThemeMode,
     getThemeStyles,
     themeClassName,
+    themeMode,
+    isDark,
   };
 
   return (

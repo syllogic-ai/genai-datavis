@@ -18,10 +18,12 @@ const PublicDashboardThemeContext = createContext<PublicDashboardThemeContextTyp
 export function PublicDashboardThemeProvider({
   dashboardId,
   theme,
+  dashboardData,
   children,
 }: {
   dashboardId: string;
   theme?: Theme | null;
+  dashboardData?: any;
   children: React.ReactNode;
 }) {
   
@@ -30,36 +32,54 @@ export function PublicDashboardThemeProvider({
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
   const [themeClassName, setThemeClassName] = useState<string>('');
+  const [themeMode] = useState<'light' | 'dark' | 'system'>(dashboardData?.themeMode || 'system');
 
-  // Detect dark mode
+  // Determine dark mode based on dashboard theme mode preference
   useEffect(() => {
-    const checkDarkMode = () => {
-      const hasClass = document.documentElement.classList.contains('dark');
-      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const isDarkMode = hasClass || systemDark;
+    const updateDarkMode = () => {
+      let shouldBeDark = false;
       
-      // Respect the global theme state instead of forcing light mode
-      setIsDark(isDarkMode);
+      if (themeMode === 'dark') {
+        shouldBeDark = true;
+      } else if (themeMode === 'light') {
+        shouldBeDark = false;
+      } else if (themeMode === 'system') {
+        // For system mode, check both HTML class and system preference
+        const hasClass = document.documentElement.classList.contains('dark');
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        shouldBeDark = hasClass || systemDark;
+      }
+      
+      console.log('Public dashboard theme mode check:', {
+        themeMode,
+        shouldBeDark,
+        htmlClasses: document.documentElement.className
+      });
+      
+      setIsDark(shouldBeDark);
     };
 
-    checkDarkMode();
+    updateDarkMode();
     
-    // Listen for class changes on html element
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, { 
-      attributes: true, 
-      attributeFilter: ['class'] 
-    });
+    // Only listen for system changes if mode is 'system'
+    if (themeMode === 'system') {
+      // Listen for class changes on html element
+      const observer = new MutationObserver(updateDarkMode);
+      observer.observe(document.documentElement, { 
+        attributes: true, 
+        attributeFilter: ['class'] 
+      });
 
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', checkDarkMode);
+      // Listen for system theme changes
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      mediaQuery.addEventListener('change', updateDarkMode);
 
-    return () => {
-      observer.disconnect();
-      mediaQuery.removeEventListener('change', checkDarkMode);
-    };
-  }, []);
+      return () => {
+        observer.disconnect();
+        mediaQuery.removeEventListener('change', updateDarkMode);
+      };
+    }
+  }, [themeMode]);
 
   // Set active theme from props
   useEffect(() => {

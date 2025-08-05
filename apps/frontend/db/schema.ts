@@ -38,6 +38,7 @@ export const dashboards = pgTable("dashboards", {
   
   // Theme assignment - each dashboard can have one active theme
   activeThemeId: text("active_theme_id").references(() => themes.id, { onDelete: "set null" }),
+  themeMode: text("theme_mode").default("light").notNull(), // 'light' | 'dark' | 'system'
   
   // Dashboard layout settings
   width: text("width").default("full").notNull(), // 'full' | 'constrained'

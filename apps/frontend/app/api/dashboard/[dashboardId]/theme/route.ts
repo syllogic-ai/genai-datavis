@@ -84,7 +84,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { themeId } = body;
+    const { themeId, themeMode } = body;
 
     // Verify dashboard belongs to user
     const dashboard = await db.select().from(dashboards)
@@ -111,12 +111,13 @@ export async function PUT(
       }
     }
 
-    // Update dashboard with new theme
+    // Update dashboard with new theme and/or mode
+    const updateData: any = { updatedAt: new Date() };
+    if (themeId !== undefined) updateData.activeThemeId = themeId || null;
+    if (themeMode !== undefined) updateData.themeMode = themeMode;
+
     const updatedDashboard = await db.update(dashboards)
-      .set({
-        activeThemeId: themeId || null,
-        updatedAt: new Date(),
-      })
+      .set(updateData)
       .where(eq(dashboards.id, dashboardId))
       .returning();
 
