@@ -22,9 +22,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     const initialTheme = savedTheme || systemTheme;
     
+    // Check if the theme is already applied by the script in head
+    const isDarkApplied = document.documentElement.classList.contains('dark');
+    const expectedDark = initialTheme === 'dark';
+    
     setThemeState(initialTheme);
-    // Theme may already be applied by the script in the head, but ensure it's correct
-    applyTheme(initialTheme);
+    
+    // Only apply theme if it's not already correctly applied
+    if (isDarkApplied !== expectedDark) {
+      applyTheme(initialTheme);
+    }
+    
     setMounted(true);
   }, []);
 

@@ -80,7 +80,7 @@ export function AppSidebar({
             <SidebarMenuButton size="sm" asChild className="hover:bg-transparent">
               <Link href="/dashboard" className="py-2">
                 {mounted && (
-                  <div className="w-full flex py-1" style={{ height: 32 }}>
+                  <div className="w-full flex py-1" style={{ height: 32 }} suppressHydrationWarning>
                     <Image
                       src={
                         theme === "dark"
@@ -183,7 +183,7 @@ My Account
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={toggleTheme} className="focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground">
+                    <DropdownMenuItem onClick={toggleTheme} className="focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground" suppressHydrationWarning>
                       {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                       {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                     </DropdownMenuItem>

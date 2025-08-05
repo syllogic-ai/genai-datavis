@@ -88,10 +88,12 @@ export function DashboardHeader({
             disabled={!dashboardId || isPublishLoading}
           >
             {isPublic ? (
-              <>
-                <Globe className="size-4" />
+              <div className="group flex items-center gap-2">
+                <div className="flex items-center justify-center size-4 group-hover:bg-green-200 rounded-full group-hover:animate-pulse">
+                  <div className="size-2 bg-green-600 rounded-full"></div>
+                </div>
                 Published
-              </>
+              </div>
             ) : (
               <>
                 Publish
