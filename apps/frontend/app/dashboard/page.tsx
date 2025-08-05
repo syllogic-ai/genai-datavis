@@ -62,7 +62,7 @@ export default function DashboardPage() {
   // Show sign-in prompt
   if (!isSignedIn) {
     return (
-      <div className="flex flex-col h-full overflow-hidden text-black">
+      <div className="flex flex-col h-full overflow-hidden">
         <SiteHeader />
         <div className="flex-1 overflow-auto">
           <div className="flex flex-col justify-center items-center h-full px-4">
@@ -76,7 +76,7 @@ export default function DashboardPage() {
   // Error state
   if (error) {
     return (
-      <div className="flex flex-col h-full overflow-hidden text-black">
+      <div className="flex flex-col h-full overflow-hidden">
         <SiteHeader />
         <div className="flex-1 overflow-auto">
           <div className="flex flex-col justify-center items-center h-full px-4">
@@ -91,17 +91,17 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden text-black">
+    <div className="flex flex-col h-full overflow-hidden">
       <SiteHeader chatTitle='Home'/>
       <div className="flex-1 overflow-auto">
         <div className="max-w-7xl mx-auto px-6 py-8">
           {/* Header */}
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">
+              <h1 className="text-3xl font-bold">
                 Your Dashboards
               </h1>
-              <p className="text-gray-600 mt-2">
+              <p className=" mt-2">
                 Manage and explore your data visualizations
               </p>
             </div>
@@ -119,10 +119,10 @@ export default function DashboardPage() {
           {/* Dashboard Grid or Empty State */}
           {dashboards.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                <FolderIcon className="w-8 h-8 text-gray-400" />
+              <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6">
+                <FolderIcon className="w-8 h-8" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              <h3 className="text-xl font-semibold mb-2">
                 No dashboards yet
               </h3>
               <p className="text-gray-600 mb-8 max-w-md">
@@ -143,7 +143,7 @@ export default function DashboardPage() {
               {/* Recent Section */}
               {dashboards.length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  <h2 className="text-lg font-semibold mb-4">
                     Recent
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -163,7 +163,7 @@ export default function DashboardPage() {
               {/* All Dashboards Section */}
               {dashboards.length > 6 && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                  <h2 className="text-lg font-semibold mb-4">
                     Earlier
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

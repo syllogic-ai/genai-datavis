@@ -200,7 +200,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreate
   return (
     <>
     <Card 
-      className="cursor-pointer hover:shadow-md transition-shadow duration-200 border border-gray-200 group"
+      className="cursor-pointer hover:shadow-md transition-shadow duration-200 border  group"
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -210,27 +210,27 @@ export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreate
           {/* Icon */}
           <div className={`w-16 h-16 rounded-xl ${iconColor} flex items-center justify-center flex-shrink-0`}>
             {dashboard.icon === "DocumentTextIcon" || !dashboard.icon ? (
-              <span className="text-white font-semibold text-lg">
+              <span className=" font-semibold text-lg">
                 {abbreviation}
               </span>
             ) : (
               <IconRenderer
                 icon={dashboard.icon}
-                className="w-8 h-8 text-white"
+                className="w-8 h-8 "
               />
             )}
           </div>
           
           {/* Content */}
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-lg text-gray-900 truncate">
+            <h3 className="font-semibold text-lg  truncate">
               {dashboard.name}
             </h3>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm  mt-1">
               Opened {formatTimeAgo(dashboard.updatedAt)}
             </p>
             {dashboard.description && (
-              <p className="text-sm text-gray-600 mt-2 line-clamp-2">
+              <p className="text-sm  mt-2 line-clamp-2">
                 {dashboard.description}
               </p>
             )}
@@ -240,7 +240,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreate
         {/* Dropdown Menu - positioned absolutely in top right */}
         <div className="absolute top-4 right-4">
           {operationLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+            <Loader2 className="h-4 w-4 animate-spin " />
           ) : (
             <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen}>
               <DropdownMenuTrigger asChild>
@@ -346,10 +346,10 @@ export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreate
           </div>
           
           <div className="mt-4 space-y-3">
-            <AlertDialogDescription className="text-sm text-gray-600">
+            <AlertDialogDescription className="text-sm ">
               Are you sure you want to delete &quot;{dashboard.name}&quot;? This action will permanently delete all associated data and cannot be undone.
             </AlertDialogDescription>
-            <div className="text-sm text-gray-600">
+            <div className="text-sm ">
               <div className="font-medium text-gray-700 mb-1">This includes:</div>
               <div className="space-y-1 pl-4">
                 <div>• The dashboard and all its widgets</div>
@@ -357,7 +357,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreate
                 <div>• Chat history and conversations</div>
               </div>
             </div>
-            <div className="font-medium text-red-600 text-sm">
+              <div className="font-medium  text-sm">
               ⚠️ This action cannot be undone.
             </div>
           </div>
@@ -368,7 +368,7 @@ export function DashboardCard({ dashboard, onDashboardUpdated, onDashboardCreate
               handleDeleteDashboard();
               setShowDeleteDialog(false);
             }}
-            className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-500"
+              className="bg-red-600  hover:bg-red-700 focus:ring-red-500 text-white"
             disabled={operationLoading}
           >
             {operationLoading ? (

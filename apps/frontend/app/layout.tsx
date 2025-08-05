@@ -5,6 +5,7 @@ import "./globals.css";
 import { Navbar } from "@/components/ui/navbar";
 import { ClerkProvider } from '@clerk/nextjs';
 import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
+import { ThemeProvider } from "@/lib/ThemeProvider";
 const openSans = Open_Sans({
   variable: "--font-open-sans",
   subsets: ["latin"],
@@ -24,14 +25,31 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const theme = localStorage.getItem('theme') || 
+                  (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                if (theme === 'dark') {
+                  document.documentElement.classList.add('dark');
+                }
+              } catch (e) {}
+            `,
+          }}
+        />
+      </head>
       <ClerkProvider>
         <body
           className={`${openSans.variable} antialiased font-sans`}
           style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
         >
-          <GoogleFontsLoader />
-          {/* <Navbar /> */}
-          {children}
+          <ThemeProvider>
+            <GoogleFontsLoader />
+            {/* <Navbar /> */}
+            {children}
+          </ThemeProvider>
         </body>
       </ClerkProvider>
     </html>

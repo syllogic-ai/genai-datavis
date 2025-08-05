@@ -65,11 +65,8 @@ export function DashboardThemeProvider({
         htmlClasses: document.documentElement.className
       });
       
-      // Temporary: force light mode for testing (disabling dark mode completely)
-      setIsDark(false);
-      // Remove dark class if it exists
-      document.documentElement.classList.remove('dark');
-      // setIsDark(isDarkMode);
+      // Respect the global theme state instead of forcing light mode
+      setIsDark(isDarkMode);
     };
 
     checkDarkMode();

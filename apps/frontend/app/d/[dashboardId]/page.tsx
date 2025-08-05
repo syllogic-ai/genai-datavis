@@ -55,12 +55,12 @@ function PublicDashboardContent({
 
   // Apply width setting from dashboard data
   const dashboardWidth = data.dashboard.width || 'full';
-  const maxWidthClass = dashboardWidth === 'constrained' ? 'max-w-7xl' : 'max-w-none';
+  const maxWidthClass = dashboardWidth === 'constrained' ? 'max-w-5xl' : 'max-w-none';
 
   return (
     <div className={`min-h-screen ${themeClassName}`} style={{ backgroundColor: 'var(--background)' }}>
       {/* Main Content */}
-      <main className={`${maxWidthClass} mx-auto px-4 sm:px-6 lg:px-8 py-8`}>
+      <main className={`${maxWidthClass} mx-auto px-4 sm:px-6 lg:px-8 lg:py-24 py-8`}>
         {sortedWidgets.length === 0 ? (
           <div className="flex items-center justify-center h-96">
             <div className="text-center">

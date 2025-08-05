@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -95,6 +95,10 @@ export function NavMain({
   const [showDeleteDialog, setShowDeleteDialog] = useState<string | null>(null);
   const [renamingDashboard, setRenamingDashboard] = useState<Dashboard | null>(null);
   const [dropdownOpenId, setDropdownOpenId] = useState<string | null>(null);
+  
+  // Refs to track mouse position and hover state more accurately
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const dashboardRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
 
   // Memoize the active dashboard ID to prevent unnecessary re-renders
   const activeDashboardId = useMemo(() => {
@@ -115,6 +119,43 @@ export function NavMain({
   
   // Track which dashboards are expanded
   const [expandedDashboards, setExpandedDashboards] = useState<Set<string>>(new Set());
+
+  // Enhanced hover management
+  const setDashboardHovered = useCallback((dashboardId: string | null) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    
+    if (dashboardId) {
+      setHoveredDashboard(dashboardId);
+      // Lazy load widget count when user hovers over dashboard
+      if (!loadedDashboardIds.has(dashboardId)) {
+        loadWidgetsForDashboard(dashboardId);
+      }
+    } else {
+      // Delay clearing hover state to prevent flickering
+      hoverTimeoutRef.current = setTimeout(() => {
+        setHoveredDashboard(null);
+      }, 100);
+    }
+  }, [loadedDashboardIds]);
+
+  // Check if mouse is still within dashboard bounds
+  const isMouseWithinDashboard = useCallback((dashboardId: string, event: MouseEvent): boolean => {
+    const dashboardElement = dashboardRefs.current[dashboardId];
+    if (!dashboardElement) return false;
+    
+    const rect = dashboardElement.getBoundingClientRect();
+    const { clientX, clientY } = event;
+    
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  }, []);
 
   // Function to load widgets for a specific dashboard
   const loadWidgetsForDashboard = useCallback(async (dashboardId: string): Promise<Widget[]> => {
@@ -389,6 +430,35 @@ export function NavMain({
     }
   }, [activeDashboardId]);
 
+  // Cleanup hover timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Global mouse move listener to handle complex hover scenarios
+  useEffect(() => {
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      // Only run this logic if we have a hovered dashboard
+      if (!hoveredDashboard) return;
+      
+      // Check if mouse is still within the hovered dashboard bounds
+      if (!isMouseWithinDashboard(hoveredDashboard, event)) {
+        // Mouse has left the dashboard area entirely
+        setDashboardHovered(null);
+      }
+    };
+
+    // Only add listener when we have a hovered dashboard
+    if (hoveredDashboard) {
+      document.addEventListener('mousemove', handleGlobalMouseMove);
+      return () => document.removeEventListener('mousemove', handleGlobalMouseMove);
+    }
+  }, [hoveredDashboard, isMouseWithinDashboard, setDashboardHovered]);
+
   return (
     <>
       <SidebarGroup>
@@ -412,19 +482,27 @@ export function NavMain({
                 <SidebarMenuItem key={dashboard.id}>
                   <Collapsible key={dashboard.id} open={expandedDashboards.has(dashboard.id)}>
                     <div 
+                      ref={(el) => {
+                        dashboardRefs.current[dashboard.id] = el;
+                      }}
                       className="relative group"
                       onMouseEnter={() => {
-                        setHoveredDashboard(dashboard.id);
-                        // Lazy load widget count when user hovers over dashboard
-                        if (!loadedDashboardIds.has(dashboard.id)) {
-                          loadWidgetsForDashboard(dashboard.id);
+                        setDashboardHovered(dashboard.id);
+                      }}
+                      onMouseLeave={() => {
+                        // Only clear hover if dropdown is not open for this dashboard
+                        if (dropdownOpenId !== dashboard.id) {
+                          setDashboardHovered(null);
                         }
                       }}
-                      onMouseLeave={() => setHoveredDashboard(null)}
                     >
                       {/* Main Dashboard Button */}
-                      <div className={`relative flex items-center w-full h-8 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground-foreground ${
-                        dashboard.isActive ? 'bg-primary text-primary-foreground hover:text-sidebar-foreground-foreground' : ''
+                      <div className={`relative flex items-center w-full h-8 rounded-md py-1 text-left text-sm transition-colors ${
+                        dashboard.isActive 
+                          ? 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground' 
+                          : hoveredDashboard === dashboard.id
+                          ? 'bg-sidebar-foreground/10 text-sidebar-foreground-foreground'
+                          : 'hover:bg-sidebar-foreground/10 hover:text-sidebar-foreground-foreground'
                       }`}>
                         
                         {/* Dashboard Icon - visible when not hovered */}
@@ -432,7 +510,11 @@ export function NavMain({
                           hoveredDashboard === dashboard.id ? 'opacity-0' : 'opacity-100'
                         }`}>
                           <IconRenderer
-                            className={`size-4 transition-colors ${dashboard.isActive ? 'text-primary-foreground group-hover:text-sidebar-foreground' : 'text-sidebar-foreground'}`}
+                            className={`size-4 transition-colors ${
+                              dashboard.isActive 
+                                ? 'text-primary-foreground hover:text-primary' 
+                                : 'text-sidebar-foreground'
+                            }`}
                             icon={dashboard.icon}
                           />
                         </div>
@@ -452,53 +534,87 @@ export function NavMain({
                               }}
                               onMouseEnter={() => {
                                 console.log('[NavMain] Chevron mouse enter for dashboard:', dashboard.id);
-                              }}
-                              onMouseLeave={() => {
-                                console.log('[NavMain] Chevron mouse leave for dashboard:', dashboard.id);
+                                setDashboardHovered(dashboard.id);
                               }}
                             >
-                              <ChevronRight className="h-3 w-3 text-sidebar-foreground-foreground" />
+                              <ChevronRight className={`h-3 w-3 ${
+                                dashboard.isActive 
+                                  ? 'text-primary-foreground' 
+                                  : 'text-sidebar-foreground-foreground'
+                              }`} />
                               <span className="sr-only">Toggle widgets</span>
                             </CollapsibleTrigger>
                           ) : (
-                            <ChevronRight className="h-3 w-3 text-sidebar-foreground-foreground/50" />
+                            <ChevronRight className={`h-3 w-3 ${
+                              dashboard.isActive 
+                                ? 'text-primary-foreground/50' 
+                                : 'text-sidebar-foreground-foreground/50'
+                            }`} />
                           )}
                         </div>
                         
                         {/* Dashboard name - positioned to not overlap icons */}
                         <Link href={`/dashboard/${dashboard.id}`} className="absolute left-8 right-10 py-1 truncate">
-                          <span className={`truncate text-sm transition-colors ${dashboard.isActive ? 'text-primary-foreground group-hover:text-sidebar-foreground' : ''}`}>{dashboard.name}</span>
+                          <span className={`truncate text-sm transition-colors ${
+                            dashboard.isActive 
+                              ? 'text-primary-foreground' 
+                              : ''
+                          }`}>{dashboard.name}</span>
                         </Link>
                       </div>
 
                       {/* Menu Actions - Loading indicator or Ellipsis Menu */}
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-20">
+                      <div 
+                        className="absolute right-2 top-1/2 -translate-y-1/2 z-20"
+                        onMouseEnter={() => setDashboardHovered(dashboard.id)}
+                      >
                         {operationLoading[dashboard.id] ? (
                           <Loader2 className="h-4 w-4 animate-spin text-sidebar-foreground" />
                         ) : (
-                          <DropdownMenu 
-                            open={dropdownOpenId === dashboard.id}
-                            onOpenChange={(open) => {
-                              console.log('[NavMain] Dropdown menu state changing for dashboard:', dashboard.id, 'open:', open);
-                              setDropdownOpenId(open ? dashboard.id : null);
-                            }}
-                          >
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className={`h-6 w-6 p-0 transition-opacity duration-200 ${
-                                  hoveredDashboard === dashboard.id 
-                                    ? 'opacity-100' 
-                                    : 'opacity-0'
-                                }`}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  console.log('[NavMain] Dropdown trigger clicked for dashboard:', dashboard.id);
-                                }}
+                          <div className={`h-4 w-4 flex items-center justify-center transition-opacity duration-200 ${
+                            hoveredDashboard === dashboard.id ? 'opacity-100' : 'opacity-0'
+                          }`}>
+                            <DropdownMenu 
+                              open={dropdownOpenId === dashboard.id}
+                              onOpenChange={(open) => {
+                                console.log('[NavMain] Dropdown menu state changing for dashboard:', dashboard.id, 'open:', open);
+                                setDropdownOpenId(open ? dashboard.id : null);
+                                
+                                // Maintain hover state when dropdown is open
+                                if (open) {
+                                  setDashboardHovered(dashboard.id);
+                                } else {
+                                  // Clear hover state when dropdown closes (with small delay)
+                                  setTimeout(() => {
+                                    setDashboardHovered(null);
+                                  }, 100);
+                                }
+                              }}
+                            >
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className={`h-4 w-4 p-2 transition-all duration-200 flex items-center justify-center rounded-sm pointer-events-auto hover:bg-primary/30 ${
+                                    dashboard.isActive 
+                                      ? 'text-primary-foreground' 
+                                      : 'text-sidebar-foreground-foreground'
+                                  }`}
+                                  onMouseEnter={() => {
+                                    console.log('[NavMain] MoreHorizontal mouse enter for dashboard:', dashboard.id);
+                                    setDashboardHovered(dashboard.id);
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    console.log('[NavMain] Dropdown trigger clicked for dashboard:', dashboard.id);
+                                  }}
                               >
-                                <MoreHorizontal className="h-3 w-3" />
+                                <MoreHorizontal className={`h-1 w-1 ${
+                                  dashboard.isActive 
+                                    ? 'text-primary-foreground' 
+                                    : 'text-sidebar-foreground-foreground'
+                                }`} />
                                 <span className="sr-only">Dashboard options</span>
                               </Button>
                             </DropdownMenuTrigger>
@@ -569,6 +685,7 @@ export function NavMain({
                             </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
+                          </div>
                         )}
                       </div>
                     </div>

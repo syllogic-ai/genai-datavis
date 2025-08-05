@@ -38,10 +38,8 @@ export function PublicDashboardThemeProvider({
       const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       const isDarkMode = hasClass || systemDark;
       
-      // Temporary: force light mode for testing (disabling dark mode completely)
-      setIsDark(false);
-      // Remove dark class if it exists
-      document.documentElement.classList.remove('dark');
+      // Respect the global theme state instead of forcing light mode
+      setIsDark(isDarkMode);
     };
 
     checkDarkMode();

@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Command, Home, Plus, Settings, Palette, ChevronsUpDown, LogOut, HelpCircle, Moon, Sun } from "lucide-react";
+import { Command, Home, Plus, Settings, Palette, ChevronsUpDown, LogOut, HelpCircle, Moon, Sun, User } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useUser, SignOutButton } from "@clerk/nextjs";
+import Image from "next/image";
 import {
   Sidebar,
   SidebarContent,
@@ -27,6 +28,7 @@ import { NavMain } from "@/components/dashboard/NavMain";
 import { Dashboard } from "@/db/schema";
 import { DashboardCreateEditPopover } from "./DashboardCreateEditPopover";
 import { useDashboardContext } from "./DashboardUserContext";
+import { useTheme } from "@/lib/ThemeProvider";
 import Link from "next/link";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -41,42 +43,13 @@ export function AppSidebar({
   const router = useRouter();
   const { user, isLoaded } = useUser();
   const { isMobile } = useSidebar();
+  const { theme, toggleTheme } = useTheme();
   const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
   const [mounted, setMounted] = React.useState(false);
-  const [isDarkMode, setIsDarkMode] = React.useState(false);
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Theme management
-  React.useEffect(() => {
-    const checkDarkMode = () => {
-      setIsDarkMode(document.documentElement.classList.contains('dark'));
-    };
-
-    checkDarkMode();
-    
-    // Listen for class changes on html element
-    const observer = new MutationObserver(checkDarkMode);
-    observer.observe(document.documentElement, { 
-      attributes: true, 
-      attributeFilter: ['class'] 
-    });
-
-    return () => observer.disconnect();
-  }, []);
-
-  const toggleTheme = () => {
-    const htmlElement = document.documentElement;
-    if (htmlElement.classList.contains('dark')) {
-      htmlElement.classList.remove('dark');
-      setIsDarkMode(false);
-    } else {
-      htmlElement.classList.add('dark');
-      setIsDarkMode(true);
-    }
-  };
   
   // Extract active dashboard ID from pathname
   const activeChatId =
@@ -103,16 +76,26 @@ export function AppSidebar({
     <Sidebar variant="inset" className="fixed h-full" {...props}>
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <Command className="size-4" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">GenAI DataVis</span>
-                  <span className="truncate text-xs">Dashboard</span>
-                </div>
+          <SidebarMenuItem className="mb-6">
+            <SidebarMenuButton size="sm" asChild className="hover:bg-transparent">
+              <Link href="/dashboard" className="py-2">
+                {mounted && (
+                  <div className="w-full flex py-1" style={{ height: 32 }}>
+                    <Image
+                      src={
+                        theme === "dark"
+                          ? "https://ptsbrkwalysbchtdharj.supabase.co/storage/v1/object/public/web-public/brand-kit/syllogic_logo.png"
+                          : "https://ptsbrkwalysbchtdharj.supabase.co/storage/v1/object/public/web-public/brand-kit/syllogic_logo_black.png"
+                      }
+                      alt="Syllogic Logo"
+                      width={100}
+                      height={28}
+                      priority
+                      style={{ objectFit: "contain" }}
+                      className="w-auto h-full"
+                    />
+                  </div>
+                )}
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -195,30 +178,16 @@ export function AppSidebar({
                   align="end"
                   sideOffset={4}
                 >
-                  <DropdownMenuLabel className="p-0 font-normal">
-                    <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                      <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
-                        <span className="text-sm font-medium">
-                          {user.firstName?.[0] || user.emailAddresses[0]?.emailAddress[0] || "U"}
-                        </span>
-                      </div>
-                      <div className="grid flex-1 text-left text-sm leading-tight">
-                        <span className="truncate font-medium">
-                          {user.fullName || user.firstName || "User"}
-                        </span>
-                        <span className="truncate text-xs">
-                          {user.emailAddresses[0]?.emailAddress || ""}
-                        </span>
-                      </div>
-                    </div>
+                  <DropdownMenuLabel className="flex flex-row gap-2 items-center font-normal">
+My Account
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={toggleTheme}>
-                      {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-                      {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+                    <DropdownMenuItem onClick={toggleTheme} className="focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground">
+                      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                      {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="focus:bg-accent focus:text-accent-foreground hover:bg-accent hover:text-accent-foreground">
                       <a href="mailto:giannis@syllogic.ai" className="flex items-center">
                         <HelpCircle />
                         Help & Support
@@ -227,7 +196,7 @@ export function AppSidebar({
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <SignOutButton>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem variant="destructive">
                       <LogOut />
                       Log out
                     </DropdownMenuItem>
