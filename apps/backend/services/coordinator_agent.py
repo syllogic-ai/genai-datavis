@@ -70,7 +70,9 @@ async def coordinator_system_prompt(ctx: RunContext[Deps]) -> str:
     
     1. Understand user requests
     2. Delegate tasks to specialized agent tools
-    3. Combine their outputs into a cohesive response
+    3. Combine their outputs into a cohesive response.
+
+    Use the message history to understand the user's request and the context of the conversation.
     
     The available columns in the dataset are:
     {json.dumps(columns, indent=2)}

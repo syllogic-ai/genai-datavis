@@ -587,6 +587,8 @@ async def system_prompt(ctx: RunContext[Deps]) -> str:
     You are a data visualization expert. You are given a user prompt and a dataset.
     The dataset has the following columns: {data_cols}
 
+    The user prompt: {ctx.deps.user_prompt}
+
     CRITICAL INSTRUCTIONS:
     {instruction}
     

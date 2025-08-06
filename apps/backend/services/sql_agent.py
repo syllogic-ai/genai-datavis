@@ -190,7 +190,11 @@ async def calculate(ctx: RunContext[Deps], input: CalcInput, is_first_attempt: b
         # ctx.deps.tool_usage["calculate"] = True
     else:
         logfire.info("Not first attempt to calculate")
-        return SQLOutput(widget_id=ctx.deps.widget_id, sql=input.sql, success=True, confidence_score=0, confidence_reasoning="Already calculated.", follow_up_questions=[])
+        if ctx.deps.widget_id:
+            widget_id = ctx.deps.widget_id
+        else:
+            widget_id = ""
+        return SQLOutput(widget_id=widget_id, sql=input.sql, success=True, confidence_score=0, confidence_reasoning="Already calculated.", follow_up_questions=[])
 
     sql = input.sql
     # Check if the widget already exists
@@ -359,7 +363,7 @@ async def calculate_confidence(ctx: Deps, input: ConfidenceInput) -> ConfidenceO
     
     # Create a detailed prompt for confidence evaluation
     confidence_prompt = f"""
-    You are an expert SQL analyst evaluating the quality and accuracy of a generated SQL query against a user's request.
+    You are an expert business analyst evaluating the quality and accuracy of a generated SQL query against a user's request.
     
     DATASET SCHEMA:
     {"\n".join([f"Column: {col} | Type: {dtype}" for col, dtype in profile.columns.items()])}
@@ -370,12 +374,12 @@ async def calculate_confidence(ctx: Deps, input: ConfidenceInput) -> ConfidenceO
     GENERATED SQL QUERY:
     {input.generated_sql}
     
-    TASK: Evaluate how well the generated SQL query matches the user's request and provide a confidence score from 0 to 100.
+    TASK: Evaluate how well the generated SQL query matches the user's request and provide a confidence score from 0 to 100. 
     
     EVALUATION CRITERIA:
-    1. **Semantic Alignment (0-40 points)**: Does the SQL query address what the user actually asked for? Is the user asking for something else?
-    2. **Technical Accuracy (0-25 points)**: Is the SQL syntactically correct and follows best practices?
-    3. **Data Relevance (0-35 points)**: Are the fields that you are about to use match what the user is asking for?
+    1. **Semantic Alignment (0-60 points)**: Does the SQL query address what the user actually asked for? Is the user asking for something else?
+    2. **Technical Accuracy (0-10 points)**: Is the SQL syntactically correct?
+    3. **Data Relevance (0-30 points)**: Are the fields that you are about to use match what the user is asking for?
     
     ONFIDENCE SCORING:
     - 90-100: Excellent match, highly confident
