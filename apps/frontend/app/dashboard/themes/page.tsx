@@ -821,6 +821,16 @@ export default function ThemeGeneratorPage() {
                       />
                     );
                   })}
+                  <ColorInput
+                    label="Chart Positive"
+                    value={getCurrentStyles()["chart-positive"] || "oklch(0.5682 0.167 135.46)"}
+                    onChange={(value) => updateStyle("chart-positive", value)}
+                  />
+                  <ColorInput
+                    label="Chart Negative"
+                    value={getCurrentStyles()["chart-negative"] || "oklch(0.4149 0.1695 28.96)"}
+                    onChange={(value) => updateStyle("chart-negative", value)}
+                  />
                 </CollapsibleContent>
               </Collapsible>
 

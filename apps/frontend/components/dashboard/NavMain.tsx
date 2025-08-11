@@ -120,43 +120,6 @@ export function NavMain({
   // Track which dashboards are expanded
   const [expandedDashboards, setExpandedDashboards] = useState<Set<string>>(new Set());
 
-  // Enhanced hover management
-  const setDashboardHovered = useCallback((dashboardId: string | null) => {
-    if (hoverTimeoutRef.current) {
-      clearTimeout(hoverTimeoutRef.current);
-      hoverTimeoutRef.current = null;
-    }
-    
-    if (dashboardId) {
-      setHoveredDashboard(dashboardId);
-      // Lazy load widget count when user hovers over dashboard
-      if (!loadedDashboardIds.has(dashboardId)) {
-        loadWidgetsForDashboard(dashboardId);
-      }
-    } else {
-      // Delay clearing hover state to prevent flickering
-      hoverTimeoutRef.current = setTimeout(() => {
-        setHoveredDashboard(null);
-      }, 100);
-    }
-  }, [loadedDashboardIds]);
-
-  // Check if mouse is still within dashboard bounds
-  const isMouseWithinDashboard = useCallback((dashboardId: string, event: MouseEvent): boolean => {
-    const dashboardElement = dashboardRefs.current[dashboardId];
-    if (!dashboardElement) return false;
-    
-    const rect = dashboardElement.getBoundingClientRect();
-    const { clientX, clientY } = event;
-    
-    return (
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
-    );
-  }, []);
-
   // Function to load widgets for a specific dashboard
   const loadWidgetsForDashboard = useCallback(async (dashboardId: string): Promise<Widget[]> => {
     // Return cached widgets if available
@@ -197,6 +160,43 @@ export function NavMain({
       return emptyWidgets;
     }
   }, [dashboardWidgets, activeDashboardId, currentDashboardWidgets]);
+
+  // Enhanced hover management
+  const setDashboardHovered = useCallback((dashboardId: string | null) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    
+    if (dashboardId) {
+      setHoveredDashboard(dashboardId);
+      // Lazy load widget count when user hovers over dashboard
+      if (!loadedDashboardIds.has(dashboardId)) {
+        loadWidgetsForDashboard(dashboardId);
+      }
+    } else {
+      // Delay clearing hover state to prevent flickering
+      hoverTimeoutRef.current = setTimeout(() => {
+        setHoveredDashboard(null);
+      }, 100);
+    }
+  }, [loadedDashboardIds, loadWidgetsForDashboard]);
+
+  // Check if mouse is still within dashboard bounds
+  const isMouseWithinDashboard = useCallback((dashboardId: string, event: MouseEvent): boolean => {
+    const dashboardElement = dashboardRefs.current[dashboardId];
+    if (!dashboardElement) return false;
+    
+    const rect = dashboardElement.getBoundingClientRect();
+    const { clientX, clientY } = event;
+    
+    return (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    );
+  }, []);
 
   // Function to toggle dashboard expansion and load widgets if needed
   const toggleDashboardExpansion = useCallback(async (dashboardId: string) => {

@@ -544,7 +544,7 @@ class TableOutput(BaseModel):
 
 # Declare the agent
 viz_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:gpt-4.1",
     deps_type=Deps, 
     retries=3,
 )

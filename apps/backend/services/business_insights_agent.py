@@ -19,7 +19,7 @@ class BusinessInsightsOutput(BaseModel):
 
 # Declare the business insights agent
 business_insights_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:gpt-4.1",
     deps_type=Deps,
     output_type=BusinessInsightsOutput,
 )

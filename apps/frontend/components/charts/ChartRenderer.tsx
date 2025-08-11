@@ -7,6 +7,7 @@ import { KPIRenderer } from "@/components/charts/renderers/KPIRenderer";
 import { BarChartRenderer } from "@/components/charts/renderers/BarChartRenderer";
 import { PieChartRenderer } from "@/components/charts/renderers/PieChartRenderer";
 import { TableRenderer } from "@/components/charts/renderers/TableRenderer";
+import { RadialChartRenderer } from "@/components/charts/renderers/RadialChartRenderer";
 
 /**
  * Unified chart renderer that determines which chart component to render
@@ -36,6 +37,8 @@ export function ChartRenderer({ spec }: { spec: ChartSpec }) {
       return <PieChartRenderer spec={spec} />;
     case "table":
       return <TableRenderer spec={spec} />;
+    case "radial":
+      return <RadialChartRenderer spec={spec} />;
     default:
       console.error(`Unknown chart type: ${spec.chartType}`);
       return null;

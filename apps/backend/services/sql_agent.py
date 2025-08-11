@@ -47,7 +47,7 @@ class SQLOutput(BaseModel):
     follow_up_questions: List[str] = Field(description="Follow-up questions to improve confidence if calculated")
 
 confidence_agent = Agent(
-            "openai:gpt-4o-mini",
+            "openai:gpt-4.1",
             system_prompt="You are an expert SQL analyst evaluating the quality and accuracy of a generated SQL query against a user's request.",
             output_type=ConfidenceOutput,
             retries=3
@@ -55,10 +55,10 @@ confidence_agent = Agent(
 
 # Declare the SQL agent
 sql_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:o3",
     deps_type=Deps,
     # output_type=ToolOutput(SQLOutput, name="calculate_output"),
-    # output_type=[calculate, get_column_unique_values],
+    # output_type=[calculate, get_column_unique_values],we
     output_type=SQLOutput,
     retries=3
 )

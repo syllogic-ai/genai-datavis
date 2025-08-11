@@ -96,6 +96,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.55 0.22 263)",
         "chart-4": "oklch(0.49 0.22 264)",
         "chart-5": "oklch(0.42 0.18 266)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -105,6 +107,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.55 0.22 263)",
         "chart-4": "oklch(0.49 0.22 264)",
         "chart-5": "oklch(0.42 0.18 266)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },
@@ -121,6 +125,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.60 0.20 220)",
         "chart-4": "oklch(0.55 0.18 230)",
         "chart-5": "oklch(0.50 0.15 240)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -130,6 +136,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.60 0.20 220)",
         "chart-4": "oklch(0.55 0.18 230)",
         "chart-5": "oklch(0.50 0.15 240)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },
@@ -146,6 +154,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.65 0.18 340)",
         "chart-4": "oklch(0.60 0.20 320)",
         "chart-5": "oklch(0.55 0.18 300)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -155,6 +165,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.65 0.18 340)",
         "chart-4": "oklch(0.60 0.20 320)",
         "chart-5": "oklch(0.55 0.18 300)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },
@@ -171,6 +183,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.70 0.15 90)",
         "chart-4": "oklch(0.55 0.15 180)",
         "chart-5": "oklch(0.50 0.12 120)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -180,6 +194,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.70 0.15 90)",
         "chart-4": "oklch(0.55 0.15 180)",
         "chart-5": "oklch(0.50 0.12 120)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },
@@ -196,6 +212,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.60 0 0)",
         "chart-4": "oklch(0.75 0 0)",
         "chart-5": "oklch(0.85 0 0)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -205,6 +223,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.55 0 0)",
         "chart-4": "oklch(0.40 0 0)",
         "chart-5": "oklch(0.30 0 0)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },
@@ -221,6 +241,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.68 0.28 130)",  // Bright green
         "chart-4": "oklch(0.65 0.25 300)",  // Purple
         "chart-5": "oklch(0.72 0.26 60)",   // Yellow
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -246,6 +268,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.84 0.09 140)",  // Soft green
         "chart-4": "oklch(0.82 0.08 280)",  // Soft purple
         "chart-5": "oklch(0.86 0.10 60)",   // Soft yellow
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -255,6 +279,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.64 0.09 140)",
         "chart-4": "oklch(0.62 0.08 280)",
         "chart-5": "oklch(0.66 0.10 60)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },
@@ -272,6 +298,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.50 0.02 200)",  // Gray-blue
         "chart-4": "oklch(0.65 0.08 200)",  // Light blue
         "chart-5": "oklch(0.55 0.01 0)",    // Gray
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
       dark: {
         ...baseUIColors.dark,
@@ -282,6 +310,8 @@ export const THEME_PRESETS: ThemePreset[] = [
         "chart-3": "oklch(0.65 0.02 200)",
         "chart-4": "oklch(0.80 0.08 200)",
         "chart-5": "oklch(0.60 0.01 0)",
+        "chart-positive": "oklch(0.5682 0.167 135.46)",
+        "chart-negative": "oklch(0.4149 0.1695 28.96)",
       },
     },
   },

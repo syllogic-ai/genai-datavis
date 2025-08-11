@@ -184,6 +184,8 @@ export interface ThemeStyleProps {
   "chart-3": string;
   "chart-4": string;
   "chart-5": string;
+  "chart-positive": string; // e.g., "oklch(0.5682 0.167 135.46)"
+  "chart-negative": string; // e.g., "oklch(0.4149 0.1695 28.96)"
   [key: `chart-${number}`]: string; // Allow additional chart colors
   
   // Font configuration

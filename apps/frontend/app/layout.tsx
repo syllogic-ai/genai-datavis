@@ -14,7 +14,7 @@ const openSans = Open_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "GenAI DataVis",
+  title: "Syllogic",
   description: "Data visualization with AI",
 };
  

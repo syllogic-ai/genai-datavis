@@ -7,7 +7,7 @@ export interface DataItem {
   [key: string]: string | number; // { category: "Product A", revenue: 4200, cost: 2100, profit: 2100 } OR { datetime: "2024-01-01", desktop: 1000, mobile: 500, tablet: 200 }
 }
 
-export type ChartType = "line" | "bar" | "area" | "kpi" | "pie" | "table";
+export type ChartType = "line" | "bar" | "area" | "kpi" | "pie" | "table" | "radial";
 
 /**
  * Represents the direction of change for KPI metrics
@@ -102,6 +102,16 @@ export interface ChartSpec {
     barCategoryGap?: number;
     /** Whether to display the bar chart horizontally */
     isHorizontal?: boolean;
+    /** Bar chart variant - negative allows different colors for positive/negative values */
+    variant?: 'default' | 'negative';
+    /** Color for negative values when using negative variant */
+    negativeColor?: string;
+    /** Color for positive values when using negative variant */
+    positiveColor?: string;
+    /** Whether to show labels on bars */
+    showLabels?: boolean;
+    /** Position of labels when shown */
+    labelPosition?: 'top' | 'center' | 'bottom';
   };
 
   /**
@@ -178,6 +188,46 @@ export interface ChartSpec {
     pagination?: {
       page?: number;
       pageSize?: number;
+    };
+  };
+
+  /** Radial-specific configuration properties */
+  radialConfig?: {
+    /** Variant of radial chart - default (single value) or stacked (multiple values) */
+    variant?: 'default' | 'stacked';
+    /** Start angle in degrees */
+    startAngle?: number;
+    /** End angle in degrees */
+    endAngle?: number;
+    /** Inner radius of the radial chart */
+    innerRadius?: number;
+    /** Outer radius of the radial chart */
+    outerRadius?: number;
+    /** Corner radius for bars */
+    cornerRadius?: number;
+    /** Data key for the main value (for default variant) */
+    dataKey?: string;
+    /** Stack ID for stacked variant */
+    stackId?: string;
+    /** Whether to show background for radial bars */
+    showBackground?: boolean;
+    /** Text to display in the center */
+    centerText?: {
+      /** Primary text (usually the value) */
+      primary?: string;
+      /** Secondary text (usually the label) */
+      secondary?: string;
+      /** Whether to show total for stacked variant */
+      showTotal?: boolean;
+    };
+    /** Grid configuration */
+    gridConfig?: {
+      /** Grid type */
+      gridType?: 'circle' | 'polygon';
+      /** Whether to show radial lines */
+      radialLines?: boolean;
+      /** Polar radius values for grid circles */
+      polarRadius?: number[];
     };
   };
 }

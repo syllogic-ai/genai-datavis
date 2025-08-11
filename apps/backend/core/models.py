@@ -170,6 +170,38 @@ class KPIStyles(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class RadialGridConfig(BaseModel):
+    """Configuration for radial chart grid display."""
+    gridType: Optional[str] = 'circle'
+    radialLines: Optional[bool] = False
+    polarRadius: Optional[List[int]] = None
+    model_config = ConfigDict(extra="forbid")
+
+
+class RadialCenterText(BaseModel):
+    """Configuration for center text in radial charts."""
+    primary: Optional[str] = None
+    secondary: Optional[str] = None
+    showTotal: Optional[bool] = None
+    model_config = ConfigDict(extra="forbid")
+
+
+class RadialConfig(BaseModel):
+    """Configuration specific to radial charts."""
+    variant: Optional[str] = 'default'
+    startAngle: Optional[int] = 0
+    endAngle: Optional[int] = None
+    innerRadius: Optional[int] = 80
+    outerRadius: Optional[int] = None
+    cornerRadius: Optional[int] = None
+    dataKey: Optional[str] = None
+    stackId: Optional[str] = 'a'
+    showBackground: Optional[bool] = None
+    centerText: Optional[RadialCenterText] = None
+    gridConfig: Optional[RadialGridConfig] = None
+    model_config = ConfigDict(extra="forbid")
+
+
 class ChartSpec(BaseModel):
     """
     Complete specification for a chart in the system.
@@ -185,6 +217,7 @@ class ChartSpec(BaseModel):
     area_config: Optional[AreaCfg] = None
     bar_config: Optional[BarCfg] = None
     kpi_config: Optional[KPIStyles] = None
+    radial_config: Optional[RadialConfig] = None
     dateFormatTooltip: Optional[str] = None
     lineType: Optional[LineType] = None
     hideLegend: Optional[bool] = None

@@ -49,7 +49,7 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
     try {
       // Try to access a property that requires the editor to be mounted
       editor.isDestroyed;
-      return !editor.isDestroyed && editor.view && editor.view.dom;
+      return !editor.isDestroyed && !!editor.view && !!editor.view.dom;
     } catch (error) {
       return false;
     }

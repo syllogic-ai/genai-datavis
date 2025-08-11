@@ -246,6 +246,8 @@ export function createThemeFromCSS(
     'chart-3': 'oklch(0.5500 0.2200 263)',
     'chart-4': 'oklch(0.4900 0.2200 264)',
     'chart-5': 'oklch(0.4200 0.1800 266)',
+    'chart-positive': 'oklch(0.5682 0.167 135.46)',
+    'chart-negative': 'oklch(0.4149 0.1695 28.96)',
     'font-sans': 'ui-sans-serif, system-ui, sans-serif',
     'font-mono': 'ui-monospace, SFMono-Regular, monospace',
     'font-serif': 'ui-serif, Georgia, serif',

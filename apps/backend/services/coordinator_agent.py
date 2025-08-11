@@ -45,7 +45,7 @@ class AnalysisOutput(BaseModel):
 
 # Declare the coordinator agent
 coordinator_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:gpt-4.1",
     # 'openai:o3',
     deps_type=Deps,
     output_type=AnalysisOutput,

@@ -194,6 +194,7 @@ function EnhancedDashboardContent() {
     setupCompleted: true,
     isPublic: isPublished,
     activeThemeId: null,
+    themeMode: 'light',
     width: dashboardSettings.width || 'full',
     createdAt: new Date('2024-01-01'), // Use fixed date to prevent infinite re-renders
     updatedAt: null,

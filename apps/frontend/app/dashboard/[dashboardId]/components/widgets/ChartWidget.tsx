@@ -140,6 +140,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
               <option value="line">Line Chart</option>
               <option value="area">Area Chart</option>
               <option value="pie">Pie Chart</option>
+              <option value="radial">Radial Chart</option>
             </select>
           </div>
 

@@ -47,7 +47,7 @@ class IntentAnalysisAgent:
 
 # Create simple agent for compatibility
 intent_analysis_agent = Agent(
-    "openai:gpt-4o-mini",
+    "openai:gpt-4.1",
     result_type=AnalysisOutput,
     system_prompt="You analyze user intent for data visualization."
 )

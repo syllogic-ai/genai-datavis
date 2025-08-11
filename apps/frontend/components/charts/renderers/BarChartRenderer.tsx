@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart, Bar, XAxis, CartesianGrid, YAxis } from "recharts";
+import { BarChart, Bar, XAxis, CartesianGrid, YAxis, Cell, LabelList } from "recharts";
 import {
   ChartTooltip,
   ChartTooltipContent,
@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/chart";
 import type { ChartSpec } from "@/types/chart-types";
 import moment from "moment";
-import { memo } from "react";
+import React, { memo } from "react";
 import { useThemeGridLines } from "@/hooks/useThemeGridLines";
 
 /**
@@ -17,6 +17,33 @@ import { useThemeGridLines } from "@/hooks/useThemeGridLines";
 export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec: ChartSpec }) {
   // Get theme setting for grid lines - must be called at the top level
   const showGridLines = useThemeGridLines();
+
+  // Check if negative variant is requested (for positive/negative value styling)
+  const isNegativeVariant = spec.barConfig?.variant === 'negative';
+
+  // Pre-compute colors for negative variant to avoid repeated DOM access
+  // These hooks must be called at the top level, not conditionally
+  const positiveColor = React.useMemo(() => {
+    if (spec.barConfig?.positiveColor) return spec.barConfig.positiveColor;
+    if (typeof window === 'undefined') return 'oklch(0.5682 0.167 135.46)'; // SSR fallback
+    const rootStyles = getComputedStyle(document.documentElement);
+    const color = rootStyles.getPropertyValue('--chart-positive').trim() || 'oklch(0.5682 0.167 135.46)';
+    if (isNegativeVariant) {
+      console.log('BarChartRenderer: Positive color resolved to:', color);
+    }
+    return color;
+  }, [spec.barConfig?.positiveColor, isNegativeVariant]);
+  
+  const negativeColor = React.useMemo(() => {
+    if (spec.barConfig?.negativeColor) return spec.barConfig.negativeColor;
+    if (typeof window === 'undefined') return 'oklch(0.4149 0.1695 28.96)'; // SSR fallback
+    const rootStyles = getComputedStyle(document.documentElement);
+    const color = rootStyles.getPropertyValue('--chart-negative').trim() || 'oklch(0.4149 0.1695 28.96)';
+    if (isNegativeVariant) {
+      console.log('BarChartRenderer: Negative color resolved to:', color);
+    }
+    return color;
+  }, [spec.barConfig?.negativeColor, isNegativeVariant]);
 
   if (spec.chartType !== 'bar') {
     console.error(`BarChartRenderer: Expected chart type 'bar', got '${spec.chartType}'`);
@@ -38,6 +65,17 @@ export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec:
   
   // Check if horizontal layout is requested
   const isHorizontal = spec.barConfig?.isHorizontal === true;
+  
+  // Debug logging
+  if (spec.title?.includes('IRR')) {
+    console.log('BarChartRenderer Debug:', {
+      title: spec.title,
+      variant: spec.barConfig?.variant,
+      isNegativeVariant,
+      dataKeys,
+      sampleData: spec.data?.slice(0, 2)
+    });
+  }
   
   // Format x-axis ticks if needed (e.g., for dates)
   function formatXAxis(tickItem: string) {
@@ -105,16 +143,63 @@ export const BarChartRenderer = memo(function BarChartRenderer({ spec }: { spec:
             content={<ChartTooltipContent indicator="dashed" />} 
           />
           
-          {dataKeys.map((key) => (
-            <Bar
-              key={key}
-              dataKey={key}
-              fill={spec.chartConfig?.[key]?.color || '#cccccc'}
-              radius={spec.barConfig?.radius ?? 4}
-              stackId={useStacks ? "a" : undefined}
-              fillOpacity={spec.barConfig?.fillOpacity}
-            />
-          ))}
+          {dataKeys.map((key, index) => {
+            // Calculate proper radius for stacked bars
+            let barRadius: number | [number, number, number, number] = spec.barConfig?.radius ?? 4;
+            
+            if (useStacks && dataKeys.length > 1) {
+              // For stacked bars, apply radius only to the appropriate corners
+              const baseRadius = spec.barConfig?.radius ?? 4;
+              if (index === 0) {
+                // First (bottom) bar - rounded bottom corners only
+                barRadius = isHorizontal ? [0, baseRadius, baseRadius, 0] : [0, 0, baseRadius, baseRadius];
+              } else if (index === dataKeys.length - 1) {
+                // Last (top) bar - rounded top corners only  
+                barRadius = isHorizontal ? [baseRadius, 0, 0, baseRadius] : [baseRadius, baseRadius, 0, 0];
+              } else {
+                // Middle bars - no rounded corners
+                barRadius = [0, 0, 0, 0];
+              }
+            }
+            
+            const baseColor = spec.chartConfig?.[key]?.color || '#cccccc';
+            
+            return (
+              <Bar
+                key={key}
+                dataKey={key}
+                fill={!isNegativeVariant ? baseColor : 'transparent'}
+                radius={barRadius}
+                stackId={useStacks ? "a" : undefined}
+                fillOpacity={spec.barConfig?.fillOpacity}
+              >
+                {/* Handle negative variant with conditional coloring */}
+                {isNegativeVariant && spec.data && spec.data.map((item, itemIndex) => {
+                  const value = item[key];
+                  const isPositive = typeof value === 'number' ? value >= 0 : parseFloat(String(value)) >= 0;
+                  const cellColor = isPositive ? positiveColor : negativeColor;
+                  
+                  console.log(`Cell ${itemIndex}: value=${value}, isPositive=${isPositive}, color=${cellColor}`);
+                  
+                  return (
+                    <Cell
+                      key={`cell-${itemIndex}`}
+                      fill={cellColor}
+                    />
+                  );
+                })}
+                
+                {/* Handle labels if requested */}
+                {spec.barConfig?.showLabels && (
+                  <LabelList
+                    position={spec.barConfig?.labelPosition || "top"}
+                    dataKey={spec.xAxisConfig?.dataKey || "name"}
+                    fillOpacity={1}
+                  />
+                )}
+              </Bar>
+            );
+          })}
         </BarChart>
     </ChartContainer>
   );

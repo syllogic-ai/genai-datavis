@@ -204,7 +204,7 @@ class GeneratedTitle(BaseModel):
 
 # Create an agent for title generation
 title_agent = Agent(
-    "openai:gpt-4o-mini", # Using a cost-effective and fast model
+    "openai:gpt-4.1", # Using a cost-effective and fast model
     output_type=GeneratedTitle,
 )
 
