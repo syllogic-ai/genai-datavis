@@ -20,7 +20,6 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
-import { useJobStatusRealtime } from "@/app/lib/hooks/useJobStatusRealtime";
 import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobCompletion";
 
 export interface ChatSidebarProps {
@@ -69,29 +68,8 @@ export function ChatSidebar({
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   
-  // Enhanced job monitoring (keep the old one for backward compatibility)
-  const { status: jobStatus } = useJobStatusRealtime(currentJobId, {
-    onComplete: async (job) => {
-      console.log('Job completed in ChatSidebar:', job);
-      setCurrentJobId(null); // Clear job ID
-      
-      // The enhanced job completion handler in parent will handle the rest
-      if (onWidgetsRefresh) {
-        try {
-          console.log('Refreshing dashboard widgets after job completion (silent refresh)');
-          setTimeout(async () => {
-            await onWidgetsRefresh();
-          }, 1500);
-        } catch (error) {
-          console.error('Failed to refresh widgets:', error);
-        }
-      }
-    },
-    onError: (error) => {
-      console.error('Job error in ChatSidebar:', error);
-      setCurrentJobId(null); // Clear job ID
-    }
-  });
+  // Job monitoring is now handled by the parent component (ChatPhase)
+  // This component only tracks the currentJobId for UI purposes
   
   // Hooks
   const { user } = useUser();

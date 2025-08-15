@@ -3,10 +3,12 @@ import { auth } from '@clerk/nextjs/server';
 import { v4 as uuidv4 } from 'uuid';
 import { updateChatConversation } from '@/app/lib/chatActions';
 import db from '@/db';
-import { chats } from '@/db/schema';
+import { chats, jobs } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { Client } from '@upstash/qstash';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000';
+const QSTASH_DESTINATION_URL = process.env.QSTASH_URL || BACKEND_URL;
 
 export async function POST(request: NextRequest) {
   try {
@@ -65,8 +67,6 @@ export async function POST(request: NextRequest) {
       message,
       timestamp: new Date().toISOString(),
       contextWidgetIds,
-      targetWidgetType,
-      targetChartSubType,
     };
 
     // Update chat conversation with the new user message
@@ -80,98 +80,66 @@ export async function POST(request: NextRequest) {
     // Generate unique request ID for tracking
     const requestId = uuidv4();
 
-    // Chart colors are now handled at the dashboard level via themes
-    // The backend will return theme color references (var(--chart-1), etc.)
-    // which will be resolved on the frontend
-    const chartColors = null;
-
     // Prepare the payload for the backend
     const backendPayload = {
       message,
       dashboardId,
       contextWidgetIds: contextWidgetIds || undefined,
-      targetWidgetType: targetWidgetType || undefined,
-      targetChartSubType: targetChartSubType || undefined,
       chat_id: chatId,
       request_id: requestId,
       user_id: userId, // Include the Clerk user ID for job ownership
       conversation_history: [...conversationHistory, newUserMessage], // Include full conversation
-      chart_colors: chartColors || {
-        chart1: "220 70% 50%",    // Default blue
-        chart2: "140 70% 50%",    // Default green
-        chart3: "30 70% 50%",     // Default orange
-        chart4: "0 70% 50%",      // Default red
-        chart5: "270 70% 50%",    // Default purple
-      }
     };
 
-    console.log('Sending to backend:', {
-      url: `${BACKEND_URL}/chat/analyze`,
+    console.log('Publishing to QStash:', {
+      url: `${QSTASH_DESTINATION_URL}/analyze`,
       payload: backendPayload
     });
 
-    // Forward the request to the backend
-    const backendResponse = await fetch(`${BACKEND_URL}/chat/analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(backendPayload)
-    });
-
-    if (!backendResponse.ok) {
-      const errorData = await backendResponse.text();
-      console.error('Backend error:', {
-        status: backendResponse.status,
-        statusText: backendResponse.statusText,
-        error: errorData
-      });
-      
+    const qstashToken = process.env.QSTASH_TOKEN;
+    if (!qstashToken) {
       return NextResponse.json(
-        { 
-          error: 'Backend service error',
-          details: errorData,
-          status: backendResponse.status
-        },
-        { status: backendResponse.status }
+        { error: 'QStash token not configured' },
+        { status: 500 }
       );
     }
 
-    const result = await backendResponse.json();
-
-    console.log('Backend response:', result);
-
-    // If this is the first message in the chat (only contains the user message we just added), trigger auto-rename
-    if (conversationHistory.length === 0) {
-      try {
-        // Get the base URL from the request
-        const url = new URL(request.url);
-        const baseUrl = `${url.protocol}//${url.host}`;
-        
-        // Don't await this - let it run in background
-        fetch(`${baseUrl}/api/chat/rename`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            chatId, 
-            firstMessage: message 
-          }),
-        }).catch(error => {
-          console.error('Error auto-renaming chat:', error);
-        });
-      } catch (error) {
-        console.error('Error initiating chat rename:', error);
-      }
+    // Create job record immediately before publishing to QStash
+    try {
+      await db.insert(jobs).values({
+        id: requestId,
+        userId: userId,
+        dashboardId: dashboardId,
+        status: 'pending',
+        progress: 0,
+      });
+      console.log(`Created job record ${requestId} for user ${userId}`);
+    } catch (error) {
+      console.error('Error creating job record:', error);
+      return NextResponse.json(
+        { error: 'Failed to create job record' },
+        { status: 500 }
+      );
     }
+
+    const qstashClient = new Client({ token: qstashToken });
+
+    const publishResult = await qstashClient.publishJSON({
+      url: `${process.env.NEXT_PUBLIC_API_URL}/analyze`,
+      body: backendPayload,
+    });
+
+    console.log('QStash publish result:', publishResult);
 
     // Return the successful response
     return NextResponse.json({
       success: true,
-      message: result.message || 'Analysis request enqueued successfully',
+      message: 'Analysis request enqueued successfully',
       requestId,
       chatId,
-      taskId: result.task_id,
-      queueName: result.queue_name
+      taskId: requestId, // Use requestId as taskId since backend uses request_id as job_id
+      qstashMessageId: publishResult.messageId,
+      queueName: 'qstash'
     });
 
   } catch (error) {

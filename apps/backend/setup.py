@@ -55,7 +55,7 @@ run_in_venv(f"{python_path} -m pip install -r requirements.txt")
 
 # Verify critical dependencies are installed
 print("Verifying critical dependencies...")
-critical_packages = ["uvicorn", "requests", "plotly"]
+critical_packages = ["uvicorn", "requests", "plotly", "langgraph", "langsmith"]
 
 for package in critical_packages:
     try:
@@ -63,6 +63,44 @@ for package in critical_packages:
     except subprocess.CalledProcessError:
         print(f"Warning: {package} not found. Installing...")
         run_in_venv(f"{python_path} -m pip install {package}")
+
+# Validate environment variables
+print("Validating environment variables...")
+
+def check_env_file():
+    """Check if .env file exists and validate configuration."""
+    env_file = ".env"
+    env_example_file = ".env.example"
+    
+    if not os.path.exists(env_file):
+        if os.path.exists(env_example_file):
+            print(f"⚠️  .env file not found. Please copy {env_example_file} to .env and configure your environment variables.")
+        else:
+            print("⚠️  Neither .env nor .env.example files found.")
+        return False
+    
+    # Check LangSmith configuration
+    try:
+        from config.langsmith_config import check_environment_variables as check_langsmith
+        langsmith_valid, langsmith_missing = check_langsmith()
+        if not langsmith_valid and langsmith_missing:
+            print(f"⚠️  LangSmith missing required variables: {', '.join(langsmith_missing)}")
+            print("   LangSmith tracing will be disabled.")
+    except ImportError:
+        print("⚠️  Could not import LangSmith configuration. Please ensure config files are properly created.")
+    
+    # Check LangGraph configuration  
+    try:
+        from config.langgraph_config import check_environment_variables as check_langgraph
+        langgraph_valid, langgraph_missing = check_langgraph()
+        if not langgraph_valid and langgraph_missing:
+            print(f"⚠️  LangGraph missing required variables: {', '.join(langgraph_missing)}")
+    except ImportError:
+        print("⚠️  Could not import LangGraph configuration. Please ensure config files are properly created.")
+    
+    return True
+
+check_env_file()
 
 print("✅ Backend setup complete.")
 

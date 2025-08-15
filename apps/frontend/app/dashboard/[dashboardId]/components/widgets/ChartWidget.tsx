@@ -90,7 +90,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
     chartType: chartType as any,
     title: "",  // Remove title from chart display
     description: "",  // Remove description from chart display
-    data: widget.data || sampleData,
+    data: widget.config.data || widget.data || sampleData,
     xAxisConfig: widget.config.xAxisConfig || {
       dataKey: "name",
     },
@@ -172,7 +172,7 @@ export function ChartWidget({ widget, onUpdate, isEditing, onEditToggle }: Chart
   return (
     <div className="h-[300px] flex flex-col border rounded-lg transition-all duration-200 p-3" style={{ backgroundColor: 'var(--card)', borderColor: 'var(--border)', color: 'var(--card-foreground)', boxShadow: 'var(--shadow)' }}>
       <div className="flex-1 min-h-0 overflow-hidden">
-        {widget.data || sampleData ? (
+        {widget.config.data || widget.data || sampleData ? (
           <ChartRenderer spec={chartSpec} />
         ) : (
           <div className="h-full flex items-center justify-center" style={{ color: 'var(--muted-foreground)' }}>

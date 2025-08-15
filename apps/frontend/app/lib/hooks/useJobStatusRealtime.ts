@@ -45,6 +45,8 @@ export function useJobStatusRealtime(
   const [isConnected, setIsConnected] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const hasInitialFetch = useRef(false);
+  const lastJobId = useRef<string | null>(null);
 
   const {
     onStatusChange,
@@ -129,7 +131,7 @@ export function useJobStatusRealtime(
         }, (retryCount + 1) * 1000);
       }
     }
-  }, [jobId, userId, onStatusChange, onComplete, onError, hasCompleted, onProgress]);
+  }, [jobId, userId]); // Removed callback dependencies to prevent re-creation
 
   useEffect(() => {
     if (!jobId || !isSignedIn || !userId || hasCompleted) {
@@ -137,9 +139,21 @@ export function useJobStatusRealtime(
     }
 
     const supabase = createClient();
-    
-    // Fetch initial job state
-    fetchInitialJob(supabase);
+
+    // Reset fetch flag when jobId changes
+    if (lastJobId.current !== jobId) {
+      lastJobId.current = jobId;
+      hasInitialFetch.current = false;
+      setJob(null);
+      setHasCompleted(false);
+    }
+
+    // Fetch initial state only once per jobId
+    if (!hasInitialFetch.current) {
+      hasInitialFetch.current = true;
+      // Fetch initial job state only once
+      fetchInitialJob(supabase);
+    }
     
     // Set up real-time subscription
     const channel = supabase
@@ -216,7 +230,7 @@ export function useJobStatusRealtime(
     return () => {
       disconnect();
     };
-  }, [jobId, isSignedIn, userId, hasCompleted, disconnect, fetchInitialJob, onComplete, onError, onProgress, onStatusChange]);
+  }, [jobId, isSignedIn, userId, hasCompleted, disconnect, fetchInitialJob]); // Removed callback dependencies
 
   return {
     job,

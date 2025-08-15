@@ -144,7 +144,7 @@ export function useDashboardJobCompletion(options: DashboardJobCompletionOptions
   const handleJobProgress = useCallback((job: JobStatusData) => {
     console.log('Job progress update:', job);
     
-    if (showToasts && job.progress && job.progress > 0) {
+    if (showToasts && job.progress && job.progress > 0 && job.progress !== 100) {
       // Only show progress toast for significant progress updates
       if (job.progress === 50 || job.progress === 75) {
         toast.loading(`Processing... ${job.progress}%`, {

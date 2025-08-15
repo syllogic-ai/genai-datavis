@@ -24,7 +24,8 @@
       "Bash(psql:*)",
       "Bash(node:*)",
       "Bash(npx shadcn@latest add:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(pip install:*)"
     ],
     "deny": []
   }
