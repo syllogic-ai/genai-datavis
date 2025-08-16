@@ -25,7 +25,10 @@
       "Bash(node:*)",
       "Bash(npx shadcn@latest add:*)",
       "Bash(npx eslint:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(rm:*)",
+      "Bash(cp:*)",
+      "Bash(DATABASE_URL=\"postgresql://temp:temp@localhost:5432/temp\" npm run build)"
     ],
     "deny": []
   }

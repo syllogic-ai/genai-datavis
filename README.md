@@ -1,47 +1,45 @@
-![Backend Build](https://github.com/syllogic-ai/genai-datavis/actions/workflows/backend-build.yml/badge.svg)
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-![Frontend Build](https://github.com/syllogic-ai/genai-datavis/actions/workflows/frontend-build.yml/badge.svg)
+Testing the Build github action.
 
-# GenAI DataVis Project
+## Getting Started
 
-Ever wanted to talk with your visualizations just like talking with ChatGPT? With Syllogic, you can do that! Simply ask what you want, and watch our agent transforming your asks to valuable visual reports!
+First, run the development server:
 
-## Project Structure
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-- `apps/frontend`: Next.js frontend application
-- `apps/backend`: FastAPI backend application
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 ## Environment Variables
 
-This project uses separate environment files for the frontend and backend applications.
-
-### Backend Environment Variables
-
-Backend environment variables are stored in `apps/backend/.env`:
-
-```
-# Server Configuration
-PORT=8000
-HOST=0.0.0.0
-DEBUG=True
-
-# Database Configuration
-DATABASE_URL=postgresql://username:password@localhost:5432/database_name
-
-# API Keys and Secrets 
-SECRET_KEY=your_secret_key_here
-JWT_SECRET=your_jwt_secret_here
-
-# CORS Settings
-FRONTEND_URL=http://localhost:3000
-
-# Other Services
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-### Frontend Environment Variables
-
-Frontend environment variables are stored in `apps/frontend/.env.local`:
+This Next.js application uses environment variables for configuration. Create a `.env.local` file in the root directory with the following variables:
 
 ```
 # API Configuration
@@ -57,44 +55,34 @@ NEXT_PUBLIC_FEATURE_ANALYTICS=true
 NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
 ```
 
-**Note**: In the frontend, only variables prefixed with `NEXT_PUBLIC_` are exposed to the browser.
-
-## Setup Instructions
-
-1. Clone the repository
-2. Set up the environment variables:
+A `.env.example` file is provided as a template. Copy it to `.env.local` and fill in the values:
 
 ```bash
-# Set up backend environment
-cd apps/backend
-cp .env.example .env
-# Edit .env with your values
-
-# Set up frontend environment
-cd ../frontend
 cp .env.example .env.local
-# Edit .env.local with your values
+# Edit the .env.local file with your actual values
 ```
 
-3. Install dependencies and start the applications:
+### Environment Variables in Next.js
 
-```bash
-# Start backend
-cd apps/backend
-python setup.py --run  # Sets up environment and starts the server
+Next.js has built-in support for environment variables:
 
-# Start frontend (in another terminal)
-cd apps/frontend
-npm install
-npm run dev
+- `.env.local`: Local environment variables, not committed to git
+- `.env.development`: Development environment variables
+- `.env.production`: Production environment variables
+- `.env`: Default environment variables
+
+Only variables prefixed with `NEXT_PUBLIC_` are exposed to the browser.
+
+### Using Environment Variables
+
+Environment variables can be accessed in your code using the utilities in `app/lib/env.ts`:
+
+```tsx
+import { API_URL, FEATURE_FLAGS } from '../lib/env';
+
+// Use API_URL in fetch calls
+fetch(`${API_URL}/endpoint`);
+
+// Conditionally render based on feature flags
+{FEATURE_FLAGS.analytics && <AnalyticsComponent />}
 ```
-
-For more detailed instructions, see the README files in the respective application directories.
-
-## Environment Variables Best Practices
-
-1. Never commit environment files (.env, .env.local) to version control
-2. Keep sensitive data only in backend environment files
-3. Use .env.example files as templates
-4. Set different values for development, testing, and production environments
-5. For production deployments, use the environment variable management of your hosting provider 
