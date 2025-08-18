@@ -281,8 +281,7 @@ export function ChatSidebar({
         message: newMessage.message,
         dashboardId,
         contextWidgetIds: newMessage.contextWidgetIds && newMessage.contextWidgetIds.length > 0 ? newMessage.contextWidgetIds : undefined,
-        targetWidgetType: newMessage.targetWidgetType || undefined,
-        chatId
+        chatId: chatId
       };
 
       console.log('Sending analyze request:', analyzeRequest);
@@ -315,15 +314,15 @@ export function ChatSidebar({
       console.log('Analyze response:', result);
       
       if (result.success) {
-        console.log(`Message sent successfully. Task ID: ${result.taskId}`);
+        console.log(`Message sent successfully. Thread ID: ${result.thread_id}`);
         
         // Track the job for monitoring
-        if (result.taskId) {
-          setCurrentJobId(result.taskId);
+        if (result.thread_id) {
+          setCurrentJobId(result.thread_id);
           
           // Notify parent component about job start
           if (onJobStart) {
-            onJobStart(result.taskId);
+            onJobStart(result.thread_id);
           }
         }
         

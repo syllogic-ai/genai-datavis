@@ -233,10 +233,13 @@ function EnhancedDashboardContent() {
     // For first-time setup, navigate to chat phase
     // Use phase=chat to explicitly show chat mode
     if (!setupState.hasMessages && files.length > 0) {
-      router.replace(`/dashboard/${dashboardId}?phase=chat`);
+      // Include chat ID in URL if available to maintain chat context
+      const chatParam = defaultChatId ? `&chat=${defaultChatId}` : '';
+      router.replace(`/dashboard/${dashboardId}?phase=chat${chatParam}`);
     } else {
-      // For returning users, just go back to dashboard
-      router.replace(`/dashboard/${dashboardId}`);
+      // For returning users, just go back to dashboard, preserve chat ID if available
+      const chatParam = defaultChatId ? `?chat=${defaultChatId}` : '';
+      router.replace(`/dashboard/${dashboardId}${chatParam}`);
     }
   };
 
@@ -244,11 +247,17 @@ function EnhancedDashboardContent() {
     markFirstMessage();
     // Also mark setup as completed when first message is sent
     markSetupCompleted();
+    
+    // When transitioning from ChatPhase to full dashboard, maintain the chat ID in URL
+    if (defaultChatId && !urlChatId) {
+      router.replace(`/dashboard/${dashboardId}?chat=${defaultChatId}`);
+    }
   };
 
   const handleBackToSetup = () => {
-    // Navigate back to setup mode
-    router.replace(`/dashboard/${dashboardId}?setup=true`);
+    // Navigate back to setup mode, preserve chat ID if available
+    const chatParam = chatId ? `&chat=${chatId}` : '';
+    router.replace(`/dashboard/${dashboardId}?setup=true${chatParam}`);
   };
 
 

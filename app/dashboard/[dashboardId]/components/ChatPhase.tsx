@@ -221,8 +221,7 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidget
         message: data.message,
         dashboardId,
         contextWidgetIds: data.selectedItems?.length ? data.selectedItems.map(item => item.id) : undefined,
-        targetWidgetType: data.widgetType || undefined,
-        chatId
+        chatId: chatId
       };
 
       console.log('Sending analyze request:', analyzeRequest);
@@ -255,14 +254,14 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidget
       console.log('Analyze response:', result);
       
       if (result.success) {
-        console.log(`Message sent successfully. Task ID: ${result.taskId}`);
+        console.log(`Message sent successfully. Thread ID: ${result.thread_id}`);
         
         // Move to processing state - we'll wait for real-time updates to detect completion
         setProcessingStatus('processing');
         setProcessingMessage('Creating your dashboard...');
         
-        // Store the task ID for tracking
-        const taskId = result.taskId || result.requestId;
+        // Store the thread ID for tracking
+        const taskId = result.thread_id || result.result?.taskId;
         console.log('Setting pending task ID:', taskId);
         
         // Add a small delay to allow backend to create the job record
