@@ -100,13 +100,13 @@ export function getGridSizeFromDimensions(w: number, h: number, widgetType?: str
     return "text-xs"; // Default for text
   }
   
-  // For charts and tables, use chart prefixes with adaptive sizing
-  if (widgetType === 'chart' || widgetType === 'table') {
+  // For all non-text widgets, use chart prefixes with adaptive sizing
+  if (widgetType !== 'text') {
     if (w >= 8 && h >= 4) return "chart-xl";
     if (w >= 6 && h >= 4) return "chart-l";
     if (w >= 4 && h >= 4) return "chart-m";
     if (w >= 4 && h >= 2) return "chart-s";
-    return "chart-s"; // Default for charts/tables
+    return "chart-s"; // Default for non-text widgets
   }
   
   return gridToSizeMap[key as keyof typeof gridToSizeMap] || "chart-s";
@@ -155,7 +155,7 @@ export function getOptimalWidgetSize(
     return 'kpi';
   }
   
-  // For charts and tables, find the largest size that fits
+  // For all non-text widgets, find the largest size that fits
   for (const size of sizes) {
     const dimensions = getResponsiveDimensions(size, breakpoint, availableColumns);
     if (dimensions.w <= availableColumns) {

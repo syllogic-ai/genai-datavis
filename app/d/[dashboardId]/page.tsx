@@ -39,17 +39,11 @@ function PublicDashboardContent({
       onEditToggle: () => {}, // No-op for read-only mode
     };
 
-    switch (widget.type) {
-      case "text":
-        return <TextBlock {...props} />;
-      case "chart":
-        return <ChartWidget {...props} />;
-      case "kpi":
-        return <KPICard {...props} />;
-      case "table":
-        return <TableWidget {...props} />;
-      default:
-        return <div>Unknown widget type</div>;
+    if (widget.type === "text") {
+      return <TextBlock {...props} />;
+    } else {
+      // Treat all non-text widgets as charts
+      return <ChartWidget {...props} />;
     }
   };
 
