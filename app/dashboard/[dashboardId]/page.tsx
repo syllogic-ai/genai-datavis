@@ -21,7 +21,6 @@ import { Save, Loader2, Check, AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import * as React from "react";
 import toast, { Toaster } from 'react-hot-toast';
-import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobCompletion";
 import { useDashboardRealtime } from "@/app/lib/hooks/useDashboardRealtime";
 import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardUpdates";
 import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
@@ -94,23 +93,6 @@ function EnhancedDashboardContent() {
     error: chatError
   } = useDashboardChat(dashboardId);
 
-  // Enhanced job completion and realtime handling
-  const {
-    trackJob,
-    stopTracking,
-    currentJob,
-    isProcessing,
-    completedJobs,
-    failedJobs
-  } = useDashboardJobCompletion({
-    dashboardId,
-    onWidgetRefresh: () => loadWidgets({ bustCache: true, silent: true }),
-    onCacheInvalidation: (result) => {
-      console.log('Cache invalidation result:', result);
-    },
-    showToasts: true,
-    autoRefresh: true
-  });
 
   // Realtime dashboard updates with optimistic UI
   const {
@@ -445,7 +427,7 @@ function EnhancedDashboardContent() {
             onToggle={handleChatSidebarToggle}
             dashboardWidgets={widgets}
             onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
-            onJobStart={trackJob}
+            onJobStart={() => {}}
           />
         )}
       </motion.div>
@@ -492,19 +474,6 @@ function EnhancedDashboardContent() {
             </motion.div>
           )}
           
-          {/* Processing Status */}
-          {isProcessing && (
-            <motion.div
-              key="processing"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg"
-            >
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span className="text-sm">Processing...</span>
-            </motion.div>
-          )}
           
           
           {/* Optimistic Updates Indicator */}

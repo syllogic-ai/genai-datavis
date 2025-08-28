@@ -59,6 +59,9 @@ export const widgets = pgTable("widgets", {
 
   // Widget type from frontend: 'text' | 'chart' | 'kpi' | 'table'
   type: text("type").notNull(),
+
+  // Summary
+  summary: text("summary"),
   
   // Widget configuration (all widget-specific settings)
   config: jsonb("config").notNull().$type<Record<string, any>>(),
@@ -121,7 +124,7 @@ export const llmUsage = pgTable('llm_usage', {
   id: text("id").primaryKey(),
   userId: text("user_id"), // Store as text, no foreign key for analytics preservation
   chatId: text("chat_id"), // Store as text, no foreign key for analytics preservation
-  requestId: text("request_id"), // Same as job_id for linking to jobs
+  requestId: text("request_id"),
   dashboardId: text("dashboard_id"), // Store dashboard_id for analytics
   
   model: text('model').notNull(),
@@ -132,28 +135,6 @@ export const llmUsage = pgTable('llm_usage', {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// JOBS (for tracking async analysis tasks)
-export const jobs = pgTable('jobs', {
-  id: text("id").primaryKey(), // UUID job ID (same as Redis key)
-  userId: text("user_id").notNull(), // Store as text, no foreign key for analytics preservation
-  dashboardId: text("dashboard_id").notNull(), // Store as text, no foreign key for analytics preservation
-  
-  // Job metadata
-  status: text("status").notNull().default("pending"), // 'pending' | 'processing' | 'completed' | 'failed'
-  progress: integer("progress").default(0), // 0-100
-  
-  // Error tracking
-  error: text("error"),
-  
-  // Timing information
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  startedAt: timestamp("started_at"),
-  completedAt: timestamp("completed_at"),
-  
-  // Performance metrics
-  processingTimeMs: integer("processing_time_ms"),
-  queueTimeMs: integer("queue_time_ms"),
-});
 
 // THEMES (global theme system - can be shared across dashboards)
 export const themes = pgTable("themes", {
@@ -262,6 +243,5 @@ export type Dashboard = typeof dashboards.$inferSelect;
 export type Widget = typeof widgets.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
 export type LLMUsage = typeof llmUsage.$inferSelect;
-export type Job = typeof jobs.$inferSelect;
 export type Theme = typeof themes.$inferSelect;
 export type UserPreferences = typeof userPreferences.$inferSelect;

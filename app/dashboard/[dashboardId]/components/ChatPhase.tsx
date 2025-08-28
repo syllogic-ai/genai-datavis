@@ -10,7 +10,6 @@ import { FileRecord } from "../hooks/useSetupState";
 import { ChatInput } from "@/components/dashboard/ChatInput";
 import { useDashboardChat } from "../hooks/useDashboardChat";
 import { useChatRealtime } from "@/app/lib/hooks/useChatRealtime";
-import { useJobStatusRealtime } from "@/app/lib/hooks/useJobStatusRealtime";
 
 interface ChatPhaseProps {
   dashboardId: string;
@@ -35,57 +34,6 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidget
   // Get or create chat for this dashboard
   const { chatId, isLoading: isChatLoading } = useDashboardChat(dashboardId);
   
-  // Job status monitoring with Supabase Realtime
-  const {
-    status: jobStatus,
-    progress: jobProgress,
-    error: jobError,
-    job: jobData,
-    isCompleted: jobCompleted,
-    isFailed: jobFailed,
-    disconnect: disconnectJob
-  } = useJobStatusRealtime(pendingTaskId, {
-    onComplete: async (job) => {
-      console.log('Job completed via Realtime:', job);
-      if (!hasNavigated) {
-        setProcessingStatus('completed');
-        setProcessingMessage('Dashboard ready!');
-        setHasNavigated(true);
-        
-        // Clear any existing timer
-        if (completionTimer) {
-          clearTimeout(completionTimer);
-          setCompletionTimer(null);
-        }
-        
-        // Refresh widgets to load the newly created ones with cache busting
-        if (onWidgetsRefresh) {
-          try {
-            console.log('Refreshing dashboard widgets after job completion (with cache bust)');
-            // Add small delay to ensure backend has completed all operations
-            setTimeout(async () => {
-              await onWidgetsRefresh();
-            }, 1500);
-          } catch (error) {
-            console.error('Failed to refresh widgets:', error);
-          }
-        }
-        
-        // Small delay to show completion message, then transition
-        const timer = setTimeout(() => {
-          onFirstMessage();
-        }, 1500);
-        setCompletionTimer(timer);
-      }
-    },
-    onError: (error) => {
-      console.error('Job error via Realtime:', error);
-      setProcessingStatus('idle');
-      setProcessingMessage('');
-      setPendingTaskId(null);
-      setErrorMessage(error);
-    }
-  });
   
   // Subscribe to real-time chat updates to detect completion
   const { conversation, isLoading: isConversationLoading } = useChatRealtime(
@@ -333,21 +281,6 @@ export function ChatPhase({ dashboardId, files, onFirstMessage, onBack, onWidget
                 This may take a few moments while we analyze your data and create visualizations.
               </p>
               
-              {/* Progress indicator if we have job progress */}
-              {jobProgress > 0 && (
-                <div className="w-full max-w-md mx-auto mb-4">
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>Progress</span>
-                    <span>{jobProgress}%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                      style={{ width: `${jobProgress}%` }}
-                    ></div>
-                  </div>
-                </div>
-              )}
               
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                 <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />

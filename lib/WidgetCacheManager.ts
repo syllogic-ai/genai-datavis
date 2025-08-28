@@ -261,48 +261,6 @@ export class WidgetCacheManager {
     console.log(`Batch cached ${cacheOperations.length} widgets`);
   }
 
-  // Job completion cache invalidation
-  async invalidateJobRelatedCaches(jobId: string, dashboardId: string): Promise<{
-    widgetsInvalidated: number;
-    dashboardCacheCleared: boolean;
-  }> {
-    try {
-      console.log(`Invalidating caches for job ${jobId} on dashboard ${dashboardId}`);
-      
-      // Clear all dashboard widget caches
-      await this.invalidateDashboardCache(dashboardId);
-      
-      // Get count of widgets that were invalidated
-      const dashboardWidgetsData = await db.select()
-        .from(widgets)
-        .where(eq(widgets.dashboardId, dashboardId));
-      
-      const widgetsInvalidated = dashboardWidgetsData.length;
-      
-      // Clear any dashboard-level caches
-      const dashboardCacheKeys = [`dashboard:${dashboardId}:*`];
-      for (const pattern of dashboardCacheKeys) {
-        const keys = await this.redis.keys(pattern);
-        if (keys.length > 0) {
-          await this.redis.del(...keys);
-          console.log(`Cleared ${keys.length} dashboard cache keys`);
-        }
-      }
-      
-      console.log(`Job completion cache invalidation completed: ${widgetsInvalidated} widgets invalidated`);
-      
-      return {
-        widgetsInvalidated,
-        dashboardCacheCleared: true
-      };
-    } catch (error) {
-      console.error(`Error invalidating job-related caches:`, error);
-      return {
-        widgetsInvalidated: 0,
-        dashboardCacheCleared: false
-      };
-    }
-  }
 
   // Preemptive cache warming for new widgets
   async warmCacheForNewWidgets(dashboardId: string, widgetIds: string[]): Promise<void> {

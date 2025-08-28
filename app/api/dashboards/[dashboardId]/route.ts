@@ -123,7 +123,7 @@ export async function DELETE(
       console.log('[DELETE API] Widgets deleted successfully');
 
       // 2. Delete all chats associated with the dashboard
-      // Note: Job and LLM usage records are preserved for analytics (no foreign key constraints)
+      // Note: LLM usage records are preserved for analytics (no foreign key constraints)
       console.log('[DELETE API] Deleting chats');
       await tx.delete(chats)
         .where(eq(chats.dashboardId, dashboardId));

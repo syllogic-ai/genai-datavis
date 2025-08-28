@@ -20,7 +20,6 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
-import { useDashboardJobCompletion } from "@/app/lib/hooks/useDashboardJobCompletion";
 
 export interface ChatSidebarProps {
   dashboardId: string;

@@ -13,7 +13,9 @@ export async function POST(request: NextRequest) {
     }
     
     const cacheManager = new WidgetCacheManager();
-    const result = await cacheManager.invalidateJobRelatedCaches(jobId, dashboardId);
+    // Invalidate dashboard cache instead since we removed job-related functionality
+    await cacheManager.invalidateDashboardCache(dashboardId);
+    const result = { widgetsInvalidated: 0, dashboardCacheCleared: true };
     
     return NextResponse.json(result);
   } catch (error) {
