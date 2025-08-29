@@ -1,15 +1,15 @@
 "use server";
 
 import db from '@/db';
-import { chats, files } from '../../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { chats, messages, tasks, files } from '../../db/schema';
+import { eq, and, desc } from 'drizzle-orm';
 import { supabase } from './supabase';
 import { chatEvents, CHAT_EVENTS } from './events';
 import { v4 as uuidv4 } from 'uuid';
 import { widgets } from '@/db/schema';
 
 /**
- * Create a new chat session
+ * Create a new chat session with initial message
  */
 export async function createChat(
   userId: string,
@@ -17,18 +17,23 @@ export async function createChat(
   initialMessageContent: string
 ) {
   const chatId = uuidv4();
+  const messageId = uuidv4();
   const newChat = {
     id: chatId,
     userId,
     dashboardId,
     title: "New Widget Chat",
-    conversation: [
-      {
-        role: 'user',
-        message: initialMessageContent,
-        timestamp: new Date().toISOString(),
-      },
-    ],
+    lastMessageAt: new Date(),
+    messageCount: 1,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const initialMessage = {
+    id: messageId,
+    chatId,
+    role: 'user',
+    content: initialMessageContent,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -38,6 +43,9 @@ export async function createChat(
     if (insertedChats.length === 0) {
       throw new Error('Failed to create new chat.');
     }
+    
+    await db.insert(messages).values(initialMessage);
+    
     return insertedChats[0];
   } catch (error) {
     console.error('Error creating chat:', error);
@@ -58,7 +66,7 @@ export async function createEmptyChat(
     userId,
     dashboardId,
     title: "New Chat",
-    conversation: [],
+    messageCount: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -106,23 +114,35 @@ export async function renameChat(chatId: string, userId: string, newTitle: strin
 }
 
 /**
- * Update chat conversation with new message
+ * Add a new message to a chat
  */
-export async function updateChatConversation(
+export async function addMessage(
   chatId: string,
   userId: string,
-  newMessage: {
+  messageData: {
     role: string;
-    message: string;
-    timestamp: string;
-    contextWidgetIds?: string[];
-    targetWidgetType?: 'chart' | 'table' | 'kpi';
-    targetChartSubType?: 'line' | 'area' | 'bar' | 'horizontal-bar' | 'pie';
+    content: string;
+    messageType?: string;
+    taskGroupId?: string;
   }
 ) {
+  const messageId = uuidv4();
+  const timestamp = new Date();
+  
+  const newMessage = {
+    id: messageId,
+    chatId,
+    role: messageData.role,
+    content: messageData.content,
+    messageType: messageData.messageType,
+    taskGroupId: messageData.taskGroupId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
   try {
-    // First get the current conversation
-    const currentChat = await db.select()
+    // First verify the chat belongs to the user
+    const chatExists = await db.select()
       .from(chats)
       .where(and(
         eq(chats.id, chatId),
@@ -130,32 +150,26 @@ export async function updateChatConversation(
       ))
       .limit(1);
 
-    if (!currentChat || currentChat.length === 0) {
+    if (!chatExists || chatExists.length === 0) {
       throw new Error(`Chat ${chatId} not found`);
     }
 
-    const currentConversation = currentChat[0].conversation || [];
-    const updatedConversation = [...currentConversation, newMessage];
-
-    // Update the chat with the new conversation
-    const result = await db.update(chats)
+    // Insert the message
+    const insertedMessage = await db.insert(messages).values(newMessage).returning();
+    
+    // Update chat metadata (increment message count)
+    const currentChat = chatExists[0];
+    await db.update(chats)
       .set({ 
-        conversation: updatedConversation,
-        updatedAt: new Date()
+        lastMessageAt: timestamp,
+        messageCount: (currentChat.messageCount || 0) + 1,
+        updatedAt: timestamp
       })
-      .where(and(
-        eq(chats.id, chatId),
-        eq(chats.userId, userId)
-      ))
-      .returning();
+      .where(eq(chats.id, chatId));
 
-    if (!result || result.length === 0) {
-      throw new Error(`Failed to update chat ${chatId}`);
-    }
-
-    return result[0];
+    return insertedMessage[0];
   } catch (error) {
-    console.error('Error updating chat conversation:', error);
+    console.error('Error adding message:', error);
     throw error;
   }
 }
@@ -182,4 +196,137 @@ export async function deleteChat(chatId: string, userId: string) {
     console.error('Error deleting chat:', error);
     throw error;
   }
-} 
+}
+
+/**
+ * Get all messages for a chat
+ */
+export async function getChatMessages(chatId: string, userId: string) {
+  try {
+    // First verify the chat belongs to the user
+    const chatExists = await db.select()
+      .from(chats)
+      .where(and(
+        eq(chats.id, chatId),
+        eq(chats.userId, userId)
+      ))
+      .limit(1);
+
+    if (!chatExists || chatExists.length === 0) {
+      throw new Error(`Chat ${chatId} not found`);
+    }
+
+    const chatMessages = await db.select()
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(messages.createdAt);
+
+    return chatMessages;
+  } catch (error) {
+    console.error('Error getting chat messages:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create a new task
+ */
+export async function createTask(
+  chatId: string,
+  dashboardId: string,
+  taskData: {
+    taskGroupId: string;
+    title: string;
+    description?: string;
+    order: number;
+    status?: string;
+  }
+) {
+  const taskId = uuidv4();
+  const timestamp = new Date();
+  
+  const newTask = {
+    id: taskId,
+    chatId,
+    dashboardId,
+    taskGroupId: taskData.taskGroupId,
+    title: taskData.title,
+    description: taskData.description,
+    status: taskData.status || 'pending',
+    order: taskData.order,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  try {
+    const insertedTask = await db.insert(tasks).values(newTask).returning();
+    return insertedTask[0];
+  } catch (error) {
+    console.error('Error creating task:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update task status
+ */
+export async function updateTaskStatus(
+  taskId: string,
+  status: string,
+  startedAt?: Date,
+  completedAt?: Date
+) {
+  const updateData: any = {
+    status,
+    updatedAt: new Date(),
+  };
+
+  if (startedAt) updateData.startedAt = startedAt;
+  if (completedAt) updateData.completedAt = completedAt;
+
+  try {
+    const result = await db.update(tasks)
+      .set(updateData)
+      .where(eq(tasks.id, taskId))
+      .returning();
+
+    return result[0];
+  } catch (error) {
+    console.error('Error updating task status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get tasks for a chat grouped by taskGroupId
+ */
+export async function getChatTasks(chatId: string) {
+  try {
+    const chatTasks = await db.select()
+      .from(tasks)
+      .where(eq(tasks.chatId, chatId))
+      .orderBy(tasks.taskGroupId, tasks.order);
+
+    return chatTasks;
+  } catch (error) {
+    console.error('Error getting chat tasks:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get tasks for a specific task group (linked to a message)
+ */
+export async function getTasksByGroupId(taskGroupId: string) {
+  try {
+    const groupTasks = await db.select()
+      .from(tasks)
+      .where(eq(tasks.taskGroupId, taskGroupId))
+      .orderBy(tasks.order);
+
+    return groupTasks;
+  } catch (error) {
+    console.error('Error getting tasks by group ID:', error);
+    throw error;
+  }
+}

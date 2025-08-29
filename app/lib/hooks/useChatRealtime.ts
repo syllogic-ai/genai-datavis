@@ -39,32 +39,52 @@ export function useChatRealtime(
       prevChatIdRef.current = chatId;
     }
 
-    // Fetch conversation data
+    // Fetch conversation data from messages table
     const fetchConversation = async () => {
       try {
-        const { data, error } = await supabase
+        // First verify the chat belongs to the user
+        const { data: chatData, error: chatError } = await supabase
           .from('chats')
-          .select('conversation')
+          .select('id')
           .eq('id', chatId)
           .eq('user_id', user.id)
           .single();
 
-        if (error) {
-          throw error;
+        if (chatError) {
+          throw chatError;
         }
 
-        if (data?.conversation) {
-          // Normalize message format before setting state
-          const normalizedConversation = normalizeMessages(data.conversation);
-          setConversation(normalizedConversation);
+        if (!chatData) {
+          throw new Error('Chat not found or access denied');
+        }
+
+        // Fetch messages for this chat
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('chat_id', chatId)
+          .order('created_at', { ascending: true });
+
+        if (messagesError) {
+          throw messagesError;
+        }
+
+        if (messagesData && messagesData.length > 0) {
+          // Convert messages to chat format
+          const chatMessages: ChatMessage[] = messagesData.map(msg => ({
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.created_at,
+            messageType: msg.message_type,
+            taskGroupId: msg.task_group_id
+          }));
+          setConversation(chatMessages);
         } else {
-          // If no conversation data, set to empty array
           setConversation([]);
         }
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to fetch conversation'));
       } finally {
-        // Always exit loading state after fetch attempt
         setIsLoading(false);
       }
     };
@@ -85,28 +105,42 @@ export function useChatRealtime(
       channelRef.current = null;
     }
     
-    // Create new subscription
+    // Create new subscription for messages table
     const channel = supabase
-      .channel(`chat:${chatId}`)
+      .channel(`messages:${chatId}`)
       .on(
         'postgres_changes',
         { 
-          event: 'UPDATE', 
+          event: 'INSERT', 
           schema: 'public', 
-          table: 'chats', 
-          filter: `id=eq.${chatId}` 
+          table: 'messages', 
+          filter: `chat_id=eq.${chatId}` 
         },
-        (payload) => {
-          // Check if the update is for the current user's chat
-          if (payload.new.user_id === user.id) {
-            // Normalize message format before setting state
-            const normalizedConversation = normalizeMessages(payload.new.conversation);
-            setConversation(normalizedConversation);
-            
-            // Call the onUpdate callback if provided
-            if (options?.onUpdate) {
-              options.onUpdate(normalizedConversation);
+        async (payload) => {
+          // New message added - refetch all messages to maintain order
+          try {
+            const { data: messagesData, error } = await supabase
+              .from('messages')
+              .select('*')
+              .eq('chat_id', chatId)
+              .order('created_at', { ascending: true });
+
+            if (!error && messagesData) {
+              const chatMessages: ChatMessage[] = messagesData.map(msg => ({
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.created_at,
+                messageType: msg.message_type,
+                taskGroupId: msg.task_group_id
+              }));
+              setConversation(chatMessages);
+              
+              if (options?.onUpdate) {
+                options.onUpdate(chatMessages);
+              }
             }
+          } catch (error) {
+            console.error('Error fetching updated messages:', error);
           }
         }
       )

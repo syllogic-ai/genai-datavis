@@ -2,9 +2,11 @@
  * Type for standard chat messages with content field
  */
 export type ChatMessage = {
-  role: "user" | "system" | "chart";
+  role: "user" | "assistant" | "system" | "chart";
   content: string;
   timestamp?: string;
+  messageType?: string; // 'task-list', 'chat', 'tool-usage', etc.
+  taskGroupId?: string; // Links to tasks table
   widget_ids?: string[]; // Support for multiple widgets
   chart_id?: string; // Backward compatibility
 };

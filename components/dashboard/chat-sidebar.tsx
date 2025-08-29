@@ -20,6 +20,7 @@ import { useUser } from "@clerk/nextjs";
 import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
+import { ChatMessage } from "./ChatMessage";
 
 export interface ChatSidebarProps {
   dashboardId: string;
@@ -33,7 +34,7 @@ export interface ChatSidebarProps {
 }
 
 interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'ai' | 'system';
   message: string;
   timestamp: string;
   contextWidgetIds?: string[];
@@ -96,9 +97,12 @@ export function ChatSidebar({
   // Convert real-time conversation to our local format and merge with pending messages
   const chatHistory = React.useMemo(() => {
     const realTimeMessages = conversation.map(msg => ({
-      role: msg.role as 'user' | 'assistant' | 'system',
-      message: msg.content,
+      role: msg.role as 'user' | 'ai' | 'system',
+      content: msg.content,
+      message: msg.content, // For backward compatibility
       timestamp: msg.timestamp || new Date().toISOString(),
+      messageType: msg.messageType,
+      taskGroupId: msg.taskGroupId,
       contextWidgetIds: undefined, // This info isn't stored in the normalized format
       targetWidgetType: undefined,
       isPending: false,
@@ -484,64 +488,37 @@ export function ChatSidebar({
               ) : (
                 chatHistory
                   .filter(msg => {
+                    // Allow AI task-list messages through even if content is empty
+                    if (msg.role === 'ai' && (msg as any).messageType === 'task-list') {
+                      return true;
+                    }
+                    
                     // Additional validation before rendering - should already be filtered by normalizeMessages but double-check
-                    if (!msg.message || typeof msg.message !== 'string' || msg.message.trim() === '') return false;
+                    const content = msg.content || msg.message || '';
+                    if (!content || typeof content !== 'string' || content.trim() === '') return false;
                     // Check if message is just a UUID
                     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-                    if (uuidRegex.test(msg.message.trim())) return false;
+                    if (uuidRegex.test(content.trim())) return false;
                     return true;
                   })
                   .map((msg, index) => (
-                  <div
-                    key={(msg as any).tempId || index}
-                    className={cn(
-                      "p-3 rounded-lg max-w-[85%] break-words transition-opacity",
-                      msg.role === 'user'
-                        ? "ml-auto bg-primary text-primary-foreground"
-                        : msg.role === 'system'
-                        ? "mr-auto bg-muted/50 text-muted-foreground border"
-                        : "mr-auto bg-muted",
-                      msg.isPending && "opacity-70" // Show pending messages with reduced opacity
-                    )}
-                  >
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
-                        
-                        {/* Show widget creation info */}
-                        {(msg.widget_ids || msg.chart_id) && (
-                          <div className="mt-2 p-2 bg-green-100 dark:bg-green-900/20 rounded text-xs">
-                            {msg.widget_ids && msg.widget_ids.length > 1 ? (
-                              <div className="flex items-center gap-1">
-                                <span className="text-green-700 dark:text-green-300">
-                                  ✅ Created {msg.widget_ids.length} widgets
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1">
-                                <span className="text-green-700 dark:text-green-300">
-                                  ✅ Widget created
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        
-                        <div className="flex items-center gap-2 mt-1">
-                          <p className="text-xs opacity-70">
-                            {new Date(msg.timestamp).toLocaleTimeString()}
-                          </p>
-                          {msg.isPending && (
-                            <div className="flex items-center gap-1">
-                              <div className="animate-spin h-2 w-2 border border-current border-t-transparent rounded-full" />
-                              <span className="text-xs opacity-70">Sending...</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                    <ChatMessage 
+                      key={(msg as any).tempId || index}
+                      message={{
+                        role: msg.role as 'user' | 'ai' | 'system',
+                        content: msg.content,
+                        message: msg.message, // For backward compatibility
+                        timestamp: msg.timestamp,
+                        messageType: (msg as any).messageType,
+                        taskGroupId: (msg as any).taskGroupId,
+                        widget_ids: msg.widget_ids,
+                        chart_id: msg.chart_id,
+                        isPending: msg.isPending,
+                        tempId: (msg as any).tempId,
+                      }}
+                      index={index}
+                    />
+                  ))
               )}
               {isLoading && (
                 <div className="mr-auto bg-muted p-3 rounded-lg max-w-[85%]">

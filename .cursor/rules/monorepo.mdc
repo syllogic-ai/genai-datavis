@@ -1,9 +1,6 @@
 ---
-description: 
-globs: 
-alwaysApply: true
+alwaysApply: false
 ---
-
 # Your rule content
 
 This is a monorepo, containing backend and frontend folders. Always install frontend related content under frontend folder and backend related content to backend. If you install a new package in backend, make sure you update requirements.txt and setup.sh and setup.bat if needed. Always use strict types instead of any in TypeScript.

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { updateDashboard, getDashboard } from '@/app/lib/actions';
 import db from '@/db';
-import { dashboards, widgets, chats, files } from '@/db/schema';
+import { dashboards, widgets, chats, messages, tasks, files } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { dashboardCache } from '@/lib/redis';
 
@@ -122,14 +122,33 @@ export async function DELETE(
         .where(eq(widgets.dashboardId, dashboardId));
       console.log('[DELETE API] Widgets deleted successfully');
 
-      // 2. Delete all chats associated with the dashboard
+      // 2. Delete all tasks associated with the dashboard
+      console.log('[DELETE API] Deleting tasks');
+      await tx.delete(tasks)
+        .where(eq(tasks.dashboardId, dashboardId));
+      console.log('[DELETE API] Tasks deleted successfully');
+
+      // 3. Delete all messages associated with dashboard chats
+      console.log('[DELETE API] Getting chat IDs for message deletion');
+      const dashboardChats = await tx.select({ id: chats.id })
+        .from(chats)
+        .where(eq(chats.dashboardId, dashboardId));
+      
+      console.log('[DELETE API] Found chats:', dashboardChats.length);
+      for (const chat of dashboardChats) {
+        await tx.delete(messages)
+          .where(eq(messages.chatId, chat.id));
+      }
+      console.log('[DELETE API] Messages deleted successfully');
+
+      // 4. Delete all chats associated with the dashboard
       // Note: LLM usage records are preserved for analytics (no foreign key constraints)
       console.log('[DELETE API] Deleting chats');
       await tx.delete(chats)
         .where(eq(chats.dashboardId, dashboardId));
       console.log('[DELETE API] Chats deleted successfully');
 
-      // 3. Delete all files associated with the dashboard
+      // 5. Delete all files associated with the dashboard
       // Note: In a real implementation, you would also delete the actual files from storage
       console.log('[DELETE API] Getting files for dashboard');
       const dashboardFiles = await tx.select()
@@ -149,7 +168,7 @@ export async function DELETE(
         .where(eq(files.dashboardId, dashboardId));
       console.log('[DELETE API] File records deleted successfully');
 
-      // 4. Finally delete the dashboard itself
+      // 6. Finally delete the dashboard itself
       console.log('[DELETE API] Deleting dashboard');
       await tx.delete(dashboards)
         .where(eq(dashboards.id, dashboardId));

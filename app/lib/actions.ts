@@ -1,7 +1,7 @@
 "use server";
 
 import db from '@/db';
-import { files, chats, dashboards, widgets } from '../../db/schema'; // Import Drizzle schemas
+import { files, chats, messages, tasks, dashboards, widgets } from '../../db/schema'; // Import Drizzle schemas
 import { eq, and, desc, isNull } from 'drizzle-orm'; // Import eq, and, desc, and isNull operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
 import { createClient } from '@supabase/supabase-js';
@@ -101,32 +101,36 @@ export async function updateFileStatus(fileId: string, status: string) {
 // Create a new chat in the database using Drizzle
 export async function createChat(chatId: string, userId: string, dashboardId: string, initialMessageContent?: string) {
   try {
-    const initialConversation = [];
-    if (initialMessageContent) {
-      initialConversation.push({
-        role: 'user',
-        message: initialMessageContent,
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    const result = await db.insert(chats).values({
+    const chatResult = await db.insert(chats).values({
       id: chatId,
       userId: userId,
       dashboardId: dashboardId,
-      conversation: initialConversation, // Initialize with an empty or initial message
-      updatedAt: new Date(), // Set updatedAt to current time
-      // usage field is omitted, assuming it's nullable or has a default in the DB/schema
-    }).returning(); // Optional: return the inserted record
+      messageCount: initialMessageContent ? 1 : 0,
+      lastMessageAt: initialMessageContent ? new Date() : null,
+      updatedAt: new Date(),
+    }).returning();
 
-    if (!result || result.length === 0) {
+    if (!chatResult || chatResult.length === 0) {
       throw new Error("Failed to create chat record in database.");
     }
 
-    return result[0]; // Return the inserted chat record
+    // Create initial message if provided
+    if (initialMessageContent) {
+      const messageId = uuidv4();
+      await db.insert(messages).values({
+        id: messageId,
+        chatId: chatId,
+        role: 'user',
+        content: initialMessageContent,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    return chatResult[0];
   } catch (error) {
     console.error('Error creating chat record:', error);
-    throw error; // Re-throw the error
+    throw error;
   }
 } 
 
@@ -171,53 +175,53 @@ export async function getDashboard(dashboardId: string, userId: string) {
 }
 
 /**
- * Update the conversation in a chat
+ * Replace all messages in a chat (batch update)
  */
 export async function updateChatConversation(
   chatId: string,
   conversation: ChatMessage[] | any[],
   userId: string
 ) {
-  // We'll store messages in their original format in the database
-  // But ensure they have consistent properties
-  const processedConversation = conversation.map(msg => {
-    // Process any format of message to ensure it has proper structure
-    // Keep both 'content' and 'message' fields depending on what was originally there
-    const processedMsg: any = {
-      role: msg.role
-    };
-    
-    if ('content' in msg) {
-      processedMsg.content = msg.content;
-    }
-    
-    if ('message' in msg) {
-      processedMsg.message = msg.message;
-    }
-    
-    // Ensure at least one of content or message exists
-    if (!('content' in processedMsg) && !('message' in processedMsg)) {
-      processedMsg.content = "Unknown message content";
-    }
-    
-    return processedMsg;
-  });
-
   try {
-    const result = await db.update(chats)
-      .set({ 
-        conversation: processedConversation,
-        updatedAt: new Date() // Update the timestamp
-      })
+    // First verify the chat belongs to the user
+    const chatExists = await db.select()
+      .from(chats)
       .where(and(
         eq(chats.id, chatId),
         eq(chats.userId, userId)
       ))
-      .returning();
+      .limit(1);
 
-    if (!result || result.length === 0) {
-      throw new Error(`Failed to update conversation for chat ${chatId}`);
+    if (!chatExists || chatExists.length === 0) {
+      throw new Error(`Chat ${chatId} not found`);
     }
+
+    // Delete existing messages
+    await db.delete(messages).where(eq(messages.chatId, chatId));
+
+    // Insert new messages
+    if (conversation.length > 0) {
+      const messagesToInsert = conversation.map((msg, index) => ({
+        id: uuidv4(),
+        chatId: chatId,
+        role: msg.role,
+        content: msg.content || msg.message || "Unknown message content",
+        createdAt: new Date(msg.timestamp || new Date()),
+        updatedAt: new Date(),
+      }));
+
+      await db.insert(messages).values(messagesToInsert);
+    }
+
+    // Update chat metadata
+    const result = await db.update(chats)
+      .set({ 
+        messageCount: conversation.length,
+        lastMessageAt: conversation.length > 0 ? new Date() : null,
+        updatedAt: new Date()
+      })
+      .where(eq(chats.id, chatId))
+      .returning();
 
     return result;
   } catch (error) {
@@ -269,68 +273,87 @@ export async function getChat(chatId: string, userId: string) {
 }
 
 /**
- * Append a single message to the conversation in a chat
+ * Append a single message to a chat
  */
 export async function appendChatMessage(
   chatId: string,
   message: ChatMessage | any,
   userId: string
 ) {
-  // Process the message to ensure it has proper structure
-  const processedMsg: any = {
+  const messageId = uuidv4();
+  const timestamp = new Date();
+  
+  const newMessage = {
+    id: messageId,
+    chatId: chatId,
     role: message.role,
-    timestamp: new Date().toISOString(), // Add timestamp
+    content: message.content || message.message || "Unknown message content",
+    messageType: message.messageType,
+    taskGroupId: message.taskGroupId,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
-  
-  if ('content' in message) {
-    processedMsg.content = message.content;
-  }
-  
-  if ('message' in message) {
-    processedMsg.message = message.message;
-  }
-  
-  // Ensure at least one of content or message exists
-  if (!('content' in processedMsg) && !('message' in processedMsg)) {
-    processedMsg.content = "Unknown message content";
-  }
 
   try {
-    // First get the current conversation
-    const chatResult = await db.select({ conversation: chats.conversation })
+    // First verify the chat belongs to the user
+    const chatExists = await db.select()
       .from(chats)
       .where(and(
         eq(chats.id, chatId),
         eq(chats.userId, userId)
-      ));
-    
-    if (!chatResult || chatResult.length === 0) {
+      ))
+      .limit(1);
+
+    if (!chatExists || chatExists.length === 0) {
       throw new Error(`Chat with ID ${chatId} not found`);
     }
 
-    // Append the new message to the existing conversation
-    const currentConversation = chatResult[0].conversation || [];
-    const updatedConversation = [...currentConversation, processedMsg];
+    // Insert the message
+    const insertedMessage = await db.insert(messages).values(newMessage).returning();
     
-    // Update the chat with the new conversation
-    const result = await db.update(chats)
+    // Update chat metadata
+    const currentChat = chatExists[0];
+    await db.update(chats)
       .set({ 
-        conversation: updatedConversation,
-        updatedAt: new Date() // Update the timestamp
+        lastMessageAt: timestamp,
+        messageCount: (currentChat.messageCount || 0) + 1,
+        updatedAt: timestamp
       })
+      .where(eq(chats.id, chatId));
+
+    return insertedMessage[0];
+  } catch (error) {
+    console.error('Error appending chat message:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all messages for a chat
+ */
+export async function getChatMessages(chatId: string, userId: string) {
+  try {
+    // First verify the chat belongs to the user
+    const chatExists = await db.select()
+      .from(chats)
       .where(and(
         eq(chats.id, chatId),
         eq(chats.userId, userId)
       ))
-      .returning();
+      .limit(1);
 
-    if (!result || result.length === 0) {
-      throw new Error(`Failed to append message to chat ${chatId}`);
+    if (!chatExists || chatExists.length === 0) {
+      throw new Error(`Chat ${chatId} not found`);
     }
 
-    return result;
+    const chatMessages = await db.select()
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(messages.createdAt);
+
+    return chatMessages;
   } catch (error) {
-    console.error('Error appending chat message:', error);
+    console.error('Error getting chat messages:', error);
     throw error;
   }
 }

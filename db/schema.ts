@@ -101,20 +101,59 @@ export const widgets = pgTable("widgets", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// CHATS (linked to dashboards for unified context)
+// CHATS (simplified - conversation moved to separate messages table)
 export const chats = pgTable("chats", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => users.id),
   dashboardId: text("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }), // Chat context per dashboard
   title: text("title").notNull().default("Dashboard Chat"),
-  conversation: jsonb("conversation").notNull().$type<{
-    role: string;
-    message: string;
-    timestamp: string;
-    contextWidgetIds?: string[]; // Widgets included as context for this message
-    targetWidgetType?: 'chart' | 'table' | 'kpi'; // Target widget type for creation
-    targetChartSubType?: 'line' | 'area' | 'bar' | 'horizontal-bar' | 'pie'; // Chart sub-type if applicable
-  }[]>(),
+  
+  // Chat metadata
+  lastMessageAt: timestamp("last_message_at"),
+  messageCount: integer("message_count").default(0).notNull(),
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// MESSAGES (new table for individual chat messages)
+export const messages = pgTable("messages", {
+  id: text("id").primaryKey(),
+  chatId: text("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  
+  // Core message properties
+  role: text("role").notNull(), // 'user' | 'system' | 'ai'
+  content: text("content"),
+  
+  // Message categorization
+  messageType: text("message_type"), // 'chat' | 'task-list' | 'tool-usage'
+  
+  // Task grouping (for messages that create/manage tasks)
+  taskGroupId: text("task_group_id"), // Links message to a group of related tasks
+  
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// TASKS (new table for tracking job tasks and progress)
+export const tasks = pgTable("tasks", {
+  id: text("id").primaryKey(),
+  chatId: text("chat_id").notNull().references(() => chats.id, { onDelete: "cascade" }),
+  dashboardId: text("dashboard_id").notNull().references(() => dashboards.id, { onDelete: "cascade" }),
+  
+  // Task grouping - multiple tasks can belong to same group (same AI response)
+  taskGroupId: text("task_group_id").notNull(),
+  
+  // Task details
+  title: text("title").notNull(), // "Fetch data", "Generate code", etc.
+  description: text("description"), // Optional detailed description
+  status: text("status").default("pending").notNull(), // 'pending' | 'in-progress' | 'completed' | 'failed'
+  order: integer("order").notNull(), // Display order within the group
+  
+  // Execution tracking
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -242,6 +281,8 @@ export type File = typeof files.$inferSelect;
 export type Dashboard = typeof dashboards.$inferSelect;
 export type Widget = typeof widgets.$inferSelect;
 export type Chat = typeof chats.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+export type Task = typeof tasks.$inferSelect;
 export type LLMUsage = typeof llmUsage.$inferSelect;
 export type Theme = typeof themes.$inferSelect;
 export type UserPreferences = typeof userPreferences.$inferSelect;
