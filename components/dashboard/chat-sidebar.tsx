@@ -21,6 +21,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
 import { ChatMessage } from "./ChatMessage";
+import { TodoTracker } from "./TodoTracker";
 
 export interface ChatSidebarProps {
   dashboardId: string;
@@ -36,6 +37,7 @@ export interface ChatSidebarProps {
 interface ChatMessage {
   role: 'user' | 'ai' | 'system';
   message: string;
+  content?: string; // Add content for compatibility with real-time messages
   timestamp: string;
   contextWidgetIds?: string[];
   targetWidgetType?: string;
@@ -67,6 +69,7 @@ export function ChatSidebar({
   // Scroll management
   const scrollAreaRef = React.useRef<HTMLDivElement>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  const viewportRef = React.useRef<HTMLDivElement>(null);
   
   // Job monitoring is now handled by the parent component (ChatPhase)
   // This component only tracks the currentJobId for UI purposes
@@ -85,8 +88,11 @@ export function ChatSidebar({
     }));
   }, [dashboardWidgets]);
   
-  // Use real-time chat hook for conversation
-  const { conversation, isLoading: chatLoading, error: chatError } = useChatRealtime(chatId);
+  // Track previous message count for scroll detection
+  const prevMessageCountRef = React.useRef(0);
+  
+  // Use real-time chat hook for conversation and tasks
+  const { conversation, tasks, isLoading: chatLoading, error: chatError } = useChatRealtime(chatId);
   
   // Clear pending messages when chatId changes
   React.useEffect(() => {
@@ -127,23 +133,78 @@ export function ChatSidebar({
   
   // Auto-scroll to bottom function
   const scrollToBottom = React.useCallback((behavior: 'smooth' | 'instant' = 'smooth') => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
-        behavior,
-        block: 'end',
-        inline: 'nearest'
-      });
-    }
+    const performScroll = () => {
+      console.log('Attempting to scroll to bottom, behavior:', behavior);
+      
+      // Method 1: Use viewport ref if available
+      if (viewportRef.current) {
+        console.log('Using viewportRef, scrollHeight:', viewportRef.current.scrollHeight);
+        if (behavior === 'instant') {
+          viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
+        } else {
+          viewportRef.current.scrollTo({
+            top: viewportRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+        return;
+      }
+      
+      // Method 2: Find viewport through ScrollArea ref
+      if (scrollAreaRef.current) {
+        const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+        if (viewport) {
+          console.log('Using found viewport, scrollHeight:', viewport.scrollHeight);
+          if (behavior === 'instant') {
+            viewport.scrollTop = viewport.scrollHeight;
+          } else {
+            viewport.scrollTo({
+              top: viewport.scrollHeight,
+              behavior: 'smooth'
+            });
+          }
+          return;
+        } else {
+          console.log('Could not find viewport element');
+        }
+      }
+      
+      // Method 3: Fallback to scrollIntoView
+      if (messagesEndRef.current) {
+        console.log('Using messagesEndRef scrollIntoView');
+        messagesEndRef.current.scrollIntoView({ 
+          behavior,
+          block: 'end',
+          inline: 'nearest'
+        });
+      }
+    };
+    
+    // Execute scroll immediately
+    performScroll();
   }, []);
   
-  // Scroll to bottom when chat history changes (new messages or chat switch)
-  React.useEffect(() => {
-    if (chatHistory.length > 0) {
-      // Use instant scroll when switching chats, smooth scroll for new messages
-      const behavior = pendingMessages.length > 0 ? 'smooth' : 'instant';
-      scrollToBottom(behavior);
+  // Scroll to bottom when new messages are added
+  React.useLayoutEffect(() => {
+    const currentMessageCount = chatHistory.length;
+    
+    // Only scroll if we have new messages (count increased)
+    if (currentMessageCount > prevMessageCountRef.current && currentMessageCount > 0) {
+      // Immediate scroll attempt
+      scrollToBottom('smooth');
+      
+      // Additional scroll attempts with different timings to ensure it works
+      setTimeout(() => scrollToBottom('smooth'), 50);
+      setTimeout(() => scrollToBottom('smooth'), 150);
+      setTimeout(() => scrollToBottom('smooth'), 300);
+      
+      // Final fallback with instant scroll
+      setTimeout(() => scrollToBottom('instant'), 500);
     }
-  }, [chatHistory, scrollToBottom, pendingMessages.length]);
+    
+    // Update previous count
+    prevMessageCountRef.current = currentMessageCount;
+  }, [chatHistory, scrollToBottom]);
   
   // Scroll to bottom when sidebar opens
   React.useEffect(() => {
@@ -471,7 +532,17 @@ export function ChatSidebar({
         {/* Chat History - with bottom padding for fixed input */}
         <div className="flex-1 overflow-hidden relative bg-background">
           <ScrollArea className="h-full" ref={scrollAreaRef}>
-            <div className="p-4 space-y-4 pb-56"> {/* Further increased bottom padding for chat input to ensure all messages are visible */}
+            <div 
+              className="p-4 space-y-4 pb-56" 
+              ref={(el) => {
+                if (el) {
+                  const viewport = el.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
+                  if (viewport && viewportRef.current !== viewport) {
+                    (viewportRef as React.MutableRefObject<HTMLElement | null>).current = viewport;
+                  }
+                }
+              }}
+            > {/* Further increased bottom padding for chat input to ensure all messages are visible */}
               {chatLoading && chatHistory.length === 0 ? (
                 <div className="text-center text-muted-foreground">
                   <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
@@ -486,7 +557,16 @@ export function ChatSidebar({
                   Start a conversation by describing the widget you want to create.
                 </div>
               ) : (
-                chatHistory
+                <>
+                  {/* Show TodoTracker if there are tasks */}
+                  {tasks.length > 0 && (
+                    <div className="mb-4">
+                      <TodoTracker tasks={tasks} />
+                    </div>
+                  )}
+                  
+                  {/* Chat Messages */}
+                  {chatHistory
                   .filter(msg => {
                     // Allow AI task-list messages through even if content is empty
                     if (msg.role === 'ai' && (msg as any).messageType === 'task-list') {
@@ -506,8 +586,8 @@ export function ChatSidebar({
                       key={(msg as any).tempId || index}
                       message={{
                         role: msg.role as 'user' | 'ai' | 'system',
-                        content: msg.content,
-                        message: msg.message, // For backward compatibility
+                        content: msg.content || msg.message,
+                        message: msg.message || msg.content, // For backward compatibility
                         timestamp: msg.timestamp,
                         messageType: (msg as any).messageType,
                         taskGroupId: (msg as any).taskGroupId,
@@ -518,7 +598,8 @@ export function ChatSidebar({
                       }}
                       index={index}
                     />
-                  ))
+                  ))}
+                </>
               )}
               {isLoading && (
                 <div className="mr-auto bg-muted p-3 rounded-lg max-w-[85%]">
@@ -552,7 +633,7 @@ export function ChatSidebar({
               { value: "kpi-card", label: "KPI Card" },
               { value: "pie-chart", label: "Pie Chart" },
             ]}
-            className="w-full"
+            className="w-full bg-background"
           />
         </div>
         

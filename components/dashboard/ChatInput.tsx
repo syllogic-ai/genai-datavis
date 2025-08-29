@@ -109,7 +109,7 @@ export function ChatInput({
   };
 
   return (
-    <Card className={`h-fit w-[500px] flex flex-col gap-0 ${className}`}>
+    <Card className={`h-fit w-[500px]  flex flex-col gap-0 ${className}`}>
       {showTagSelector && (
         <CardHeader className="ml-2 pb-0 mb-0 px-2">
           <TagSelector
@@ -124,32 +124,14 @@ export function ChatInput({
       )}
       <CardContent className="py-0 my-0 px-2">
         <Textarea
-          className="placeholder:text-primary/60 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 resize-none rows-1"
+          className="placeholder:text-primary/60 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-background! resize-none rows-1"
           placeholder={messagePlaceholder}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
         />
       </CardContent>
-      <CardFooter className="w-full flex justify-between px-4">
-        {showWidgetDropdown ? (
-          <div className="max-w-xs h-fit py-1">
-            <Select value={widgetType} onValueChange={setWidgetType}>
-              <SelectTrigger className="h-fit py-1 text-xs border bg-secondary hover:bg-primary/3">
-                <SelectValue placeholder="Widget" />
-              </SelectTrigger>
-              <SelectContent className="h-fit py-1 text-xs border bg-secondary hover:bg-secondary">
-                {widgetOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <div />
-        )}
+      <CardFooter className="w-full flex justify-end px-4">
         <Button
           type="submit"
           size="icon"

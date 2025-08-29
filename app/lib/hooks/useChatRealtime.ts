@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
 import { useUser } from '@clerk/nextjs';
 import { ChatMessage, ChatRealtimeOptions, normalizeMessages } from '@/app/lib/types';
+import { Task } from '@/db/schema';
 
 /**
  * Hook to subscribe to realtime updates for a specific chat
@@ -15,13 +16,15 @@ export function useChatRealtime(
 ) {
   // Initialize all state variables unconditionally (React hooks rule)
   const [conversation, setConversation] = useState<ChatMessage[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const { user, isSignedIn } = useUser();
   
   // Use refs to prevent re-renders and effect cleanup
   const isMountedRef = useRef(true);
-  const channelRef = useRef<any>(null);
+  const messagesChannelRef = useRef<any>(null);
+  const tasksChannelRef = useRef<any>(null);
   const prevChatIdRef = useRef<string | null>(null);
 
   // Initial data fetch
@@ -35,6 +38,7 @@ export function useChatRealtime(
     if (prevChatIdRef.current !== chatId) {
       setIsLoading(true);
       setConversation([]); // Clear conversation immediately when chat ID changes
+      setTasks([]); // Clear tasks immediately when chat ID changes
       setError(null); // Clear any previous errors
       prevChatIdRef.current = chatId;
     }
@@ -82,6 +86,20 @@ export function useChatRealtime(
         } else {
           setConversation([]);
         }
+
+        // Also fetch tasks for this chat
+        const { data: tasksData, error: tasksError } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('chat_id', chatId)
+          .order('task_group_id', { ascending: true })
+          .order('order', { ascending: true });
+
+        if (tasksError) {
+          console.error('Error fetching tasks:', tasksError);
+        } else {
+          setTasks(tasksData || []);
+        }
       } catch (err) {
         setError(err instanceof Error ? err : new Error('Failed to fetch conversation'));
       } finally {
@@ -99,14 +117,18 @@ export function useChatRealtime(
       return;
     }
 
-    // Clean up any existing subscription
-    if (channelRef.current) {
-      channelRef.current.unsubscribe();
-      channelRef.current = null;
+    // Clean up any existing subscriptions
+    if (messagesChannelRef.current) {
+      messagesChannelRef.current.unsubscribe();
+      messagesChannelRef.current = null;
+    }
+    if (tasksChannelRef.current) {
+      tasksChannelRef.current.unsubscribe();
+      tasksChannelRef.current = null;
     }
     
     // Create new subscription for messages table
-    const channel = supabase
+    const messagesChannel = supabase
       .channel(`messages:${chatId}`)
       .on(
         'postgres_changes',
@@ -146,14 +168,54 @@ export function useChatRealtime(
       )
       .subscribe();
     
-    // Store channel in ref
-    channelRef.current = channel;
+    // Create new subscription for tasks table
+    const tasksChannel = supabase
+      .channel(`tasks:${chatId}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', // Listen to INSERT, UPDATE, DELETE
+          schema: 'public', 
+          table: 'tasks', 
+          filter: `chat_id=eq.${chatId}` 
+        },
+        async (payload) => {
+          // Task changed - refetch all tasks to maintain order and current state
+          try {
+            const { data: tasksData, error } = await supabase
+              .from('tasks')
+              .select('*')
+              .eq('chat_id', chatId)
+              .order('task_group_id', { ascending: true })
+              .order('order', { ascending: true });
 
-    // Clean up subscription on unmount (only once)
+            if (!error && tasksData) {
+              setTasks(tasksData);
+              
+              if (options?.onTasksUpdate) {
+                options.onTasksUpdate(tasksData);
+              }
+            }
+          } catch (error) {
+            console.error('Error fetching updated tasks:', error);
+          }
+        }
+      )
+      .subscribe();
+    
+    // Store channels in refs
+    messagesChannelRef.current = messagesChannel;
+    tasksChannelRef.current = tasksChannel;
+
+    // Clean up subscriptions on unmount (only once)
     return () => {
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-        channelRef.current = null;
+      if (messagesChannelRef.current) {
+        messagesChannelRef.current.unsubscribe();
+        messagesChannelRef.current = null;
+      }
+      if (tasksChannelRef.current) {
+        tasksChannelRef.current.unsubscribe();
+        tasksChannelRef.current = null;
       }
     };
   }, [chatId, user?.id, isSignedIn, options, user]);  // Only depend on these specific values
@@ -167,6 +229,7 @@ export function useChatRealtime(
 
   return {
     conversation,
+    tasks,
     isLoading,
     error
   };

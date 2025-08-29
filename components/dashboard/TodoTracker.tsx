@@ -25,15 +25,14 @@ interface TodoTrackerProps {
 }
 
 export function TodoTracker({ tasks, onTaskToggle }: TodoTrackerProps) {
-  const [localTasks, setLocalTasks] = useState(tasks);
   const [isOpen, setIsOpen] = useState(true); // Initially open
 
-  const completedCount = localTasks.filter(
+  const completedCount = tasks.filter(
     (task) => task.status === "completed"
   ).length;
-  const totalCount = localTasks.length;
+  const totalCount = tasks.length;
 
-  const sortedTasks = [...localTasks].sort((a, b) => a.order - b.order);
+  const sortedTasks = [...tasks].sort((a, b) => a.order - b.order);
 
   return (
     <MovingBorderComponent className="w-full mx-auto border border-border rounded-lg px-2 py-2 bg-card" animate={completedCount == totalCount ? false : true}>

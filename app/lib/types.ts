@@ -28,6 +28,7 @@ export type { ChartSpec } from "@/types/chart-types";
  */
 export type ChatRealtimeOptions = {
   onUpdate?: (conversation: ChatMessage[]) => void;
+  onTasksUpdate?: (tasks: any[]) => void;
 };
 
 /**
