@@ -12,7 +12,7 @@ interface ChatMessageProps {
     content?: string;
     message?: string; // For backward compatibility
     timestamp: string;
-    messageType?: string;
+    messageType: string;
     taskGroupId?: string;
     widget_ids?: string[];
     chart_id?: string;
@@ -27,40 +27,16 @@ export function ChatMessage({ message, index }: ChatMessageProps) {
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
 
   const content = message.content || message.message || '';
-  
-  // Debug logging for all messages
-  console.log('💬 ChatMessage render:', {
-    index,
-    role: message.role,
-    messageType: message.messageType,
-    taskGroupId: message.taskGroupId,
-    content: content.substring(0, 50) + '...',
-    hasTaskGroupId: !!message.taskGroupId
-  });
-  
-  // Special debug for AI task-list messages
-  if (message.role === 'ai' && message.messageType === 'task-list') {
-    console.log('🚀 AI task-list message detected:', {
-      role: message.role,
-      messageType: message.messageType,
-      taskGroupId: message.taskGroupId,
-      content,
-      index
-    });
-  }
 
   // Fetch tasks if this is an AI task-list message
   useEffect(() => {
     if (message.role === 'ai' && message.messageType === 'task-list' && message.taskGroupId) {
-      console.log('🔍 Fetching tasks for taskGroupId:', message.taskGroupId);
       setIsLoadingTasks(true);
       getTasksByGroupId(message.taskGroupId)
         .then(fetchedTasks => {
-          console.log('✅ Fetched tasks:', fetchedTasks);
           setTasks(fetchedTasks);
         })
         .catch(error => {
-          console.error('❌ Error fetching tasks for message:', error);
         })
         .finally(() => {
           setIsLoadingTasks(false);
@@ -100,8 +76,7 @@ export function ChatMessage({ message, index }: ChatMessageProps) {
   };
 
   // For AI task-list messages, render only the TodoTracker without message bubble
-  if (message.role === 'ai' && message.messageType === 'task-list') {
-    console.log('🎯 Rendering AI task-list message:', { isLoadingTasks, tasksCount: tasks.length });
+  if (message.role === 'ai' && message.messageType === 'task-list') { 
     return (
       <div key={(message as any).tempId || index} className="w-full">
         {message.taskGroupId ? (

@@ -105,12 +105,7 @@ export async function POST(
           title: widget.title,
           config: widget.config,
           data: widget.data,
-          sql: widget.sql,
-          layout: widget.layout,
-          chatId: widget.chatId,
           isConfigured: widget.isConfigured,
-          cacheKey: widget.cacheKey ? widget.cacheKey.replace(dashboardId, newDashboardId) : null,
-          lastDataFetch: widget.lastDataFetch,
           createdAt: new Date(),
           updatedAt: new Date(),
         }).returning();

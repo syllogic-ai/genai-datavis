@@ -28,7 +28,10 @@
       "Bash(pip install:*)",
       "Bash(rm:*)",
       "Bash(cp:*)",
-      "Bash(DATABASE_URL=\"postgresql://temp:temp@localhost:5432/temp\" npm run build)"
+      "Bash(DATABASE_URL=\"postgresql://temp:temp@localhost:5432/temp\" npm run build)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(npm test)"
     ],
     "deny": []
   }

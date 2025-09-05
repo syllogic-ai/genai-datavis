@@ -37,11 +37,9 @@ export class WidgetCacheManager {
           ttl: ttlSeconds,
         }));
         
-        // Update widget with cache key and last fetch time
+        // Cache functionality removed - update timestamp only
         await db.update(widgets)
           .set({ 
-            cacheKey,
-            lastDataFetch: new Date(),
             updatedAt: new Date(),
           })
           .where(eq(widgets.id, widgetId));
@@ -57,46 +55,8 @@ export class WidgetCacheManager {
   }
 
   async getCachedWidgetData(widgetId: string): Promise<any | null> {
-    try {
-      // Get widget to find cache key
-      const widgetResult = await db.select()
-        .from(widgets)
-        .where(eq(widgets.id, widgetId))
-        .limit(1);
-      
-      const widget = widgetResult[0];
-      
-      if (!widget?.cacheKey) {
-        return null;
-      }
-      
-      // Get from Redis
-      const cached = await this.redis.get(widget.cacheKey);
-      if (!cached) {
-        console.log(`Cache miss for widget ${widgetId}`);
-        return null;
-      }
-      
-      const parsedCache = JSON.parse(cached as string);
-      
-      // Check if cache is still valid
-      const cacheAge = Date.now() - parsedCache.timestamp;
-      const maxAge = (parsedCache.ttl || 3600) * 1000; // Convert to milliseconds
-      const isStale = cacheAge > maxAge;
-      
-      if (isStale) {
-        console.log(`Cache expired for widget ${widgetId} (age: ${Math.round(cacheAge / 1000)}s)`);
-        // Clean up expired cache
-        await this.invalidateWidgetCache(widgetId);
-        return null;
-      }
-      
-      console.log(`Cache hit for widget ${widgetId} (age: ${Math.round(cacheAge / 1000)}s)`);
-      return parsedCache.data;
-    } catch (error) {
-      console.error(`Error getting cached widget ${widgetId} data:`, error);
-      return null;
-    }
+    // Cache functionality removed
+    return null;
   }
 
   async invalidateWidgetCache(widgetId: string): Promise<void> {
@@ -109,14 +69,14 @@ export class WidgetCacheManager {
       
       const widget = widgetResult[0];
       
-      if (widget?.cacheKey) {
+      // Cache functionality removed
+      if (false) {
         // Delete from Redis
-        await this.redis.del(widget.cacheKey);
+        // await this.redis.del(widget.cacheKey);
         
         // Clear cache key from widget
         await db.update(widgets)
           .set({ 
-            cacheKey: null,
             updatedAt: new Date(),
           })
           .where(eq(widgets.id, widgetId));
@@ -138,7 +98,7 @@ export class WidgetCacheManager {
 
       // Invalidate cache for each widget
       const invalidationPromises = dashboardWidgetsData
-        .filter(widget => widget?.cacheKey)
+        .filter(widget => false) // Cache functionality removed
         .map(widget => this.invalidateWidgetCache(widget.id));
 
       await Promise.all(invalidationPromises);
@@ -281,12 +241,11 @@ export class WidgetCacheManager {
           // Determine cache TTL based on widget type
           const cacheType = widget.type === 'kpi' ? 'realtime' : 'daily';
           
-          // If widget has SQL, it will need data fetching
-          if (widget.sql) {
+          // SQL functionality removed
+          if (false) {
             // Mark as needing data fetch (don't actually fetch here to avoid long delays)
             await db.update(widgets)
               .set({ 
-                lastDataFetch: null, // Reset to force fresh fetch
                 updatedAt: new Date(),
               })
               .where(eq(widgets.id, widgetId));

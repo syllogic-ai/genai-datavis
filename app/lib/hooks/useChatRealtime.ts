@@ -26,6 +26,7 @@ export function useChatRealtime(
   const messagesChannelRef = useRef<any>(null);
   const tasksChannelRef = useRef<any>(null);
   const prevChatIdRef = useRef<string | null>(null);
+  const pollTasksIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initial data fetch
   useEffect(() => {
@@ -169,6 +170,7 @@ export function useChatRealtime(
       .subscribe();
     
     // Create new subscription for tasks table
+    console.log('🔗 Setting up tasks realtime subscription for chat:', chatId);
     const tasksChannel = supabase
       .channel(`tasks:${chatId}`)
       .on(
@@ -181,6 +183,7 @@ export function useChatRealtime(
         },
         async (payload) => {
           // Task changed - refetch all tasks to maintain order and current state
+          console.log('🔄 Task realtime update received for chat', chatId, ':', payload);
           try {
             const { data: tasksData, error } = await supabase
               .from('tasks')
@@ -190,22 +193,61 @@ export function useChatRealtime(
               .order('order', { ascending: true });
 
             if (!error && tasksData) {
+              console.log('✅ Tasks refetched via realtime, count:', tasksData.length);
               setTasks(tasksData);
               
               if (options?.onTasksUpdate) {
                 options.onTasksUpdate(tasksData);
               }
+            } else {
+              console.error('❌ Error refetching tasks via realtime:', error);
             }
           } catch (error) {
-            console.error('Error fetching updated tasks:', error);
+            console.error('❌ Error fetching updated tasks via realtime:', error);
           }
         }
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log('📡 Tasks subscription status:', status, err);
+      });
     
     // Store channels in refs
     messagesChannelRef.current = messagesChannel;
     tasksChannelRef.current = tasksChannel;
+
+    // Set up polling as backup for tasks (in case backend updates bypass Supabase)
+    const pollTasks = async () => {
+      try {
+        const { data: tasksData, error } = await supabase
+          .from('tasks')
+          .select('*')
+          .eq('chat_id', chatId)
+          .order('task_group_id', { ascending: true })
+          .order('order', { ascending: true });
+
+        if (!error && tasksData) {
+          // Only update if tasks actually changed to avoid unnecessary re-renders
+          setTasks(prevTasks => {
+            if (JSON.stringify(prevTasks) !== JSON.stringify(tasksData)) {
+              console.log('📊 Tasks updated via polling, count:', tasksData.length);
+              if (options?.onTasksUpdate) {
+                options.onTasksUpdate(tasksData);
+              }
+              return tasksData;
+            }
+            return prevTasks;
+          });
+        } else if (error) {
+          console.error('❌ Error polling tasks:', error);
+        }
+      } catch (error) {
+        console.error('❌ Error polling tasks:', error);
+      }
+    };
+
+    // Poll every 2 seconds for task updates (as backup to real-time)
+    console.log('⏰ Starting task polling for chat:', chatId);
+    pollTasksIntervalRef.current = setInterval(pollTasks, 2000);
 
     // Clean up subscriptions on unmount (only once)
     return () => {
@@ -216,6 +258,10 @@ export function useChatRealtime(
       if (tasksChannelRef.current) {
         tasksChannelRef.current.unsubscribe();
         tasksChannelRef.current = null;
+      }
+      if (pollTasksIntervalRef.current) {
+        clearInterval(pollTasksIntervalRef.current);
+        pollTasksIntervalRef.current = null;
       }
     };
   }, [chatId, user?.id, isSignedIn, options, user]);  // Only depend on these specific values

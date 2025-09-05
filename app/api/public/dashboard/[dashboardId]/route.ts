@@ -66,7 +66,6 @@ export async function GET(
       title: widget.title,
       config: widget.config,
       data: widget.data,
-      layout: widget.layout,
       order: widget.order,
       createdAt: widget.createdAt,
       updatedAt: widget.updatedAt,

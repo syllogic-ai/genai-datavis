@@ -162,7 +162,7 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
         // Disable link and underline from StarterKit since we're adding them separately
         link: false,
         underline: false,
-      }),
+      }) as any,
       Underline,
       Typography,
       Link.configure({

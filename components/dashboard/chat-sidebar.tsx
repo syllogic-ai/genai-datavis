@@ -134,11 +134,8 @@ export function ChatSidebar({
   // Auto-scroll to bottom function
   const scrollToBottom = React.useCallback((behavior: 'smooth' | 'instant' = 'smooth') => {
     const performScroll = () => {
-      console.log('Attempting to scroll to bottom, behavior:', behavior);
-      
       // Method 1: Use viewport ref if available
       if (viewportRef.current) {
-        console.log('Using viewportRef, scrollHeight:', viewportRef.current.scrollHeight);
         if (behavior === 'instant') {
           viewportRef.current.scrollTop = viewportRef.current.scrollHeight;
         } else {
@@ -154,7 +151,6 @@ export function ChatSidebar({
       if (scrollAreaRef.current) {
         const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
         if (viewport) {
-          console.log('Using found viewport, scrollHeight:', viewport.scrollHeight);
           if (behavior === 'instant') {
             viewport.scrollTop = viewport.scrollHeight;
           } else {
@@ -164,14 +160,11 @@ export function ChatSidebar({
             });
           }
           return;
-        } else {
-          console.log('Could not find viewport element');
         }
       }
       
       // Method 3: Fallback to scrollIntoView
       if (messagesEndRef.current) {
-        console.log('Using messagesEndRef scrollIntoView');
         messagesEndRef.current.scrollIntoView({ 
           behavior,
           block: 'end',
@@ -190,16 +183,12 @@ export function ChatSidebar({
     
     // Only scroll if we have new messages (count increased)
     if (currentMessageCount > prevMessageCountRef.current && currentMessageCount > 0) {
-      // Immediate scroll attempt
-      scrollToBottom('smooth');
-      
-      // Additional scroll attempts with different timings to ensure it works
-      setTimeout(() => scrollToBottom('smooth'), 50);
-      setTimeout(() => scrollToBottom('smooth'), 150);
-      setTimeout(() => scrollToBottom('smooth'), 300);
-      
-      // Final fallback with instant scroll
-      setTimeout(() => scrollToBottom('instant'), 500);
+      // Use multiple frames to ensure DOM is fully updated
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => scrollToBottom('smooth'), 100);
+        });
+      });
     }
     
     // Update previous count
@@ -341,6 +330,27 @@ export function ChatSidebar({
     setTimeout(() => scrollToBottom('smooth'), 100);
 
     try {
+      // First, save the user message to the database with message_type 'chat'
+      const messageResponse = await fetch('/api/chat/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: chatId,
+          content: data.message,
+          messageType: 'chat'
+        }),
+      });
+
+      if (!messageResponse.ok) {
+        const errorText = await messageResponse.text();
+        console.error('Error saving user message:', errorText);
+        throw new Error('Failed to save message to database');
+      }
+
+      const messageResult = await messageResponse.json();
+      console.log('User message saved to database:', messageResult);
+
+      // Then proceed with the existing analyze request
       const analyzeRequest = {
         message: newMessage.message,
         dashboardId,
@@ -405,8 +415,16 @@ export function ChatSidebar({
       // Remove the pending message on error
       setPendingMessages(prev => prev.filter(msg => msg.tempId !== tempId));
       
-      // Show user-friendly error message
-      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      // Check if it's a backend service unavailable error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      const isBackendUnavailable = errorMessage.includes('Backend service unavailable') || 
+                                   errorMessage.includes('503') ||
+                                   errorMessage.includes('Backend error');
+      
+      // Only show alert if it's not a backend unavailability error (since we add a system message for those)
+      if (!isBackendUnavailable) {
+        alert(`Error: ${errorMessage}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -532,17 +550,7 @@ export function ChatSidebar({
         {/* Chat History - with bottom padding for fixed input */}
         <div className="flex-1 overflow-hidden relative bg-background">
           <ScrollArea className="h-full" ref={scrollAreaRef}>
-            <div 
-              className="p-4 space-y-4 pb-56" 
-              ref={(el) => {
-                if (el) {
-                  const viewport = el.closest('[data-radix-scroll-area-viewport]') as HTMLElement;
-                  if (viewport && viewportRef.current !== viewport) {
-                    (viewportRef as React.MutableRefObject<HTMLElement | null>).current = viewport;
-                  }
-                }
-              }}
-            > {/* Further increased bottom padding for chat input to ensure all messages are visible */}
+            <div className="p-4 space-y-4 pb-56"> {/* Further increased bottom padding for chat input to ensure all messages are visible */}
               {chatLoading && chatHistory.length === 0 ? (
                 <div className="text-center text-muted-foreground">
                   <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full mx-auto mb-2" />
@@ -600,14 +608,6 @@ export function ChatSidebar({
                     />
                   ))}
                 </>
-              )}
-              {isLoading && (
-                <div className="mr-auto bg-muted p-3 rounded-lg max-w-[85%]">
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-                    <span className="text-sm">Processing your request...</span>
-                  </div>
-                </div>
               )}
               
               {/* Invisible element to scroll to */}

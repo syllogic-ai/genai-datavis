@@ -229,7 +229,7 @@ export async function getChatMessages(chatId: string, userId: string) {
 }
 
 /**
- * Create a new task
+ * Create a new task using Supabase for real-time updates
  */
 export async function createTask(
   chatId: string,
@@ -243,24 +243,35 @@ export async function createTask(
   }
 ) {
   const taskId = uuidv4();
-  const timestamp = new Date();
+  const timestamp = new Date().toISOString();
   
   const newTask = {
     id: taskId,
-    chatId,
-    dashboardId,
-    taskGroupId: taskData.taskGroupId,
+    chat_id: chatId,
+    dashboard_id: dashboardId,
+    task_group_id: taskData.taskGroupId,
     title: taskData.title,
     description: taskData.description,
     status: taskData.status || 'pending',
     order: taskData.order,
-    createdAt: timestamp,
-    updatedAt: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
   };
 
   try {
-    const insertedTask = await db.insert(tasks).values(newTask).returning();
-    return insertedTask[0];
+    // Use Supabase client for inserts to trigger real-time events
+    const { data: result, error } = await supabase
+      .from('tasks')
+      .insert(newTask)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Supabase task creation error:', error);
+      throw error;
+    }
+
+    return result;
   } catch (error) {
     console.error('Error creating task:', error);
     throw error;
@@ -268,7 +279,7 @@ export async function createTask(
 }
 
 /**
- * Update task status
+ * Update task status using Supabase for real-time updates
  */
 export async function updateTaskStatus(
   taskId: string,
@@ -278,19 +289,27 @@ export async function updateTaskStatus(
 ) {
   const updateData: any = {
     status,
-    updatedAt: new Date(),
+    updated_at: new Date().toISOString(),
   };
 
-  if (startedAt) updateData.startedAt = startedAt;
-  if (completedAt) updateData.completedAt = completedAt;
+  if (startedAt) updateData.started_at = startedAt.toISOString();
+  if (completedAt) updateData.completed_at = completedAt.toISOString();
 
   try {
-    const result = await db.update(tasks)
-      .set(updateData)
-      .where(eq(tasks.id, taskId))
-      .returning();
+    // Use Supabase client for updates to trigger real-time events
+    const { data: result, error } = await supabase
+      .from('tasks')
+      .update(updateData)
+      .eq('id', taskId)
+      .select()
+      .single();
 
-    return result[0];
+    if (error) {
+      console.error('❌ Supabase task update error:', error);
+      throw error;
+    }
+
+    return result;
   } catch (error) {
     console.error('Error updating task status:', error);
     throw error;

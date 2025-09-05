@@ -62,6 +62,8 @@ export const widgets = pgTable("widgets", {
 
   // Summary
   summary: text("summary"),
+
+  chatId: text("chat_id").references(() => chats.id),
   
   // Widget configuration (all widget-specific settings)
   config: jsonb("config").notNull().$type<Record<string, any>>(),
@@ -69,33 +71,10 @@ export const widgets = pgTable("widgets", {
   // Widget data (chart data, table data, etc.)
   data: jsonb("data").$type<any>(),
   
-  // SQL query for the dashboard
-  sql: text("sql"),
-
-  // React Grid Layout position (legacy - keep for backward compatibility)
-  layout: jsonb("layout").$type<{
-    i: string;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    minW?: number;
-    maxW?: number;
-    minH?: number;
-    maxH?: number;
-    isResizable?: boolean;
-  }>(),
-
   // Simple order-based positioning (new system - optional for transition)
   order: integer("order"),
   
-  // Optional fields for enhanced functionality
-  chatId: text("chat_id").references(() => chats.id), // If widget was created from chat
   isConfigured: boolean("is_configured").default(false),
-  
-  // Cache-related fields
-  cacheKey: text("cache_key"),
-  lastDataFetch: timestamp("last_data_fetch"),
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

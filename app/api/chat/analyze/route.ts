@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { v4 as uuidv4 } from 'uuid';
 import { getDashboardFiles } from '@/app/lib/actions';
+import { addMessage } from '@/app/lib/chatActions';
 
 // Helper function to generate thread UUID
 function thread_uuid(): string {
@@ -9,29 +10,30 @@ function thread_uuid(): string {
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    // Get the current user
-    const { userId } = await auth();
-    
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+  // Get the current user
+  const { userId } = await auth();
+  
+  if (!userId) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
+  }
 
-    // Parse the request body
-    const body = await request.json();
-    
-    // Validate required fields
-    const { message, dashboardId, contextWidgetIds, chatId } = body;
-    
-    if (!message || !dashboardId) {
-      return NextResponse.json(
-        { error: 'Missing required fields: message and dashboardId are required' },
-        { status: 400 }
-      );
-    }
+  // Parse the request body
+  const body = await request.json();
+  
+  // Validate required fields
+  const { message, dashboardId, contextWidgetIds, chatId } = body;
+
+  if (!message || !dashboardId) {
+    return NextResponse.json(
+      { error: 'Missing required fields: message and dashboardId are required' },
+      { status: 400 }
+    );
+  }
+
+  try {
 
     // Get API URL from environment
     const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.API_URL;
@@ -61,6 +63,8 @@ export async function POST(request: NextRequest) {
     // Prepare context_widget_ids
     const context_widget_ids = contextWidgetIds && Array.isArray(contextWidgetIds) ? contextWidgetIds : [];
 
+    const request_id = "req_" + uuidv4();
+
     // Prepare input data for the assistant
     const inputData = {
       user_prompt: message,
@@ -69,7 +73,8 @@ export async function POST(request: NextRequest) {
       context_widget_ids,
       thread_id,
       user_id: userId,
-      chat_id: chatId
+      chat_id: chatId,
+      request_id: request_id
     };
 
     // Get assistant ID from environment variable
@@ -126,6 +131,21 @@ export async function POST(request: NextRequest) {
         body: threadErrorText
       });
       
+      // Add system message about backend unavailability instead of throwing error
+      if (chatId) {
+        try {
+          console.log('🔄 Adding system error message to chat:', chatId);
+          await addMessage(chatId, userId, {
+            role: 'system',
+            content: 'Something went wrong, please try again later.',
+            messageType: 'chat'
+          });
+          console.log('✅ System error message added successfully');
+        } catch (msgError) {
+          console.error('❌ Failed to add system message:', msgError);
+        }
+      }
+      
       return NextResponse.json(
         { 
           error: `Failed to create thread: ${threadResponse.status} ${threadResponse.statusText}`,
@@ -152,6 +172,21 @@ export async function POST(request: NextRequest) {
         statusText: backendResponse.statusText,
         body: errorText
       });
+      
+      // Add system message about backend unavailability instead of throwing error
+      if (chatId) {
+        try {
+          console.log('🔄 Adding system error message to chat:', chatId);
+          await addMessage(chatId, userId, {
+            role: 'system',
+            content: 'Something went wrong, please try again later.',
+            messageType: 'chat'
+          });
+          console.log('✅ System error message added successfully');
+        } catch (msgError) {
+          console.error('❌ Failed to add system message:', msgError);
+        }
+      }
       
       return NextResponse.json(
         { 
@@ -189,6 +224,21 @@ export async function POST(request: NextRequest) {
       );
     
     if (isConnectionError) {
+      // Add system message about backend unavailability instead of throwing error
+      if (chatId) {
+        try {
+          console.log('🔄 Adding system error message to chat:', chatId);
+          await addMessage(chatId, userId, {
+            role: 'system',
+            content: 'Something went wrong, please try again later.',
+            messageType: 'chat'
+          });
+          console.log('✅ System error message added successfully');
+        } catch (msgError) {
+          console.error('❌ Failed to add system message:', msgError);
+        }
+      }
+      
       return NextResponse.json(
         { 
           error: 'Backend service unavailable',

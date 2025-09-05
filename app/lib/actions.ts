@@ -467,7 +467,10 @@ export async function getDashboardWidgets(dashboardId: string, userId: string) {
       type: widgets.type,
     })
       .from(widgets)
-      .where(eq(widgets.dashboardId, dashboardId))
+      .where(and(
+        eq(widgets.dashboardId, dashboardId),
+        eq(widgets.isConfigured, true)
+      ))
       .orderBy(desc(widgets.createdAt));
 
     // Transform the result to match expected format
@@ -514,14 +517,6 @@ export async function createWidgetInDashboard(
       type: widget.type || widget.chartType || 'chart',
       config: widget.chartSpecs || {},
       data: widget.data || null,
-      sql: widget.sql || null,
-      layout: {
-        i: widgetId,
-        x: layout?.x || 0,
-        y: layout?.y || 0,
-        w: layout?.w || 2,
-        h: layout?.h || 2,
-      },
     }).returning();
 
     if (!result || result.length === 0) {
@@ -557,16 +552,10 @@ export async function updateWidgetLayout(
       throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
     }
 
-    // Update the widget layout
+    // Update the widget (layout functionality removed)
     const result = await db.update(widgets)
       .set({
-        layout: {
-          i: widgetId,
-          x: layout.x || 0,
-          y: layout.y || 0,
-          w: layout.w || 2,
-          h: layout.h || 2,
-        },
+        updatedAt: new Date(),
       })
       .where(and(
         eq(widgets.id, widgetId),

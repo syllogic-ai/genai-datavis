@@ -210,13 +210,8 @@ export async function POST(
               type: widget.type,
               config: widget.config,
               data: widget.data,
-              sql: widget.sql,
-              layout: widget.layout,
               order: widget.order,
-              chatId: widget.chatId || null,
               isConfigured: widget.isConfigured || false,
-              cacheKey: widget.cacheKey || null,
-              lastDataFetch: widget.lastDataFetch || null,
               updatedAt: new Date(),
             })
             .where(
