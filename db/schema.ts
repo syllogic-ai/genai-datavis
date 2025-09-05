@@ -1,4 +1,6 @@
-import { pgTable, text, timestamp, jsonb, integer, real, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, integer, real, boolean, pgPolicy } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { authenticatedRole } from "drizzle-orm/supabase";
 
 // UNIFIED USERS TABLE (enhanced for Better Auth compatibility)
 export const users = pgTable("users", {
@@ -12,7 +14,15 @@ export const users = pgTable("users", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own record
+  pgPolicy("users_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.id}`,
+    withCheck: sql`auth.uid()::text = ${table.id}`
+  })
+]).enableRLS();
 
 // Alias for Better Auth compatibility - Better Auth will use this as the main user table
 export const user = users;
@@ -30,7 +40,15 @@ export const session = pgTable("session", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own sessions
+  pgPolicy("session_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 export const account = pgTable("account", {
   id: text("id").primaryKey(),
@@ -50,7 +68,15 @@ export const account = pgTable("account", {
   updatedAt: timestamp("updated_at")
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own accounts
+  pgPolicy("account_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 export const verification = pgTable("verification", {
   id: text("id").primaryKey(),
@@ -62,7 +88,16 @@ export const verification = pgTable("verification", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access verification records for their own email/identifier
+  // Note: This assumes identifier contains the user's email. Adjust based on your needs.
+  pgPolicy("verification_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`${table.identifier} = (SELECT email FROM auth.users WHERE auth.users.id = auth.uid())`,
+    withCheck: sql`${table.identifier} = (SELECT email FROM auth.users WHERE auth.users.id = auth.uid())`
+  })
+]).enableRLS();
 
 // FILES (simplified - user-scoped)
 export const files = pgTable("files", {
@@ -77,7 +112,15 @@ export const files = pgTable("files", {
   size: integer("size"), // File size in bytes
   status: text("status").default("ready"), // 'processing' | 'ready' | 'failed'
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own files
+  pgPolicy("files_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 // DASHBOARDS (simplified - user-scoped for MVP)
 export const dashboards = pgTable("dashboards", {
@@ -104,7 +147,31 @@ export const dashboards = pgTable("dashboards", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own dashboards OR public dashboards
+  pgPolicy("dashboards_policy", {
+    for: "select",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId} OR ${table.isPublic} = true`
+  }),
+  // Users can only insert/update/delete their own dashboards
+  pgPolicy("dashboards_modify_policy", {
+    for: "insert",
+    to: authenticatedRole,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  }),
+  pgPolicy("dashboards_update_policy", {
+    for: "update",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  }),
+  pgPolicy("dashboards_delete_policy", {
+    for: "delete",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 // WIDGETS (updated to match frontend structure)
 export const widgets = pgTable("widgets", {
@@ -135,7 +202,51 @@ export const widgets = pgTable("widgets", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access widgets from their own dashboards OR public dashboards
+  pgPolicy("widgets_policy", {
+    for: "select",
+    to: authenticatedRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM dashboards 
+      WHERE dashboards.id = ${table.dashboardId} 
+      AND (dashboards.user_id = auth.uid()::text OR dashboards.is_public = true)
+    )`
+  }),
+  // Users can only modify widgets from their own dashboards
+  pgPolicy("widgets_modify_policy", {
+    for: "insert",
+    to: authenticatedRole,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM dashboards 
+      WHERE dashboards.id = ${table.dashboardId} 
+      AND dashboards.user_id = auth.uid()::text
+    )`
+  }),
+  pgPolicy("widgets_update_policy", {
+    for: "update",
+    to: authenticatedRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM dashboards 
+      WHERE dashboards.id = ${table.dashboardId} 
+      AND dashboards.user_id = auth.uid()::text
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM dashboards 
+      WHERE dashboards.id = ${table.dashboardId} 
+      AND dashboards.user_id = auth.uid()::text
+    )`
+  }),
+  pgPolicy("widgets_delete_policy", {
+    for: "delete",
+    to: authenticatedRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM dashboards 
+      WHERE dashboards.id = ${table.dashboardId} 
+      AND dashboards.user_id = auth.uid()::text
+    )`
+  })
+]).enableRLS();
 
 // CHATS (simplified - conversation moved to separate messages table)
 export const chats = pgTable("chats", {
@@ -150,7 +261,15 @@ export const chats = pgTable("chats", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own chats
+  pgPolicy("chats_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 // MESSAGES (new table for individual chat messages)
 export const messages = pgTable("messages", {
@@ -169,7 +288,23 @@ export const messages = pgTable("messages", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access messages from their own chats
+  pgPolicy("messages_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM chats 
+      WHERE chats.id = ${table.chatId} 
+      AND chats.user_id = auth.uid()::text
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM chats 
+      WHERE chats.id = ${table.chatId} 
+      AND chats.user_id = auth.uid()::text
+    )`
+  })
+]).enableRLS();
 
 // TASKS (new table for tracking job tasks and progress)
 export const tasks = pgTable("tasks", {
@@ -192,7 +327,23 @@ export const tasks = pgTable("tasks", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access tasks from their own chats
+  pgPolicy("tasks_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`EXISTS (
+      SELECT 1 FROM chats 
+      WHERE chats.id = ${table.chatId} 
+      AND chats.user_id = auth.uid()::text
+    )`,
+    withCheck: sql`EXISTS (
+      SELECT 1 FROM chats 
+      WHERE chats.id = ${table.chatId} 
+      AND chats.user_id = auth.uid()::text
+    )`
+  })
+]).enableRLS();
 
 // LLM USAGE (simplified)
 export const llmUsage = pgTable('llm_usage', {
@@ -208,7 +359,15 @@ export const llmUsage = pgTable('llm_usage', {
   totalCost: real('total_cost').notNull(),
   
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own usage data
+  pgPolicy("llm_usage_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 
 // THEMES (global theme system - can be shared across dashboards)
@@ -230,7 +389,31 @@ export const themes = pgTable("themes", {
   
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can access their own themes OR default themes
+  pgPolicy("themes_policy", {
+    for: "select",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId} OR ${table.isDefault} = true`
+  }),
+  // Users can only insert/update/delete their own themes (not default ones)
+  pgPolicy("themes_modify_policy", {
+    for: "insert",
+    to: authenticatedRole,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  }),
+  pgPolicy("themes_update_policy", {
+    for: "update",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId} AND ${table.isDefault} = false`,
+    withCheck: sql`auth.uid()::text = ${table.userId} AND ${table.isDefault} = false`
+  }),
+  pgPolicy("themes_delete_policy", {
+    for: "delete",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId} AND ${table.isDefault} = false`
+  })
+]).enableRLS();
 
 // Theme style properties interface
 export interface ThemeStyleProps {
@@ -309,7 +492,15 @@ export const userPreferences = pgTable("user_preferences", {
   // Other preferences can be added here
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  // RLS Policy: Users can only access their own preferences
+  pgPolicy("user_preferences_policy", {
+    for: "all",
+    to: authenticatedRole,
+    using: sql`auth.uid()::text = ${table.userId}`,
+    withCheck: sql`auth.uid()::text = ${table.userId}`
+  })
+]).enableRLS();
 
 // Type definitions
 export type User = typeof users.$inferSelect;
