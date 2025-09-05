@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useCacheWarming } from "@/lib/cache-warmer";
 
@@ -15,7 +15,10 @@ import { useDashboardContext } from "@/components/dashboard/DashboardUserContext
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, isLoaded, isSignedIn } = useUser();
+  const { data: session, isPending } = useSession();
+  const user = session?.user;
+  const isLoaded = !isPending;
+  const isSignedIn = !!user;
   const { warmCache } = useCacheWarming();
   const { dashboards, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
   const [isLoading, setIsLoading] = useState(false);

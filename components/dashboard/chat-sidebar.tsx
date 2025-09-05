@@ -16,7 +16,7 @@ import { Widget } from "@/types/enhanced-dashboard-types";
 import { Chat } from "@/db/schema";
 import { getDashboardChats } from "@/app/lib/actions";
 import { createEmptyChat } from "@/app/lib/chatActions";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth-client";
 import { useRouter, usePathname } from "next/navigation";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
 import Link from "next/link";
@@ -75,7 +75,8 @@ export function ChatSidebar({
   // This component only tracks the currentJobId for UI purposes
   
   // Hooks
-  const { user } = useUser();
+  const { data: session } = useSession();
+  const user = session?.user;
   const router = useRouter();
   const pathname = usePathname();
 

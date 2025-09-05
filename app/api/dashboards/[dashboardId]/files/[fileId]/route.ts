@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { deleteFile } from '@/app/lib/actions';
 
 export async function DELETE(
@@ -7,7 +8,10 @@ export async function DELETE(
   { params }: { params: Promise<{ dashboardId: string; fileId: string }> }
 ) {
   try {
-    const { userId } = await auth();
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    const userId = session?.user?.id;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

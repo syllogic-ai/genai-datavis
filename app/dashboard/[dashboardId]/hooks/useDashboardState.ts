@@ -4,11 +4,12 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { Widget } from "@/types/enhanced-dashboard-types";
 import type { ChartSpec } from "@/types/chart-types";
 import toast from 'react-hot-toast';
-import { useAuth } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth-client";
 import { WidgetPersistence, SaveStatus } from "@/lib/WidgetPersistence";
 
 export function useDashboardState(dashboardId: string) {
-  const { userId } = useAuth();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [dashboardName, setDashboardName] = useState("My Dashboard");
   const [isChatOpen, setIsChatOpen] = useState(false);

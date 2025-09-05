@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import db from "@/db";
 import { themes, Theme } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -8,7 +9,10 @@ import { nanoid } from "nanoid";
 // GET /api/themes - Get all themes for the current user
 export async function GET() {
   try {
-    const { userId } = await auth();
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    const userId = session?.user?.id;
     
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,7 +35,10 @@ export async function GET() {
 // POST /api/themes - Create a new theme
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    const userId = session?.user?.id;
     
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

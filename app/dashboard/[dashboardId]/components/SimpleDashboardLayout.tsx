@@ -79,7 +79,7 @@ const WidgetList = React.memo(function WidgetList({
               className={`relative mb-4 group cursor-move ${
                 snapshot.isDragging ? 'z-50' : ''
               }`}
-              style={provided.draggableProps.style}
+              style={provided.draggableProps.style as React.CSSProperties}
             >
               {/* Extended hover area that includes controls */}
               <div 

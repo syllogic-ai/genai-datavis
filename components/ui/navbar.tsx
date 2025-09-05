@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs"
+import { useSession, signOut } from "@/lib/auth-client"
 
 const routes = [
   { href: "/", label: "Home" },
@@ -12,6 +12,8 @@ const routes = [
 
 export function Navbar() {
   const pathname = usePathname()
+  const { data: session } = useSession()
+  const isSignedIn = !!session?.user
   
   return (
     <nav className="border-b">
@@ -33,7 +35,7 @@ export function Navbar() {
             </Link>
           ))}
           
-          <SignedIn>
+          {isSignedIn && (
             <Link
               href="/dashboard"
               className={cn(
@@ -43,21 +45,30 @@ export function Navbar() {
             >
               Dashboard
             </Link>
-          </SignedIn>
+          )}
         </div>
         
         <div className="ml-auto flex items-center gap-4">
-          <SignedIn>
-            <UserButton afterSignOutUrl="/" />
-          </SignedIn>
-          <SignedOut>
-            <Link href="/sign-in" className="text-sm font-medium transition-colors hover:text-foreground/80">
-              Sign In
-            </Link>
-            <Link href="/sign-up" className="ml-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
-              Sign Up
-            </Link>
-          </SignedOut>
+          {isSignedIn ? (
+            <button
+              onClick={async () => {
+                await signOut()
+                window.location.href = "/"
+              }}
+              className="text-sm font-medium transition-colors hover:text-foreground/80"
+            >
+              Sign Out
+            </button>
+          ) : (
+            <>
+              <Link href="/sign-in" className="text-sm font-medium transition-colors hover:text-foreground/80">
+                Sign In
+              </Link>
+              <Link href="/sign-up" className="ml-4 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90">
+                Sign Up
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>

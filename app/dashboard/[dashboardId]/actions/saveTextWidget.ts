@@ -1,6 +1,7 @@
 'use server';
 
-import { auth } from '@clerk/nextjs/server';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 import db from '@/db';
 import { widgets } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -11,7 +12,10 @@ export async function saveTextWidgetContent(
   content: string
 ) {
   try {
-    const { userId } = await auth();
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    const userId = session?.user?.id;
     
     if (!userId) {
       throw new Error('Unauthorized');

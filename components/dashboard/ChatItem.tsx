@@ -7,7 +7,7 @@ import { MessageSquare, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { Chat } from "@/db/schema";
 import { renameChat, deleteChat } from "@/app/lib/chatActions";
 import { chatEvents, CHAT_EVENTS } from "@/app/lib/events";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth-client";
 
 import {
   DropdownMenu,
@@ -31,7 +31,8 @@ import { Input } from "@/components/ui/input";
 
 export function ChatItem({ chat, isActive }: { chat: Chat; isActive: boolean }) {
   const router = useRouter();
-  const { user } = useUser();
+  const { data: session } = useSession();
+  const user = session?.user;
   const [isRenaming, setIsRenaming] = useState(false);
   const [newTitle, setNewTitle] = useState(chat.title);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);

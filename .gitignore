@@ -75,3 +75,10 @@ htmlcov/
 # Keep example files
 !apps/backend/.env.example
 !apps/frontend/.env.example
+
+# next-video
+videos/*
+!videos/*.json
+!videos/*.js
+!videos/*.ts
+public/_next-video

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
+import { useSession } from "@/lib/auth-client";
 
 export interface FileRecord {
   id: string;
@@ -23,7 +23,8 @@ export interface SetupState {
 }
 
 export function useSetupState(dashboardId: string, currentWidgetCount?: number) {
-  const { userId } = useAuth();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
   const searchParams = useSearchParams();
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [hasMessages, setHasMessages] = useState(false);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/app/lib/supabase';
-import { useUser } from '@clerk/nextjs';
+import { useSession } from "@/lib/auth-client";
 import { ChatMessage, ChatRealtimeOptions, normalizeMessages } from '@/app/lib/types';
 import { Task } from '@/db/schema';
 
@@ -19,7 +19,9 @@ export function useChatRealtime(
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { user, isSignedIn } = useUser();
+  const { data: session } = useSession();
+  const user = session?.user;
+  const isSignedIn = !!user;
   
   // Use refs to prevent re-renders and effect cleanup
   const isMountedRef = useRef(true);

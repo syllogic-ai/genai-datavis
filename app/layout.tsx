@@ -3,7 +3,6 @@ import { Open_Sans } from "next/font/google";
 import "./globals.css";
 
 import { Navbar } from "@/components/ui/navbar";
-import { ClerkProvider } from '@clerk/nextjs';
 import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
 import { ThemeProvider } from "@/lib/ThemeProvider";
 const openSans = Open_Sans({
@@ -39,19 +38,35 @@ export default function RootLayout({
             `,
           }}
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Set dynamic viewport height for mobile browsers
+              function setVh() {
+                const vh = window.innerHeight * 0.01;
+                document.documentElement.style.setProperty('--vh', vh + 'px');
+              }
+              
+              // Set initial value
+              setVh();
+              
+              // Update on resize (handles mobile browser UI changes)
+              window.addEventListener('resize', setVh);
+              window.addEventListener('orientationchange', setVh);
+            `,
+          }}
+        />
       </head>
-      <ClerkProvider>
-        <body
-          className={`${openSans.variable} antialiased font-sans`}
-          style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
-        >
-          <ThemeProvider>
-            <GoogleFontsLoader />
-            {/* <Navbar /> */}
-            {children}
-          </ThemeProvider>
-        </body>
-      </ClerkProvider>
+      <body
+        className={`${openSans.variable} antialiased font-sans`}
+        style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
+      >
+        <ThemeProvider>
+          <GoogleFontsLoader />
+          {/* <Navbar /> */}
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@clerk/nextjs';
+import { useSession } from "@/lib/auth-client";
 import { createClient } from '@/lib/supabase/client';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { Widget } from '@/types/enhanced-dashboard-types';
@@ -47,7 +47,9 @@ export function useDashboardRealtime(options: DashboardRealtimeOptions): Dashboa
     showNotifications = true
   } = options;
 
-  const { isSignedIn, userId } = useAuth();
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  const isSignedIn = !!session?.user;
   const [isConnected, setIsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [optimisticUpdates, setOptimisticUpdates] = useState<OptimisticUpdate[]>([]);

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { nanoid } from 'nanoid';
 import db from '@/db';
 import { dashboards, widgets, files } from '@/db/schema';
@@ -11,7 +12,10 @@ export async function POST(
   context: { params: Promise<{ dashboardId: string }> }
 ) {
   try {
-    const { userId } = await auth();
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    const userId = session?.user?.id;
     
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import db from '@/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { getAuth } from '@clerk/nextjs/server';
 import { cookies, headers } from 'next/headers';
 
 // GET /api/user - Get the current user's data

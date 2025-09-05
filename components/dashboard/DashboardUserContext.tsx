@@ -1,14 +1,14 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { User as ClerkUser } from '@clerk/nextjs/server';
+// Removed Clerk User type import
 import { User as DbUser } from '@/db/schema';
 import { Dashboard } from '@/db/schema';
 import { Widget } from '@/types/enhanced-dashboard-types';
 
 // Types for the context values
 type DashboardUserContextType = {
-  user: ClerkUser | null;
+  user: any | null; // BetterAuth user type
   dbUser: DbUser | null;
 };
 
@@ -28,7 +28,7 @@ export function DashboardUserProvider({
   dbUser,
 }: {
   children: React.ReactNode;
-  user: ClerkUser | null;
+  user: any | null; // BetterAuth user type
   dbUser: DbUser | null;
 }) {
   return (

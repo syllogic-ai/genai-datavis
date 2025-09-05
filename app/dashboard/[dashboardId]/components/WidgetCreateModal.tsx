@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { v4 as uuidv4 } from "uuid";
 import { useParams } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "@/lib/auth-client";
 import { createChat } from "@/app/lib/actions";
 
 import { ChatMessage, ChartMessage } from "@/app/lib/types";
@@ -62,7 +62,8 @@ export function WidgetCreateModal({
   const [error, setError] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const params = useParams();
-  const { user } = useUser();
+  const { data: session } = useSession();
+  const user = session?.user;
 
   // Handle sending a message
   const handleSendMessage = async (message: string) => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useSession } from '@/lib/auth-client';
 import { createChat } from '@/app/lib/chatActions';
 
 /**
@@ -12,7 +12,9 @@ export function useDashboardChat(dashboardId: string) {
   const [chatId, setChatId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { user, isSignedIn } = useUser();
+  const { data: session } = useSession();
+  const user = session?.user;
+  const isSignedIn = !!user;
 
   useEffect(() => {
     if (!dashboardId || !isSignedIn || !user?.id) {

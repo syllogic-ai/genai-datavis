@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { supabase } from "@/app/lib/supabase";
 
 // GET /api/dashboard/[dashboardId]/chat/latest - Get the latest chat for a dashboard
@@ -8,7 +9,10 @@ export async function GET(
   { params }: { params: Promise<{ dashboardId: string }> }
 ) {
   try {
-    const { userId } = await auth();
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+    const userId = session?.user?.id;
     const { dashboardId } = await params;
     
     if (!userId) {

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { Command, Home, Plus, Settings, Palette, ChevronsUpDown, LogOut, HelpCircle, Moon, Sun, User } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useUser, SignOutButton } from "@clerk/nextjs";
+import { useSession, signOut } from "@/lib/auth-client";
 import Image from "next/image";
 import {
   Sidebar,
@@ -41,7 +41,9 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isLoaded } = useUser();
+  const { data: session, isPending } = useSession();
+  const user = session?.user;
+  const isLoaded = !isPending;
   const { isMobile } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { dashboards, currentDashboardWidgets, addDashboard, updateDashboard, deleteDashboard } = useDashboardContext();
@@ -158,15 +160,15 @@ export function AppSidebar({
                   >
                     <div className="h-8 w-8 rounded-lg bg-sidebar-primary text-sidebar-primary-foreground flex items-center justify-center">
                       <span className="text-sm font-medium">
-                        {user.firstName?.[0] || user.emailAddresses[0]?.emailAddress[0] || "U"}
+                        {user.name?.[0] || user.email?.[0] || "U"}
                       </span>
                     </div>
                     <div className="grid flex-1 text-left text-sm leading-tight">
                       <span className="truncate font-medium">
-                        {user.fullName || user.firstName || "User"}
+                        {user.name || "User"}
                       </span>
                       <span className="truncate text-xs">
-                        {user.emailAddresses[0]?.emailAddress || ""}
+                        {user.email || ""}
                       </span>
                     </div>
                     <ChevronsUpDown className="ml-auto size-4" />
@@ -195,12 +197,16 @@ My Account
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator />
-                  <SignOutButton>
-                    <DropdownMenuItem variant="destructive">
-                      <LogOut />
-                      Log out
-                    </DropdownMenuItem>
-                  </SignOutButton>
+                  <DropdownMenuItem 
+                    variant="destructive"
+                    onClick={async () => {
+                      await signOut();
+                      router.push('/sign-in');
+                    }}
+                  >
+                    <LogOut />
+                    Log out
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </SidebarMenuItem>
