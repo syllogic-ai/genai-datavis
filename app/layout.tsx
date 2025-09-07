@@ -5,6 +5,8 @@ import "./globals.css";
 import { Navbar } from "@/components/ui/navbar";
 import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
 import { ThemeProvider } from "@/lib/ThemeProvider";
+import { PostHogProvider } from "@/components/PostHogProvider";
+
 const openSans = Open_Sans({
   variable: "--font-open-sans",
   subsets: ["latin"],
@@ -61,11 +63,13 @@ export default function RootLayout({
         className={`${openSans.variable} antialiased font-sans`}
         style={{ fontFamily: "var(--font-open-sans), sans-serif" }}
       >
-        <ThemeProvider>
-          <GoogleFontsLoader />
-          {/* <Navbar /> */}
-          {children}
-        </ThemeProvider>
+        <PostHogProvider>
+          <ThemeProvider>
+            <GoogleFontsLoader />
+            {/* <Navbar /> */}
+            {children}
+          </ThemeProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

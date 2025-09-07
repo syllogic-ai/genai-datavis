@@ -50,18 +50,9 @@ export function LoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card className="glass-card">
         <CardHeader className="text-center pb-6">
-          <div className="flex items-center justify-center">
-            <Image
-              src="https://ptsbrkwalysbchtdharj.supabase.co/storage/v1/object/public/web-public/brand-kit/syllogic_logo.png"
-              alt="Syllogic Logo"
-              width={100}
-              height={75}
-              className="opacity-90"
-              priority
-            />{" "}
-          </div>
-          <CardDescription className="text-white/70 mt-2">
-            Sign in or create an account with GitHub or Google
+         
+          <CardDescription className="text-white/70 mt-2 text-lg">
+            Sign in or create an account with GitHub or Google.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-6 pb-6">

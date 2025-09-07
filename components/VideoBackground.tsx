@@ -120,7 +120,7 @@ export default function VideoBackground({
         playsInline
         controls={false}
         preload="auto"
-        className={`transition-opacity duration-1000 ${isLoaded ? "opacity-100" : "opacity-0"} ${className}`}
+        className={`transition-opacity duration-1000 filter grayscale ${isLoaded ? "opacity-100" : "opacity-0"} ${className}`}
         style={{
           position: 'absolute',
           top: '50%',
