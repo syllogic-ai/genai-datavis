@@ -124,7 +124,7 @@ export function ChatInput({
       )}
       <CardContent className="py-0 my-0 px-2">
         <Textarea
-          className="placeholder:text-primary/60 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-background! resize-none rows-1"
+          className="placeholder:text-primary/60 border-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-sidebar! resize-none rows-1"
           placeholder={messagePlaceholder}
           value={message}
           onChange={(e) => setMessage(e.target.value)}

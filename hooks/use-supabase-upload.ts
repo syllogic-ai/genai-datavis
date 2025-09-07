@@ -152,16 +152,36 @@ const useSupabaseUpload = (options: UseSupabaseUploadOptions) => {
             return { name: file.name, message: 'Filename could not be sanitized', sanitizedName: undefined }
           }
           
-          const uploadPath = !!path ? `${path}/${file.sanitizedName}` : file.sanitizedName
-          const { error } = await supabase.storage
-            .from(bucketName)
-            .upload(uploadPath, file, {
-              cacheControl: cacheControl.toString(),
-              upsert,
-            })
-          if (error) {
-            return { name: file.name, message: error.message, sanitizedName: file.sanitizedName }
+          // Use our API endpoint for uploads to handle authentication and RLS
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('bucketName', bucketName);
+          if (path) {
+            // Extract dashboardId from path if it follows the pattern userId/dashboardId
+            const pathParts = path.split('/');
+            const dashboardId = pathParts.length >= 2 ? pathParts[1] : pathParts[0];
+            formData.append('dashboardId', dashboardId);
+          }
+          
+          console.log('[CLIENT_UPLOAD] Uploading file:', file.name);
+          
+          const response = await fetch('/api/files/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          console.log('[CLIENT_UPLOAD] Response status:', response.status);
+          console.log('[CLIENT_UPLOAD] Response headers:', Object.fromEntries(response.headers.entries()));
+          
+          const result = await response.json();
+          
+          console.log('[CLIENT_UPLOAD] Response result:', result);
+          
+          if (!response.ok) {
+            console.error('[CLIENT_UPLOAD] Upload failed:', result.error);
+            return { name: file.name, message: result.error || 'Upload failed', sanitizedName: file.sanitizedName }
           } else {
+            console.log('[CLIENT_UPLOAD] Upload successful');
             return { name: file.name, message: undefined, sanitizedName: file.sanitizedName }
           }
         } catch (error) {

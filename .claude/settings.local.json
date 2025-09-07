@@ -34,7 +34,11 @@
       "Bash(npm test)",
       "Bash(npx @better-auth/cli generate:*)",
       "Bash(DATABASE_URL=\"postgresql://temp:temp@localhost:5432/temp\" npx @better-auth/cli generate)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__list_projects",
+      "mcp__supabase__list_tables",
+      "mcp__supabase__get_advisors"
     ],
     "deny": []
   }

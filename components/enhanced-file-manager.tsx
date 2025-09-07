@@ -26,6 +26,7 @@ import { Dropzone, DropzoneEmptyState, DropzoneContent } from "@/components/drop
 import { useSupabaseUpload } from "@/hooks/use-supabase-upload";
 import { formatBytes } from "@/components/dropzone";
 import { generateSanitizedFilename } from "@/app/lib/utils";
+import { useSession } from "@/lib/auth-client";
 import toast from "react-hot-toast";
 
 export interface ExistingFile {
@@ -57,14 +58,17 @@ export function EnhancedFileManager({
   maxFiles = 10,
   className,
 }: EnhancedFileManagerProps) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id;
+  
   const [showExistingFiles, setShowExistingFiles] = useState(true);
   const [duplicateAttempts, setDuplicateAttempts] = useState<string[]>([]);
   const [deletingFileIds, setDeletingFileIds] = useState<Set<string>>(new Set());
   const processedUploadsRef = useRef<Set<string>>(new Set());
 
   const uploadHook = useSupabaseUpload({
-    bucketName: 'test-bucket',
-    path: `dashboards/${dashboardId}`,
+    bucketName: 'user-files',
+    path: userId ? `${userId}/${dashboardId}` : undefined,
     maxFiles: maxFiles,
     upsert: true, // Allow overwriting existing files
     allowedMimeTypes: [
@@ -145,53 +149,23 @@ export function EnhancedFileManager({
           return;
         }
 
-        // Process file uploads
+        // Process successful uploads - upload endpoint now handles database creation
         for (const file of uploadHook.files) {
           if (uploadHook.successes.includes(file.name)) {
-            try {
-              const sanitizedName = file.sanitizedName || generateSanitizedFilename(file.name);
-              const response = await fetch(`/api/dashboards/${dashboardId}/files`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  fileName: file.name,
-                  storagePath: `test-bucket/dashboards/${dashboardId}/${sanitizedName}`,
-                  fileType: 'original',
-                  mimeType: file.type,
-                  size: file.size,
-                }),
-              });
-
-              if (response.ok) {
-                const data = await response.json();
-                const newFile: ExistingFile = {
-                  id: data.file.id,
-                  name: file.name,
-                  size: file.size,
-                  type: file.type,
-                  storagePath: `test-bucket/dashboards/${dashboardId}/${sanitizedName}`,
-                  uploadedAt: new Date(),
-                };
-                
-                onFileAdded(newFile);
-                toast.success(`${file.name} uploaded successfully! Click "Continue to Dashboard" when ready.`, {
-                  duration: 4000,
-                });
-              } else {
-                // Database record creation failed, but file is in storage
-                const errorText = await response.text();
-                console.error(`[EnhancedFileManager] Database record creation failed for ${file.name}: ${response.status} - ${errorText}`);
-                throw new Error(`Failed to create database record: ${response.status}`);
-              }
-            } catch (error) {
-              console.error(`[EnhancedFileManager] Error creating file record for ${file.name}:`, error);
-              
-              // If database record creation fails, the file remains in storage
-              // Since we now use upsert=true, this will be overwritten on next upload attempt
-              console.warn(`[EnhancedFileManager] File ${file.name} exists in storage but not in database. Next upload will overwrite it.`);
-              
-              toast.error(`Failed to register ${file.name} in database. File uploaded to storage but not linked to dashboard.`);
-            }
+            const sanitizedName = file.sanitizedName || generateSanitizedFilename(file.name);
+            const newFile: ExistingFile = {
+              id: `temp-${Date.now()}-${Math.random()}`, // Temporary ID until we refresh the file list
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              storagePath: userId ? `${userId}/${dashboardId}/${sanitizedName}` : `dashboards/${dashboardId}/${sanitizedName}`,
+              uploadedAt: new Date(),
+            };
+            
+            onFileAdded(newFile);
+            toast.success(`${file.name} uploaded successfully! Click "Continue to Dashboard" when ready.`, {
+              duration: 4000,
+            });
           }
         }
 
@@ -214,7 +188,7 @@ export function EnhancedFileManager({
 
       processUploads();
     }
-  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, dashboardId, onFileAdded, onRefreshFiles, checkForDuplicates, uploadHook]);
+  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, dashboardId, onFileAdded, onRefreshFiles, checkForDuplicates, uploadHook, userId]);
 
   const getFileIcon = (type: string) => {
     if (!type) return <File className="w-4 h-4" />;

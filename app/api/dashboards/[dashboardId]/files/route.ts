@@ -11,11 +11,17 @@ export async function POST(
   { params }: { params: Promise<{ dashboardId: string }> }
 ) {
   try {
+    console.log('[FILE_DB] Creating file database record...');
+    
     const session = await auth.api.getSession({
       headers: await headers()
     });
     const userId = session?.user?.id;
+    
+    console.log('[FILE_DB] Session check:', { userId: userId ? 'present' : 'missing' });
+    
     if (!userId) {
+      console.log('[FILE_DB] ERROR: No user session found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -33,6 +39,13 @@ export async function POST(
     const fileId = uuidv4();
     const sanitizedFilename = generateSanitizedFilename(fileName);
 
+    console.log('[FILE_DB] Creating file record:', {
+      fileId,
+      fileName,
+      dashboardId,
+      userId
+    });
+
     // Create file record in database
     const fileRecord = await createFile(
       fileId,
@@ -45,8 +58,12 @@ export async function POST(
       size
     );
 
+    console.log('[FILE_DB] File record created successfully');
+
     // Link file to dashboard
+    console.log('[FILE_DB] Linking file to dashboard...');
     await updateDashboardFile(dashboardId, fileId, userId);
+    console.log('[FILE_DB] File linked to dashboard successfully');
     
     // Invalidate files cache for this dashboard
     const cacheKey = CACHE_KEYS.dashboardFiles(dashboardId, userId);
@@ -57,7 +74,11 @@ export async function POST(
       file: fileRecord,
     });
   } catch (error) {
-    console.error('Error creating file record:', error);
+    console.error('[FILE_DB] ERROR creating file record:', error);
+    console.error('[FILE_DB] Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return NextResponse.json(
       { error: 'Failed to create file record' },
       { status: 500 }
@@ -102,7 +123,7 @@ export async function GET(
     }
     
     // Map database records to frontend interface
-    const files = dbFiles.map(file => ({
+    const files = dbFiles.map((file: any) => ({
       id: file.id,
       name: file.originalFilename,
       size: file.size || 0,

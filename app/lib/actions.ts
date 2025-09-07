@@ -1,10 +1,12 @@
 "use server";
 
-import db from '@/db';
+import { withRLS } from '@/lib/db-with-rls';
 import { files, chats, messages, tasks, dashboards, widgets } from '../../db/schema'; // Import Drizzle schemas
 import { eq, and, desc, isNull } from 'drizzle-orm'; // Import eq, and, desc, and isNull operators
 import { v4 as uuidv4 } from 'uuid'; // Assuming you might need UUIDs
 import { createClient } from '@supabase/supabase-js';
+import PostHogClient from '@/lib/posthog';
+const posthog = PostHogClient();
 
 // Create server-side supabase client 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -21,28 +23,30 @@ import { generateSanitizedFilename } from './utils';
 // Utility function to migrate existing files to use sanitized filenames
 export async function migrateExistingFiles(userId?: string) {
   try {
-    // Get all files that don't have sanitized filenames
-    const filesToMigrate = userId 
-      ? await db.select().from(files).where(and(isNull(files.sanitizedFilename), eq(files.userId, userId)))
-      : await db.select().from(files).where(isNull(files.sanitizedFilename));
+    return await withRLS(async (db) => {
+      // Get all files that don't have sanitized filenames
+      const filesToMigrate = userId 
+        ? await db.select().from(files).where(and(isNull(files.sanitizedFilename), eq(files.userId, userId)))
+        : await db.select().from(files).where(isNull(files.sanitizedFilename));
 
-    console.log(`Found ${filesToMigrate.length} files to migrate`);
+      console.log(`Found ${filesToMigrate.length} files to migrate`);
 
-    for (const file of filesToMigrate) {
-      if (file.originalFilename) {
-        const sanitizedFilename = generateSanitizedFilename(file.originalFilename);
-        
-        // Update the database record
-        await db.update(files)
-          .set({ sanitizedFilename: sanitizedFilename })
-          .where(eq(files.id, file.id));
-        
-        console.log(`Migrated file ${file.id}: ${file.originalFilename} -> ${sanitizedFilename}`);
+      for (const file of filesToMigrate) {
+        if (file.originalFilename) {
+          const sanitizedFilename = generateSanitizedFilename(file.originalFilename);
+          
+          // Update the database record
+          await db.update(files)
+            .set({ sanitizedFilename: sanitizedFilename })
+            .where(eq(files.id, file.id));
+          
+          console.log(`Migrated file ${file.id}: ${file.originalFilename} -> ${sanitizedFilename}`);
+        }
       }
-    }
 
-    console.log('Migration completed successfully');
-    return filesToMigrate.length;
+      console.log('Migration completed successfully');
+      return filesToMigrate.length;
+    });
   } catch (error) {
     console.error('Error migrating existing files:', error);
     throw error;
@@ -52,46 +56,62 @@ export async function migrateExistingFiles(userId?: string) {
 // Create a new file in the database using Drizzle
 export async function createFile(fileId: string, fileType: string, originalFilename: string, sanitizedFilename: string | null, storagePath: string, userId: string, mimeType?: string, size?: number) {
   try {
-    const result = await db.insert(files).values({
-      id: fileId,
-      userId: userId,
-      fileType: fileType,
-      originalFilename: originalFilename,
-      sanitizedFilename: sanitizedFilename,
-      storagePath: storagePath,
-      mimeType: mimeType || null,
-      size: size || null,
-      status: 'pending', // Assuming 'pending' is the desired initial status based on original code
-    }).returning(); // Optional: return the inserted record
+    const result = await withRLS(async (db) => {
+      return db.insert(files).values({
+        id: fileId,
+        userId: userId,
+        fileType: fileType,
+        originalFilename: originalFilename,
+        sanitizedFilename: sanitizedFilename,
+        storagePath: storagePath,
+        mimeType: mimeType || null,
+        size: size || null,
+        status: 'pending',
+      }).returning();
+    });
 
-    // Check if the insert was successful (Drizzle returns an array)
     if (!result || result.length === 0) {
       throw new Error("Failed to create file record in database.");
     }
     
-    return result[0]; // Return the first (and likely only) inserted record
+    // Track file creation in PostHog
+    posthog.capture({
+      distinctId: userId,
+      event: 'file_created',
+      properties: {
+        fileId,
+        fileType,
+        originalFilename,
+        mimeType,
+        size
+      }
+    });
+    
+    return result[0];
   } catch (error) {
     console.error('Error creating file record:', error);
-    throw error; // Re-throw the error to be handled by the caller
+    throw error;
   }
 }
 
 // Update the file status in the database using Drizzle
 export async function updateFileStatus(fileId: string, status: string) {
  try {
-    const result = await db.update(files).set({
-      status: status,
-    }).where(eq(files.id, fileId))
-    .returning(); // Optional: return the updated record(s)
+    return await withRLS(async (db) => {
+      const result = await db.update(files).set({
+        status: status,
+      }).where(eq(files.id, fileId))
+      .returning(); // Optional: return the updated record(s)
 
-    // Check if the update affected any rows
-     if (!result || result.length === 0) {
-      console.warn(`File with ID ${fileId} not found for status update.`);
-      // Depending on requirements, you might throw an error here or return null/undefined
-      return null; 
-    }
+      // Check if the update affected any rows
+       if (!result || result.length === 0) {
+        console.warn(`File with ID ${fileId} not found for status update.`);
+        // Depending on requirements, you might throw an error here or return null/undefined
+        return null; 
+      }
 
-    return result[0]; // Return the first updated record
+      return result[0]; // Return the first updated record
+    });
   } catch (error) {
     console.error('Error updating file status:', error);
     throw error; // Re-throw the error
@@ -101,31 +121,46 @@ export async function updateFileStatus(fileId: string, status: string) {
 // Create a new chat in the database using Drizzle
 export async function createChat(chatId: string, userId: string, dashboardId: string, initialMessageContent?: string) {
   try {
-    const chatResult = await db.insert(chats).values({
-      id: chatId,
-      userId: userId,
-      dashboardId: dashboardId,
-      messageCount: initialMessageContent ? 1 : 0,
-      lastMessageAt: initialMessageContent ? new Date() : null,
-      updatedAt: new Date(),
-    }).returning();
+    const chatResult = await withRLS(async (db) => {
+      const result = await db.insert(chats).values({
+        id: chatId,
+        userId: userId,
+        dashboardId: dashboardId,
+        messageCount: initialMessageContent ? 1 : 0,
+        lastMessageAt: initialMessageContent ? new Date() : null,
+        updatedAt: new Date(),
+      }).returning();
+
+      // Create initial message if provided
+      if (initialMessageContent) {
+        const messageId = uuidv4();
+        await db.insert(messages).values({
+          id: messageId,
+          chatId: chatId,
+          role: 'user',
+          content: initialMessageContent,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      }
+      
+      return result;
+    });
 
     if (!chatResult || chatResult.length === 0) {
       throw new Error("Failed to create chat record in database.");
     }
 
-    // Create initial message if provided
-    if (initialMessageContent) {
-      const messageId = uuidv4();
-      await db.insert(messages).values({
-        id: messageId,
-        chatId: chatId,
-        role: 'user',
-        content: initialMessageContent,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
+    // Track chat creation in PostHog
+    posthog.capture({
+      distinctId: userId,
+      event: 'chat_created',
+      properties: {
+        chatId,
+        dashboardId,
+        hasInitialMessage: !!initialMessageContent
+      }
+    });
 
     return chatResult[0];
   } catch (error) {
@@ -136,22 +171,24 @@ export async function createChat(chatId: string, userId: string, dashboardId: st
 
 
 export async function getChats(userId: string) {
-  const result = await db.select()
-    .from(chats)
-    .where(eq(chats.userId, userId))
-    .orderBy(desc(chats.updatedAt));
-  return result;
+  return await withRLS(async (db) => {
+    return db.select()
+      .from(chats)
+      .where(eq(chats.userId, userId))
+      .orderBy(desc(chats.updatedAt));
+  });
 }
 
 export async function getDashboardChats(userId: string, dashboardId: string) {
-  const result = await db.select()
-    .from(chats)
-    .where(and(
-      eq(chats.userId, userId),
-      eq(chats.dashboardId, dashboardId)
-    ))
-    .orderBy(desc(chats.updatedAt));
-  return result;
+  return await withRLS(async (db) => {
+    return db.select()
+      .from(chats)
+      .where(and(
+        eq(chats.userId, userId),
+        eq(chats.dashboardId, dashboardId)
+      ))
+      .orderBy(desc(chats.updatedAt));
+  });
 }
 
 /**
@@ -159,15 +196,17 @@ export async function getDashboardChats(userId: string, dashboardId: string) {
  */
 export async function getDashboard(dashboardId: string, userId: string) {
   try {
-    const result = await db.select()
-      .from(dashboards)
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ))
-      .limit(1);
-    
-    return result[0] || null;
+    return await withRLS(async (db) => {
+      const result = await db.select()
+        .from(dashboards)
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ))
+        .limit(1);
+      
+      return result[0] || null;
+    });
   } catch (error) {
     console.error('Error fetching dashboard:', error);
     throw error;
@@ -183,47 +222,49 @@ export async function updateChatConversation(
   userId: string
 ) {
   try {
-    // First verify the chat belongs to the user
-    const chatExists = await db.select()
-      .from(chats)
-      .where(and(
-        eq(chats.id, chatId),
-        eq(chats.userId, userId)
-      ))
-      .limit(1);
+    return await withRLS(async (db) => {
+      // First verify the chat belongs to the user
+      const chatExists = await db.select()
+        .from(chats)
+        .where(and(
+          eq(chats.id, chatId),
+          eq(chats.userId, userId)
+        ))
+        .limit(1);
 
-    if (!chatExists || chatExists.length === 0) {
-      throw new Error(`Chat ${chatId} not found`);
-    }
+      if (!chatExists || chatExists.length === 0) {
+        throw new Error(`Chat ${chatId} not found`);
+      }
 
-    // Delete existing messages
-    await db.delete(messages).where(eq(messages.chatId, chatId));
+      // Delete existing messages
+      await db.delete(messages).where(eq(messages.chatId, chatId));
 
-    // Insert new messages
-    if (conversation.length > 0) {
-      const messagesToInsert = conversation.map((msg, index) => ({
-        id: uuidv4(),
-        chatId: chatId,
-        role: msg.role,
-        content: msg.content || msg.message || "Unknown message content",
-        createdAt: new Date(msg.timestamp || new Date()),
-        updatedAt: new Date(),
-      }));
+      // Insert new messages
+      if (conversation.length > 0) {
+        const messagesToInsert = conversation.map((msg, index) => ({
+          id: uuidv4(),
+          chatId: chatId,
+          role: msg.role,
+          content: msg.content || msg.message || "Unknown message content",
+          createdAt: new Date(msg.timestamp || new Date()),
+          updatedAt: new Date(),
+        }));
 
-      await db.insert(messages).values(messagesToInsert);
-    }
+        await db.insert(messages).values(messagesToInsert);
+      }
 
-    // Update chat metadata
-    const result = await db.update(chats)
-      .set({ 
-        messageCount: conversation.length,
-        lastMessageAt: conversation.length > 0 ? new Date() : null,
-        updatedAt: new Date()
-      })
-      .where(eq(chats.id, chatId))
-      .returning();
+      // Update chat metadata
+      const result = await db.update(chats)
+        .set({ 
+          messageCount: conversation.length,
+          lastMessageAt: conversation.length > 0 ? new Date() : null,
+          updatedAt: new Date()
+        })
+        .where(eq(chats.id, chatId))
+        .returning();
 
-    return result;
+      return result;
+    });
   } catch (error) {
     console.error('Error updating chat conversation:', error);
     throw error;
@@ -235,37 +276,39 @@ export async function updateChatConversation(
  */
 export async function getChat(chatId: string, userId: string) {
   try {
-    // Get the chat using Drizzle
-    const chatResult = await db.select().from(chats)
-      .where(and(
-        eq(chats.id, chatId),
-        eq(chats.userId, userId)
-      ));
-    
-    if (!chatResult || chatResult.length === 0) {
-      throw new Error(`Chat with ID ${chatId} not found`);
-    }
-
-    const chatData = chatResult[0];
-
-    // Get the dashboard details using Drizzle
-    if (chatData.dashboardId) {
-      const dashboardResult = await db.select().from(dashboards)
-        .where(eq(dashboards.id, chatData.dashboardId));
+    return await withRLS(async (db) => {
+      // Get the chat using Drizzle
+      const chatResult = await db.select().from(chats)
+        .where(and(
+          eq(chats.id, chatId),
+          eq(chats.userId, userId)
+        ));
       
-      if (dashboardResult && dashboardResult.length > 0) {
-        const dashboardData = dashboardResult[0];
-        
-        // Return a combined object with chat data and dashboard details
-        return { 
-          ...chatData, 
-          dashboard: dashboardData
-        };
+      if (!chatResult || chatResult.length === 0) {
+        throw new Error(`Chat with ID ${chatId} not found`);
       }
-    }
 
-    // Return just the chat data if no dashboard is found
-    return chatData;
+      const chatData = chatResult[0];
+
+      // Get the dashboard details using Drizzle
+      if (chatData.dashboardId) {
+        const dashboardResult = await db.select().from(dashboards)
+          .where(eq(dashboards.id, chatData.dashboardId));
+        
+        if (dashboardResult && dashboardResult.length > 0) {
+          const dashboardData = dashboardResult[0];
+          
+          // Return a combined object with chat data and dashboard details
+          return { 
+            ...chatData, 
+            dashboard: dashboardData
+          };
+        }
+      }
+
+      // Return just the chat data if no dashboard is found
+      return chatData;
+    });
   } catch (error) {
     console.error('Error fetching chat:', error);
     throw error;
@@ -295,33 +338,35 @@ export async function appendChatMessage(
   };
 
   try {
-    // First verify the chat belongs to the user
-    const chatExists = await db.select()
-      .from(chats)
-      .where(and(
-        eq(chats.id, chatId),
-        eq(chats.userId, userId)
-      ))
-      .limit(1);
+    return await withRLS(async (db) => {
+      // First verify the chat belongs to the user
+      const chatExists = await db.select()
+        .from(chats)
+        .where(and(
+          eq(chats.id, chatId),
+          eq(chats.userId, userId)
+        ))
+        .limit(1);
 
-    if (!chatExists || chatExists.length === 0) {
-      throw new Error(`Chat with ID ${chatId} not found`);
-    }
+      if (!chatExists || chatExists.length === 0) {
+        throw new Error(`Chat with ID ${chatId} not found`);
+      }
 
-    // Insert the message
-    const insertedMessage = await db.insert(messages).values(newMessage).returning();
-    
-    // Update chat metadata
-    const currentChat = chatExists[0];
-    await db.update(chats)
-      .set({ 
-        lastMessageAt: timestamp,
-        messageCount: (currentChat.messageCount || 0) + 1,
-        updatedAt: timestamp
-      })
-      .where(eq(chats.id, chatId));
+      // Insert the message
+      const insertedMessage = await db.insert(messages).values(newMessage).returning();
+      
+      // Update chat metadata
+      const currentChat = chatExists[0];
+      await db.update(chats)
+        .set({ 
+          lastMessageAt: timestamp,
+          messageCount: (currentChat.messageCount || 0) + 1,
+          updatedAt: timestamp
+        })
+        .where(eq(chats.id, chatId));
 
-    return insertedMessage[0];
+      return insertedMessage[0];
+    });
   } catch (error) {
     console.error('Error appending chat message:', error);
     throw error;
@@ -333,25 +378,27 @@ export async function appendChatMessage(
  */
 export async function getChatMessages(chatId: string, userId: string) {
   try {
-    // First verify the chat belongs to the user
-    const chatExists = await db.select()
-      .from(chats)
-      .where(and(
-        eq(chats.id, chatId),
-        eq(chats.userId, userId)
-      ))
-      .limit(1);
+    return await withRLS(async (db) => {
+      // First verify the chat belongs to the user
+      const chatExists = await db.select()
+        .from(chats)
+        .where(and(
+          eq(chats.id, chatId),
+          eq(chats.userId, userId)
+        ))
+        .limit(1);
 
-    if (!chatExists || chatExists.length === 0) {
-      throw new Error(`Chat ${chatId} not found`);
-    }
+      if (!chatExists || chatExists.length === 0) {
+        throw new Error(`Chat ${chatId} not found`);
+      }
 
-    const chatMessages = await db.select()
-      .from(messages)
-      .where(eq(messages.chatId, chatId))
-      .orderBy(messages.createdAt);
+      const chatMessages = await db.select()
+        .from(messages)
+        .where(eq(messages.chatId, chatId))
+        .orderBy(messages.createdAt);
 
-    return chatMessages;
+      return chatMessages;
+    });
   } catch (error) {
     console.error('Error getting chat messages:', error);
     throw error;
@@ -363,12 +410,12 @@ export async function getChatMessages(chatId: string, userId: string) {
  */
 export async function getDashboards(userId: string) {
   try {
-    const result = await db.select()
-      .from(dashboards)
-      .where(eq(dashboards.userId, userId))
-      .orderBy(desc(dashboards.updatedAt));
-    
-    return result;
+    return await withRLS(async (db) => {
+      return db.select()
+        .from(dashboards)
+        .where(eq(dashboards.userId, userId))
+        .orderBy(desc(dashboards.updatedAt));
+    });
   } catch (error) {
     console.error('Error fetching dashboards:', error);
     throw error;
@@ -387,18 +434,32 @@ export async function createDashboard(
   icon?: string
 ) {
   try {
-    const result = await db.insert(dashboards).values({
-      id: dashboardId,
-      userId: userId,
-      name: name,
-      description: description || null,
-      icon: icon || "DocumentTextIcon",
-      updatedAt: new Date(),
-    }).returning();
+    const result = await withRLS(async (db) => {
+      return db.insert(dashboards).values({
+        id: dashboardId,
+        userId: userId,
+        name: name,
+        description: description || null,
+        icon: icon || "DocumentTextIcon",
+        updatedAt: new Date(),
+      }).returning();
+    });
 
     if (!result || result.length === 0) {
       throw new Error("Failed to create dashboard record in database.");
     }
+
+    // Track dashboard creation in PostHog
+    posthog.capture({
+      distinctId: userId,
+      event: 'dashboard_created',
+      properties: {
+        dashboardId,
+        name,
+        description,
+        icon
+      }
+    });
 
     return result[0];
   } catch (error) {
@@ -421,22 +482,24 @@ export async function updateDashboard(
   }
 ) {
   try {
-    const result = await db.update(dashboards)
-      .set({
-        ...updates,
-        updatedAt: new Date(),
-      })
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ))
-      .returning();
+    return await withRLS(async (db) => {
+      const result = await db.update(dashboards)
+        .set({
+          ...updates,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ))
+        .returning();
 
-    if (!result || result.length === 0) {
-      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
-    }
+      if (!result || result.length === 0) {
+        throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+      }
 
-    return result[0];
+      return result[0];
+    });
   } catch (error) {
     console.error('Error updating dashboard:', error);
     throw error;
@@ -448,37 +511,39 @@ export async function updateDashboard(
  */
 export async function getDashboardWidgets(dashboardId: string, userId: string) {
   try {
-    // First verify the dashboard belongs to the user
-    const dashboardResult = await db.select({ id: dashboards.id })
-      .from(dashboards)
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ));
+    return await withRLS(async (db) => {
+      // First verify the dashboard belongs to the user
+      const dashboardResult = await db.select({ id: dashboards.id })
+        .from(dashboards)
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ));
 
-    if (!dashboardResult || dashboardResult.length === 0) {
-      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
-    }
+      if (!dashboardResult || dashboardResult.length === 0) {
+        throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+      }
 
-    // Get widgets with only the fields needed for navigation
-    const result = await db.select({
-      id: widgets.id,
-      title: widgets.title,
-      type: widgets.type,
-    })
-      .from(widgets)
-      .where(and(
-        eq(widgets.dashboardId, dashboardId),
-        eq(widgets.isConfigured, true)
-      ))
-      .orderBy(desc(widgets.createdAt));
+      // Get widgets with only the fields needed for navigation
+      const result = await db.select({
+        id: widgets.id,
+        title: widgets.title,
+        type: widgets.type,
+      })
+        .from(widgets)
+        .where(and(
+          eq(widgets.dashboardId, dashboardId),
+          eq(widgets.isConfigured, true)
+        ))
+        .orderBy(desc(widgets.createdAt));
 
-    // Transform the result to match expected format
-    return result.map(widget => ({
-      id: widget.id,
-      title: widget.title,
-      type: widget.type || 'chart', // Default to 'chart' if no type specified
-    }));
+      // Transform the result to match expected format
+      return result.map((widget: any) => ({
+        id: widget.id,
+        title: widget.title,
+        type: widget.type || 'chart', // Default to 'chart' if no type specified
+      }));
+    });
   } catch (error) {
     console.error('Error fetching dashboard widgets:', error);
     throw error;
@@ -496,34 +561,36 @@ export async function createWidgetInDashboard(
   userId: string
 ) {
   try {
-    // First verify the dashboard belongs to the user
-    const dashboardResult = await db.select({ id: dashboards.id })
-      .from(dashboards)
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ));
+    return await withRLS(async (db) => {
+      // First verify the dashboard belongs to the user
+      const dashboardResult = await db.select({ id: dashboards.id })
+        .from(dashboards)
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ));
 
-    if (!dashboardResult || dashboardResult.length === 0) {
-      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
-    }
+      if (!dashboardResult || dashboardResult.length === 0) {
+        throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+      }
 
-    const widgetId = uuidv4();
-    
-    const result = await db.insert(widgets).values({
-      id: widgetId,
-      dashboardId: dashboardId,
-      title: widget.name || widget.title || 'Untitled Widget',
-      type: widget.type || widget.chartType || 'chart',
-      config: widget.chartSpecs || {},
-      data: widget.data || null,
-    }).returning();
+      const widgetId = uuidv4();
+      
+      const result = await db.insert(widgets).values({
+        id: widgetId,
+        dashboardId: dashboardId,
+        title: widget.name || widget.title || 'Untitled Widget',
+        type: widget.type || widget.chartType || 'chart',
+        config: widget.chartSpecs || {},
+        data: widget.data || null,
+      }).returning();
 
-    if (!result || result.length === 0) {
-      throw new Error("Failed to create widget record in database.");
-    }
+      if (!result || result.length === 0) {
+        throw new Error("Failed to create widget record in database.");
+      }
 
-    return { widget: result[0] };
+      return { widget: result[0] };
+    });
   } catch (error) {
     console.error('Error creating widget in dashboard:', error);
     throw error;
@@ -540,34 +607,36 @@ export async function updateWidgetLayout(
   userId: string
 ) {
   try {
-    // First verify the dashboard belongs to the user
-    const dashboardResult = await db.select({ id: dashboards.id })
-      .from(dashboards)
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ));
+    return await withRLS(async (db) => {
+      // First verify the dashboard belongs to the user
+      const dashboardResult = await db.select({ id: dashboards.id })
+        .from(dashboards)
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ));
 
-    if (!dashboardResult || dashboardResult.length === 0) {
-      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
-    }
+      if (!dashboardResult || dashboardResult.length === 0) {
+        throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+      }
 
-    // Update the widget (layout functionality removed)
-    const result = await db.update(widgets)
-      .set({
-        updatedAt: new Date(),
-      })
-      .where(and(
-        eq(widgets.id, widgetId),
-        eq(widgets.dashboardId, dashboardId)
-      ))
-      .returning();
+      // Update the widget (layout functionality removed)
+      const result = await db.update(widgets)
+        .set({
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(widgets.id, widgetId),
+          eq(widgets.dashboardId, dashboardId)
+        ))
+        .returning();
 
-    if (!result || result.length === 0) {
-      throw new Error(`Widget with ID ${widgetId} not found`);
-    }
+      if (!result || result.length === 0) {
+        throw new Error(`Widget with ID ${widgetId} not found`);
+      }
 
-    return result[0];
+      return result[0];
+    });
   } catch (error) {
     console.error('Error updating widget layout:', error);
     throw error;
@@ -579,31 +648,33 @@ export async function updateWidgetLayout(
  */
 export async function updateDashboardFile(dashboardId: string, fileId: string, userId: string) {
   try {
-    // First verify the dashboard belongs to the user
-    const dashboardResult = await db.select({ id: dashboards.id })
-      .from(dashboards)
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ));
+    return await withRLS(async (db) => {
+      // First verify the dashboard belongs to the user
+      const dashboardResult = await db.select({ id: dashboards.id })
+        .from(dashboards)
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ));
 
-    if (!dashboardResult || dashboardResult.length === 0) {
-      throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
-    }
+      if (!dashboardResult || dashboardResult.length === 0) {
+        throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
+      }
 
-    // Update the file to link it to the dashboard
-    const result = await db.update(files)
-      .set({
-        dashboardId: dashboardId,
-      })
-      .where(eq(files.id, fileId))
-      .returning();
+      // Update the file to link it to the dashboard
+      const result = await db.update(files)
+        .set({
+          dashboardId: dashboardId,
+        })
+        .where(eq(files.id, fileId))
+        .returning();
 
-    if (!result || result.length === 0) {
-      throw new Error("Failed to update dashboard file association.");
-    }
+      if (!result || result.length === 0) {
+        throw new Error("Failed to update dashboard file association.");
+      }
 
-    return result[0];
+      return result[0];
+    });
   } catch (error) {
     console.error('Error updating dashboard file association:', error);
     throw error;
@@ -615,44 +686,46 @@ export async function updateDashboardFile(dashboardId: string, fileId: string, u
  */
 export async function getDashboardFiles(dashboardId: string, userId: string) {
   try {
-    // First verify the dashboard belongs to the user
-    const dashboardResult = await db.select({ id: dashboards.id })
-      .from(dashboards)
-      .where(and(
-        eq(dashboards.id, dashboardId),
-        eq(dashboards.userId, userId)
-      ));
+    return await withRLS(async (db) => {
+      // First verify the dashboard belongs to the user
+      const dashboardResult = await db.select({ id: dashboards.id })
+        .from(dashboards)
+        .where(and(
+          eq(dashboards.id, dashboardId),
+          eq(dashboards.userId, userId)
+        ));
 
-    if (!dashboardResult || dashboardResult.length === 0) {
-      // Return null to indicate dashboard not found, let caller handle
-      return null;
-    }
+      if (!dashboardResult || dashboardResult.length === 0) {
+        // Return null to indicate dashboard not found, let caller handle
+        return null;
+      }
 
-    // Get all files linked to this dashboard
-    const fileResult = await db.select()
-      .from(files)
-      .where(and(
-        eq(files.dashboardId, dashboardId),
-        eq(files.userId, userId)
-      ))
-      .orderBy(desc(files.createdAt));
-    
-    // Auto-migrate files that don't have sanitized filenames
-    const filesToMigrate = fileResult.filter(file => !file.sanitizedFilename);
-    if (filesToMigrate.length > 0) {
-      console.log(`Auto-migrating ${filesToMigrate.length} files in dashboard ${dashboardId}`);
-      for (const file of filesToMigrate) {
-        if (file.originalFilename) {
-          const sanitizedFilename = generateSanitizedFilename(file.originalFilename);
-          await db.update(files)
-            .set({ sanitizedFilename: sanitizedFilename })
-            .where(eq(files.id, file.id));
-          file.sanitizedFilename = sanitizedFilename;
+      // Get all files linked to this dashboard
+      const fileResult = await db.select()
+        .from(files)
+        .where(and(
+          eq(files.dashboardId, dashboardId),
+          eq(files.userId, userId)
+        ))
+        .orderBy(desc(files.createdAt));
+      
+      // Auto-migrate files that don't have sanitized filenames
+      const filesToMigrate = fileResult.filter((file: any) => !file.sanitizedFilename);
+      if (filesToMigrate.length > 0) {
+        console.log(`Auto-migrating ${filesToMigrate.length} files in dashboard ${dashboardId}`);
+        for (const file of filesToMigrate) {
+          if (file.originalFilename) {
+            const sanitizedFilename = generateSanitizedFilename(file.originalFilename);
+            await db.update(files)
+              .set({ sanitizedFilename: sanitizedFilename })
+              .where(eq(files.id, file.id));
+            file.sanitizedFilename = sanitizedFilename;
+          }
         }
       }
-    }
-      
-    return fileResult;
+        
+      return fileResult;
+    });
   } catch (error) {
     console.error('Error getting dashboard files:', error);
     throw error;
@@ -664,12 +737,12 @@ export async function getDashboardFiles(dashboardId: string, userId: string) {
  */
 export async function getUserFiles(userId: string) {
   try {
-    const result = await db.select()
-      .from(files)
-      .where(eq(files.userId, userId))
-      .orderBy(desc(files.createdAt));
-    
-    return result;
+    return await withRLS(async (db) => {
+      return db.select()
+        .from(files)
+        .where(eq(files.userId, userId))
+        .orderBy(desc(files.createdAt));
+    });
   } catch (error) {
     console.error('Error fetching user files:', error);
     throw error;
@@ -683,92 +756,99 @@ export async function deleteFile(fileId: string, userId: string) {
   try {
     console.log(`[deleteFile] Starting deletion for fileId: ${fileId}, userId: ${userId}`);
     
-    // First verify the file belongs to the user
-    const fileResult = await db.select()
-      .from(files)
-      .where(and(
-        eq(files.id, fileId),
-        eq(files.userId, userId)
-      ));
+    return await withRLS(async (db) => {
+      // First verify the file belongs to the user
+      const fileResult = await db.select()
+        .from(files)
+        .where(and(
+          eq(files.id, fileId),
+          eq(files.userId, userId)
+        ));
 
-    if (!fileResult || fileResult.length === 0) {
-      console.error(`[deleteFile] File not found: fileId=${fileId}, userId=${userId}`);
-      throw new Error(`File with ID ${fileId} not found or doesn't belong to user`);
-    }
-
-    const file = fileResult[0];
-    console.log(`[deleteFile] Found file:`, {
-      id: file.id,
-      originalFilename: file.originalFilename,
-      storagePath: file.storagePath,
-      userId: file.userId
-    });
-
-    // Delete the file from Supabase storage
-    if (file.storagePath) {
-      console.log(`[deleteFile] Original storagePath: ${file.storagePath}`);
-      
-      try {
-        let bucketName = 'test-bucket'; // Default bucket
-        let filePath = file.storagePath;
-        
-        // Handle different storage path formats
-        if (file.storagePath.includes('/')) {
-          const pathParts = file.storagePath.split('/');
-          
-          // If it starts with bucket name (new format): "test-bucket/dashboards/id/file.csv"
-          if (pathParts[0] === 'test-bucket') {
-            bucketName = pathParts[0];
-            filePath = pathParts.slice(1).join('/');
-          }
-          // If it's old format: "test-bucket/file.csv" or just "dashboards/id/file.csv"
-          else if (pathParts.length === 2 && pathParts[0] === 'test-bucket') {
-            bucketName = pathParts[0];
-            filePath = pathParts[1];
-          }
-          // If it's just a path without bucket: "dashboards/id/file.csv"
-          else {
-            filePath = file.storagePath;
-          }
-        }
-        
-        console.log(`[deleteFile] Attempting to delete from bucket: ${bucketName}, path: ${filePath}`);
-        
-        const { error: storageError } = await supabase.storage
-          .from(bucketName)
-          .remove([filePath]);
-        
-        if (storageError) {
-          console.error('Error deleting file from storage:', storageError);
-          console.error('Storage error details:', JSON.stringify(storageError, null, 2));
-          // Continue with database deletion even if storage fails to avoid orphaned DB records
-          console.warn(`[deleteFile] Storage deletion failed for ${file.storagePath}, but continuing with database deletion`);
-          console.warn(`[deleteFile] This may leave an orphaned file in storage that can be overwritten on re-upload`);
-        } else {
-          console.log(`[deleteFile] Successfully deleted file from storage: ${file.storagePath}`);
-        }
-      } catch (storageErr) {
-        console.error('Exception during storage deletion:', storageErr);
-        console.warn(`[deleteFile] Storage deletion threw exception for ${file.storagePath}, but continuing with database deletion`);
+      if (!fileResult || fileResult.length === 0) {
+        console.error(`[deleteFile] File not found: fileId=${fileId}, userId=${userId}`);
+        throw new Error(`File with ID ${fileId} not found or doesn't belong to user`);
       }
-    }
 
-    // Delete the file record from database
-    console.log(`[deleteFile] Deleting database record for fileId: ${fileId}`);
-    const result = await db.delete(files)
-      .where(and(
-        eq(files.id, fileId),
-        eq(files.userId, userId)
-      ))
-      .returning();
+      const file = fileResult[0];
+      console.log(`[deleteFile] Found file:`, {
+        id: file.id,
+        originalFilename: file.originalFilename,
+        storagePath: file.storagePath,
+        userId: file.userId
+      });
 
-    if (!result || result.length === 0) {
-      console.error(`[deleteFile] Failed to delete database record for fileId: ${fileId}`);
-      throw new Error("Failed to delete file record from database.");
-    }
+      // Delete the file from Supabase storage
+      if (file.storagePath) {
+        console.log(`[deleteFile] Original storagePath: ${file.storagePath}`);
+        
+        try {
+          let bucketName = 'user-files'; // Default to new private bucket
+          let filePath = file.storagePath;
+          
+          // Handle different storage path formats
+          if (file.storagePath.includes('/')) {
+            const pathParts = file.storagePath.split('/');
+            
+            // If it starts with bucket name: "user-files/user_id/dashboard_id/file.csv"
+            if (pathParts[0] === 'user-files') {
+              bucketName = pathParts[0];
+              filePath = pathParts.slice(1).join('/');
+            }
+            // Legacy test-bucket format: "test-bucket/dashboards/id/file.csv"
+            else if (pathParts[0] === 'test-bucket') {
+              bucketName = pathParts[0];
+              filePath = pathParts.slice(1).join('/');
+            }
+            // Old format: "test-bucket/file.csv" or just "dashboards/id/file.csv"
+            else if (pathParts.length === 2 && pathParts[0] === 'test-bucket') {
+              bucketName = pathParts[0];
+              filePath = pathParts[1];
+            }
+            // If it's just a path without bucket: "user_id/dashboard_id/file.csv" or "dashboards/id/file.csv"
+            else {
+              filePath = file.storagePath;
+            }
+          }
+          
+          console.log(`[deleteFile] Attempting to delete from bucket: ${bucketName}, path: ${filePath}`);
+          
+          const { error: storageError } = await supabase.storage
+            .from(bucketName)
+            .remove([filePath]);
+          
+          if (storageError) {
+            console.error('Error deleting file from storage:', storageError);
+            console.error('Storage error details:', JSON.stringify(storageError, null, 2));
+            // Continue with database deletion even if storage fails to avoid orphaned DB records
+            console.warn(`[deleteFile] Storage deletion failed for ${file.storagePath}, but continuing with database deletion`);
+            console.warn(`[deleteFile] This may leave an orphaned file in storage that can be overwritten on re-upload`);
+          } else {
+            console.log(`[deleteFile] Successfully deleted file from storage: ${file.storagePath}`);
+          }
+        } catch (storageErr) {
+          console.error('Exception during storage deletion:', storageErr);
+          console.warn(`[deleteFile] Storage deletion threw exception for ${file.storagePath}, but continuing with database deletion`);
+        }
+      }
 
-    console.log(`[deleteFile] Successfully deleted file: ${fileId}`);
-    return result[0];
+      // Delete the file record from database
+      console.log(`[deleteFile] Deleting database record for fileId: ${fileId}`);
+      const result = await db.delete(files)
+        .where(and(
+          eq(files.id, fileId),
+          eq(files.userId, userId)
+        ))
+        .returning();
+
+      if (!result || result.length === 0) {
+        console.error(`[deleteFile] Failed to delete database record for fileId: ${fileId}`);
+        throw new Error("Failed to delete file record from database.");
+      }
+
+      console.log(`[deleteFile] Successfully deleted file: ${fileId}`);
+      return result[0];
+    });
   } catch (error) {
     console.error('Error deleting file:', error);
     throw error;
