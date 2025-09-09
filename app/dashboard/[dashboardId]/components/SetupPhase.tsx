@@ -27,10 +27,10 @@ export function SetupPhase({
   onRefreshFiles,
   isUpdatingMode = false,
 }: SetupPhaseProps) {
-  // Debug logging
+  // Debug logging - only log when count changes to reduce noise
   React.useEffect(() => {
-    console.log('[SetupPhase] Files prop updated:', files);
-  }, [files]);
+    console.log('[SetupPhase] Files count updated:', files.length);
+  }, [files.length]);
 
   // Convert FileRecord to ExistingFile format
   const existingFiles: ExistingFile[] = files.map(file => ({

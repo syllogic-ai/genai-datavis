@@ -22,16 +22,20 @@ export interface SetupState {
   isFullDashboard: boolean;
 }
 
-export function useSetupState(dashboardId: string, currentWidgetCount?: number) {
+export function useSetupState(dashboardId: string, currentWidgetCount?: number, initialData?: {
+  files?: FileRecord[];
+  dashboard?: any;
+}) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
   const searchParams = useSearchParams();
-  const [files, setFiles] = useState<FileRecord[]>([]);
+  // Initialize with server data if available
+  const [files, setFiles] = useState<FileRecord[]>(initialData?.files || []);
   const [hasMessages, setHasMessages] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialData); // No loading if we have initial data
   const [error, setError] = useState<string | null>(null);
-  const [setupCompleted, setSetupCompleted] = useState(false);
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [setupCompleted, setSetupCompleted] = useState(initialData?.dashboard?.setupCompleted || false);
+  const [dashboardData, setDashboardData] = useState<any>(initialData?.dashboard || null);
 
   // Check phase from URL params
   const urlPhase = searchParams.get('phase');
@@ -39,8 +43,8 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
   const isChatModeFromURL = urlPhase === 'chat';
   console.log('[useSetupState] URL params:', { setup: searchParams.get('setup'), phase: urlPhase });
 
-  // Load dashboard data and files
-  const loadDashboardData = useCallback(async () => {
+  // Load dashboard data and files - optimized to reduce API calls
+  const loadDashboardData = useCallback(async (options: { filesOnly?: boolean } = {}) => {
     if (!userId) {
       console.log('[useSetupState] No userId available, skipping dashboard load');
       return;
@@ -50,28 +54,32 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
       return;
     }
 
+    const { filesOnly = false } = options;
+
     try {
       setIsLoading(true);
       setError(null);
 
-      console.log(`[useSetupState] Loading dashboard data for ${dashboardId} and user ${userId}`);
+      console.log(`[useSetupState] Loading dashboard data for ${dashboardId} and user ${userId} (filesOnly: ${filesOnly})`);
       
-      // Load dashboard metadata (including setupCompleted)
-      const dashboardResponse = await fetch(`/api/dashboards/${dashboardId}`);
-      if (dashboardResponse.ok) {
-        const dashboard = await dashboardResponse.json();
-        setDashboardData(dashboard);
-        // For first-time setup flow, ignore setupCompleted from DB if no widgets exist
-        const hasWidgets = dashboard.widgetCount > 0;
-        const effectiveSetupCompleted = hasWidgets ? (dashboard.setupCompleted || false) : false;
-        setSetupCompleted(effectiveSetupCompleted);
-        console.log(`[useSetupState] Dashboard data:`, {
-          widgetCount: dashboard.widgetCount,
-          dbSetupCompleted: dashboard.setupCompleted,
-          effectiveSetupCompleted
-        });
-      } else {
-        console.warn(`[useSetupState] Failed to load dashboard metadata: ${dashboardResponse.status}`);
+      // Only load dashboard metadata if not in files-only mode
+      if (!filesOnly) {
+        const dashboardResponse = await fetch(`/api/dashboards/${dashboardId}`);
+        if (dashboardResponse.ok) {
+          const dashboard = await dashboardResponse.json();
+          setDashboardData(dashboard);
+          // For first-time setup flow, ignore setupCompleted from DB if no widgets exist
+          const hasWidgets = dashboard.widgetCount > 0;
+          const effectiveSetupCompleted = hasWidgets ? (dashboard.setupCompleted || false) : false;
+          setSetupCompleted(effectiveSetupCompleted);
+          console.log(`[useSetupState] Dashboard data:`, {
+            widgetCount: dashboard.widgetCount,
+            dbSetupCompleted: dashboard.setupCompleted,
+            effectiveSetupCompleted
+          });
+        } else {
+          console.warn(`[useSetupState] Failed to load dashboard metadata: ${dashboardResponse.status}`);
+        }
       }
       
       // Load files
@@ -99,7 +107,9 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
       console.warn(`[useSetupState] ${errorMessage}, treating as new dashboard`);
       // Don't set error for new dashboards - this is expected behavior
       setFiles([]);
-      setDashboardData(null);
+      if (!filesOnly) {
+        setDashboardData(null);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -113,17 +123,23 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
     }
   }, [currentWidgetCount]);
 
-  // Initialize data
+  // Initialize data - skip if we have initial data
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    if (!initialData) {
+      loadDashboardData();
+    } else {
+      console.log('[useSetupState] Using pre-loaded server data, skipping client fetch');
+      setIsLoading(false);
+    }
+  }, [loadDashboardData, initialData]);
 
-  // Also reload data when user authentication changes
+  // Also reload data when user authentication changes - but prevent duplicate calls
   useEffect(() => {
-    if (userId) {
+    if (userId && !isLoading && !initialData) {
       loadDashboardData();
     }
-  }, [userId, loadDashboardData]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]); // Intentionally omitting loadDashboardData and isLoading to prevent infinite loops
 
   // Remove file from local state (API call handled by component)
   const removeFile = useCallback((fileId: string) => {
@@ -131,9 +147,17 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
     setFiles(prev => prev.filter(f => f.id !== fileId));
   }, []);
 
-  // Add file to list (called after successful upload)
+  // Add file to list (called after successful upload) - prevent duplicates
   const addFile = useCallback((file: FileRecord) => {
-    setFiles(prev => [...prev, file]);
+    setFiles(prev => {
+      // Check if file with same name already exists
+      if (prev.some(f => f.name === file.name)) {
+        console.log(`[useSetupState] File ${file.name} already exists, skipping duplicate add`);
+        return prev;
+      }
+      console.log(`[useSetupState] Adding file ${file.name} to local state`);
+      return [...prev, file];
+    });
   }, []);
 
   // Calculate setup state - memoized to prevent unnecessary recalculations
@@ -243,11 +267,15 @@ export function useSetupState(dashboardId: string, currentWidgetCount?: number) 
     }
   }, [dashboardId]);
 
-  // Refresh files from database
+  // Debounced refresh to prevent rapid successive calls - only refresh files, not dashboard metadata
   const refreshFiles = useCallback(async () => {
-    console.log('[useSetupState] Manually refreshing files...');
-    await loadDashboardData();
-  }, [loadDashboardData]);
+    if (isLoading) {
+      console.log('[useSetupState] Refresh already in progress, skipping...');
+      return;
+    }
+    console.log('[useSetupState] Manually refreshing files only...');
+    await loadDashboardData({ filesOnly: true });
+  }, [loadDashboardData, isLoading]);
 
   return {
     files,

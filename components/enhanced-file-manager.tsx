@@ -97,7 +97,9 @@ export function EnhancedFileManager({
     return [];
   }, [existingFiles]);
 
-  // Enhanced upload processing
+  // Enhanced upload processing - extract success key for stable dependency
+  const successKey = uploadHook.successes.join('|');
+  
   useEffect(() => {
     if (uploadHook.isSuccess && uploadHook.files.length > 0) {
       // Create a unique identifier for this upload batch
@@ -112,6 +114,7 @@ export function EnhancedFileManager({
       const processUploads = async () => {
         // Mark this upload batch as being processed
         processedUploadsRef.current.add(uploadBatchId);
+        
         // Check for duplicates and warn user (but don't block upload since we use upsert=true)
         const duplicates = checkForDuplicates(uploadHook.files);
         if (duplicates.length > 0) {
@@ -150,6 +153,7 @@ export function EnhancedFileManager({
         }
 
         // Process successful uploads - upload endpoint now handles database creation
+        let hasSuccessfulUploads = false;
         for (const file of uploadHook.files) {
           if (uploadHook.successes.includes(file.name)) {
             const sanitizedName = file.sanitizedName || generateSanitizedFilename(file.name);
@@ -163,32 +167,54 @@ export function EnhancedFileManager({
             };
             
             onFileAdded(newFile);
-            toast.success(`${file.name} uploaded successfully! Click "Continue to Dashboard" when ready.`, {
-              duration: 4000,
-            });
+            hasSuccessfulUploads = true;
           }
         }
 
-        // Refresh files from database
-        if (onRefreshFiles) {
-          setTimeout(() => {
-            onRefreshFiles();
-          }, 500);
+        // Single success toast for all uploads
+        if (hasSuccessfulUploads) {
+          const successCount = uploadHook.successes.length;
+          toast.success(
+            `${successCount} file${successCount > 1 ? 's' : ''} uploaded successfully! Click "Continue to Dashboard" when ready.`,
+            { duration: 4000 }
+          );
         }
 
-        // Clear upload state and reset duplicate attempts
+        // Optional refresh - only if explicitly requested and there were successful uploads
+        // In most cases, the optimistic file addition above is sufficient
+        if (hasSuccessfulUploads && onRefreshFiles && process.env.NODE_ENV === 'development') {
+          // Only refresh in development mode to help with debugging
+          // Production relies on optimistic updates for better UX
+          setTimeout(() => {
+            onRefreshFiles();
+          }, 1500); // Longer delay to ensure all operations complete
+        }
+
+        // Clear upload state after processing
         setTimeout(() => {
           uploadHook.setFiles([]);
           uploadHook.setErrors([]);
           uploadHook.setSuccesses([]);
           setDuplicateAttempts([]);
-          processedUploadsRef.current.clear(); // Clear processed uploads tracking
-        }, 1000);
+          // Don't clear processedUploadsRef immediately - keep it for longer to prevent duplicates
+        }, 1200);
       };
 
       processUploads();
     }
-  }, [uploadHook.isSuccess, uploadHook.files, uploadHook.successes, dashboardId, onFileAdded, onRefreshFiles, checkForDuplicates, uploadHook, userId]);
+  }, [uploadHook.isSuccess, successKey, dashboardId, onFileAdded, onRefreshFiles, checkForDuplicates, uploadHook.files.length, userId, uploadHook]);
+
+  // Clear processed uploads tracking after a delay to prevent memory leaks
+  useEffect(() => {
+    if (uploadHook.isSuccess && uploadHook.files.length > 0) {
+      const timer = setTimeout(() => {
+        processedUploadsRef.current.clear();
+        console.log('[EnhancedFileManager] Cleared processed uploads tracking');
+      }, 5000); // Clear after 5 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [uploadHook.isSuccess, uploadHook.files.length]);
 
   const getFileIcon = (type: string) => {
     if (!type) return <File className="w-4 h-4" />;

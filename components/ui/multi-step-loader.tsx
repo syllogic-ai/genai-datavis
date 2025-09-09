@@ -1,7 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "motion/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 const CheckIcon = ({ className }: { className?: string }) => {
   return (
@@ -35,8 +35,42 @@ const CheckFilled = ({ className }: { className?: string }) => {
   );
 };
 
+const CircleIcon = ({ className }: { className?: string }) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+      className={cn("w-6 h-6 ", className)}
+    >
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+};
+
+const XCircle = ({ className }: { className?: string }) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+      className={cn("w-6 h-6 ", className)}
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 9l6 6M15 9l-6 6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
+
+type TaskStatus = "pending" | "in_progress" | "completed" | "failed";
+
 type LoadingState = {
   text: string;
+  status?: TaskStatus;
 };
 
 const LoaderCore = ({
@@ -46,11 +80,56 @@ const LoaderCore = ({
   loadingStates: LoadingState[];
   value?: number;
 }) => {
+  const hasStatuses = useMemo(
+    () => loadingStates.some((s) => s.status !== undefined),
+    [loadingStates]
+  );
+
   return (
     <div className="flex relative justify-start max-w-xl mx-auto flex-col mt-40">
       {loadingStates.map((loadingState, index) => {
+        const status = loadingState.status;
         const distance = Math.abs(index - value);
-        const opacity = Math.max(1 - distance * 0.2, 0); // Minimum opacity is 0, keep it 0.2 if you're sane.
+        const opacity = Math.max(1 - distance * 0.2, 0);
+
+        let icon = null;
+        let textClass = "text-black dark:text-white";
+
+        if (hasStatuses) {
+          switch (status) {
+            case "completed":
+              icon = <CheckFilled className="text-lime-500" />;
+              textClass = "text-lime-600 dark:text-lime-500";
+              break;
+            case "failed":
+              icon = <XCircle className="text-red-500" />;
+              textClass = "text-red-600 dark:text-red-500";
+              break;
+            case "in_progress":
+              icon = <CircleIcon className="text-sky-500 animate-pulse" />;
+              textClass = "text-sky-600 dark:text-sky-500";
+              break;
+            default:
+              icon = <CircleIcon className="text-zinc-400" />;
+              textClass = "text-zinc-600 dark:text-zinc-300";
+          }
+        } else {
+          if (index > value) {
+            icon = <CheckIcon className="text-black dark:text-white" />;
+          } else {
+            icon = (
+              <CheckFilled
+                className={cn(
+                  "text-black dark:text-white",
+                  value === index && "text-black dark:text-lime-500 opacity-100"
+                )}
+              />
+            );
+          }
+          if (value === index) {
+            textClass = cn(textClass, "text-black dark:text-lime-500 opacity-100");
+          }
+        }
 
         return (
           <motion.div
@@ -60,28 +139,8 @@ const LoaderCore = ({
             animate={{ opacity: opacity, y: -(value * 40) }}
             transition={{ duration: 0.5 }}
           >
-            <div>
-              {index > value && (
-                <CheckIcon className="text-black dark:text-white" />
-              )}
-              {index <= value && (
-                <CheckFilled
-                  className={cn(
-                    "text-black dark:text-white",
-                    value === index &&
-                      "text-black dark:text-lime-500 opacity-100"
-                  )}
-                />
-              )}
-            </div>
-            <span
-              className={cn(
-                "text-black dark:text-white",
-                value === index && "text-black dark:text-lime-500 opacity-100"
-              )}
-            >
-              {loadingState.text}
-            </span>
+            <div>{icon}</div>
+            <span className={cn(textClass)}>{loadingState.text}</span>
           </motion.div>
         );
       })}
@@ -102,9 +161,28 @@ export const MultiStepLoader = ({
 }) => {
   const [currentState, setCurrentState] = useState(0);
 
+  const hasStatuses = useMemo(
+    () => loadingStates.some((s) => s.status !== undefined),
+    [loadingStates]
+  );
+
+  const activeIndex = useMemo(() => {
+    if (!hasStatuses) return currentState;
+    const inProgress = loadingStates.findIndex((s) => s.status === "in_progress");
+    if (inProgress !== -1) return inProgress;
+    const firstPending = loadingStates.findIndex((s) => s.status === "pending");
+    if (firstPending !== -1) return firstPending;
+    // All done (completed/failed) → show last
+    return Math.max(loadingStates.length - 1, 0);
+  }, [hasStatuses, loadingStates, currentState]);
+
   useEffect(() => {
     if (!loading) {
       setCurrentState(0);
+      return;
+    }
+    if (hasStatuses) {
+      // When statuses are provided, we render reactively off props and do not auto-advance.
       return;
     }
     const timeout = setTimeout(() => {
@@ -118,7 +196,8 @@ export const MultiStepLoader = ({
     }, duration);
 
     return () => clearTimeout(timeout);
-  }, [currentState, loading, loop, loadingStates.length, duration]);
+  }, [currentState, loading, loop, loadingStates.length, duration, hasStatuses]);
+
   return (
     <AnimatePresence mode="wait">
       {loading && (
@@ -135,7 +214,7 @@ export const MultiStepLoader = ({
           className="w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl"
         >
           <div className="h-96  relative">
-            <LoaderCore value={currentState} loadingStates={loadingStates} />
+            <LoaderCore value={activeIndex} loadingStates={loadingStates} />
           </div>
 
           <div className="bg-gradient-to-t inset-x-0 z-20 bottom-0 bg-white dark:bg-black h-full absolute [mask-image:radial-gradient(900px_at_center,transparent_30%,white)]" />

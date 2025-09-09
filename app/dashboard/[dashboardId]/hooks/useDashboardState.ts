@@ -8,18 +8,22 @@ import { useSession } from "@/lib/auth-client";
 import { WidgetPersistence, SaveStatus } from "@/lib/WidgetPersistence";
 import { logger } from "@/lib/logger";
 
-export function useDashboardState(dashboardId: string) {
+export function useDashboardState(dashboardId: string, initialData?: {
+  dashboard?: any;
+  widgets?: any[];
+}) {
   const { data: session } = useSession();
   const userId = session?.user?.id;
-  const [widgets, setWidgets] = useState<Widget[]>([]);
-  const [dashboardName, setDashboardName] = useState("My Dashboard");
+  // Initialize state with server data if available
+  const [widgets, setWidgets] = useState<Widget[]>(initialData?.widgets || []);
+  const [dashboardName, setDashboardName] = useState(initialData?.dashboard?.name || "My Dashboard");
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialData); // No loading if we have initial data
   const [isSilentRefresh, setIsSilentRefresh] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [isPublished, setIsPublished] = useState(false);
+  const [isPublished, setIsPublished] = useState(initialData?.dashboard?.isPublic || false);
   const [isPublishLoading, setIsPublishLoading] = useState(false);
 
   // Reference to the grid component's add widget function
@@ -32,7 +36,10 @@ export function useDashboardState(dashboardId: string) {
   useEffect(() => {
     if (!userId) return;
     
-    logger.debug(`[useDashboardState] Initializing widget persistence for dashboard ${dashboardId}`);
+    logger.debug(`[useDashboardState] Initializing widget persistence for dashboard ${dashboardId}`, {
+      hasInitialData: !!initialData,
+      initialWidgetsCount: initialData?.widgets?.length || 0
+    });
     
     const persistenceManager = new WidgetPersistence({
       dashboardId: dashboardId,
@@ -46,40 +53,49 @@ export function useDashboardState(dashboardId: string) {
 
     widgetPersistenceRef.current = persistenceManager;
     
-    // Load dashboard data and widgets concurrently
-    Promise.all([
-      // Load dashboard information (including is_public status)
-      fetch(`/api/dashboards/${dashboardId}`)
-        .then(res => res.ok ? res.json() : null)
-        .then(dashboard => {
-          if (dashboard) {
-            logger.debug(`[useDashboardState] Loaded dashboard info:`, { 
-              id: dashboard.id, 
-              name: dashboard.name, 
-              isPublic: dashboard.isPublic 
-            });
-            setDashboardName(dashboard.name || "My Dashboard");
-            setIsPublished(dashboard.isPublic || false);
-          }
-        })
-        .catch(err => logger.warn('[useDashboardState] Failed to load dashboard info:', err)),
-      
-      // Load widgets
-      persistenceManager.loadWidgets().then((loadedWidgets) => {
+    // If we have initial data, skip the loading process
+    if (initialData) {
+      logger.debug(`[useDashboardState] Using pre-loaded server data, skipping client fetch`);
+      setIsLoading(false);
+      return () => {
+        logger.debug(`[useDashboardState] Cleaning up widget persistence`);
+        persistenceManager.cleanup();
+        widgetPersistenceRef.current = null;
+      };
+    }
+    
+    // Only load data if we don't have initial data (fallback for edge cases)
+    persistenceManager.loadWidgets()
+      .then((loadedWidgets) => {
         logger.debug(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
         setWidgets(loadedWidgets);
-        return loadedWidgets;
+        
+        // Only load dashboard info after widgets are loaded to reduce concurrent API calls
+        return fetch(`/api/dashboards/${dashboardId}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(dashboard => {
+            if (dashboard) {
+              logger.debug(`[useDashboardState] Loaded dashboard info:`, { 
+                id: dashboard.id, 
+                name: dashboard.name, 
+                isPublic: dashboard.isPublic 
+              });
+              setDashboardName(dashboard.name || "My Dashboard");
+              setIsPublished(dashboard.isPublic || false);
+            }
+          })
+          .catch(err => logger.warn('[useDashboardState] Failed to load dashboard info:', err));
       })
-    ]).finally(() => {
-      setIsLoading(false);
-    });
+      .finally(() => {
+        setIsLoading(false);
+      });
 
     return () => {
       logger.debug(`[useDashboardState] Cleaning up widget persistence`);
       persistenceManager.cleanup();
       widgetPersistenceRef.current = null;
     };
-  }, [dashboardId, userId]);
+  }, [dashboardId, userId, initialData]);
 
   // Load widgets from database with cache busting
   const loadWidgets = useCallback(async (options: { bustCache?: boolean; retryCount?: number; silent?: boolean } = {}) => {
@@ -109,21 +125,13 @@ export function useDashboardState(dashboardId: string) {
       console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets`);
       setWidgets(loadedWidgets);
       
-      // Show success toast based on context
-      if (loadedWidgets.length > 0) {
-        if (bustCache && silent) {
-          // Silent refresh with cache bust - show dashboard updated message
-          toast.success('Dashboard updated! 🎉', {
-            duration: 2000,
-            position: 'top-right',
-          });
-        } else if (!bustCache) {
-          // Regular load - show loaded message
-          toast.success(`Loaded ${loadedWidgets.length} widget${loadedWidgets.length === 1 ? '' : 's'}`, {
-            duration: 2000,
-            position: 'top-right',
-          });
-        }
+      // Reduce toast notifications - only show for explicit user actions
+      if (loadedWidgets.length > 0 && bustCache && !silent && retryCount === 0) {
+        // Only show toast for explicit user-triggered cache refresh
+        toast.success('Dashboard updated! 🎉', {
+          duration: 2000,
+          position: 'top-right',
+        });
       }
       
       // Reduced retry count from 2 to 0 to minimize Redis requests
@@ -240,9 +248,9 @@ export function useDashboardState(dashboardId: string) {
       addWidgetRef.current(type);
       // Note: Keep existing published status - new widgets don't unpublish automatically
       
-      // Show a quick toast for widget creation
-      toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} widget added!`, {
-        duration: 2000,
+      // Reduced toast spam - just a simple notification
+      toast.success(`Widget added!`, {
+        duration: 1500,
         position: 'top-right',
         icon: '✨',
       });

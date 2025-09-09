@@ -4,6 +4,7 @@ import { ChatInput } from "@/components/dashboard/ChatInput";
 import { TagItem } from "@/components/ui/tags/tag-selector";
 import { ChartArea } from "lucide-react";
 import { useState } from "react";
+import MultiStepLoaderDemo from "@/components/multi-step-loader-demo";
 
 const sampleItems = [
   { id: "1", label: "Sales metrics", icon: ChartArea, category: "File" },
@@ -43,12 +44,18 @@ export default function TestPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex justify-center items-center bg-background">
-      <ChatInput
-        availableItems={sampleItems}
-        onSubmit={handleSubmit}
-        isLoading={isLoading}
-      />
+    <div className="min-h-screen w-full flex flex-col gap-10 justify-center items-center bg-background p-8">
+      <div className="w-full max-w-3xl">
+        <ChatInput
+          availableItems={sampleItems}
+          onSubmit={handleSubmit}
+          isLoading={isLoading}
+        />
+      </div>
+
+      <div className="w-full max-w-3xl">
+        <MultiStepLoaderDemo />
+      </div>
     </div>
   );
 }
