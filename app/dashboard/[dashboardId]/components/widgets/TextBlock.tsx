@@ -273,6 +273,23 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
       if (isEditing) {
         setActiveEditor(editor);
         showToolbar();
+        
+        // When user enters text block, position cursor at end and inherit formatting
+        setTimeout(() => {
+          // Move cursor to end of content
+          editor.commands.focus('end');
+          
+          // Check if cursor is at a position with existing formatting and inherit it
+          const { from } = editor.state.selection;
+          const resolvedPos = editor.state.doc.resolve(from);
+          const nodeAtPos = resolvedPos.parent;
+          
+          // If cursor is in a text node with styling, we don't need to do anything special
+          // The editor will naturally pick up the formatting from the current position
+          
+          // Force update the active editor to refresh toolbar state
+          setActiveEditor(editor);
+        }, 50);
       }
     },
     onSelectionUpdate: ({ editor }) => {
@@ -294,6 +311,12 @@ export function TextBlock({ widget, onUpdate, isEditing, onEditToggle }: TextBlo
     editorProps: {
       attributes: {
         class: `max-w-full focus:outline-none min-h-[2rem] ${!isEditing ? 'cursor-default' : 'cursor-text'}`,
+      },
+      handleClick: (view, pos, event) => {
+        // When user clicks in the editor, ensure cursor positioning picks up local formatting
+        if (isEditing) {
+          return false; // Let default handler work
+        }
       },
     },
   });

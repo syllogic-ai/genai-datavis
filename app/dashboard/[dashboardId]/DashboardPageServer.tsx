@@ -29,7 +29,7 @@ export default async function DashboardPageServer({
   const userId = session.user.id;
 
   // Pre-load all dashboard data on server in parallel using optimized cache-aware functions
-  const { dashboard, files, widgets, chats } = await preloadDashboardData(dashboardId, userId);
+  const { dashboard, files, widgets, chats, themeData } = await preloadDashboardData(dashboardId, userId);
 
   // If dashboard doesn't exist, return 404
   if (!dashboard) {
@@ -57,6 +57,8 @@ export default async function DashboardPageServer({
     widgetsCount: widgets.length,
     chatsCount: chats.length,
     defaultChatId,
+    hasThemeData: !!themeData,
+    themeName: themeData?.theme?.name,
     userId
   });
 
@@ -76,6 +78,7 @@ export default async function DashboardPageServer({
         defaultChatId={defaultChatId}
         searchParams={searchParamsData}
         userId={userId}
+        initialThemeData={themeData}
       />
     </Suspense>
   );

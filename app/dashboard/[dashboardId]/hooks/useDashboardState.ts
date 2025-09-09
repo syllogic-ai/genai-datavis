@@ -65,37 +65,46 @@ export function useDashboardState(dashboardId: string, initialData?: {
     }
     
     // Only load data if we don't have initial data (fallback for edge cases)
-    persistenceManager.loadWidgets()
-      .then((loadedWidgets) => {
-        logger.debug(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
-        setWidgets(loadedWidgets);
-        
-        // Only load dashboard info after widgets are loaded to reduce concurrent API calls
-        return fetch(`/api/dashboards/${dashboardId}`)
-          .then(res => res.ok ? res.json() : null)
-          .then(dashboard => {
-            if (dashboard) {
-              logger.debug(`[useDashboardState] Loaded dashboard info:`, { 
-                id: dashboard.id, 
-                name: dashboard.name, 
-                isPublic: dashboard.isPublic 
-              });
-              setDashboardName(dashboard.name || "My Dashboard");
-              setIsPublished(dashboard.isPublic || false);
-            }
-          })
-          .catch(err => logger.warn('[useDashboardState] Failed to load dashboard info:', err));
-      })
-      .finally(() => {
-        setIsLoading(false);
+    if (!initialData || !Array.isArray((initialData as any)?.widgets) || (initialData as any)?.widgets?.length === 0) {
+      logger.debug(`[useDashboardState] No initial data provided, loading from API`);
+      persistenceManager.loadWidgets()
+        .then((loadedWidgets) => {
+          logger.debug(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
+          setWidgets(loadedWidgets);
+          
+          // Only load dashboard info after widgets are loaded to reduce concurrent API calls
+          return fetch(`/api/dashboards/${dashboardId}`)
+            .then(res => res.ok ? res.json() : null)
+            .then(dashboard => {
+              if (dashboard) {
+                logger.debug(`[useDashboardState] Loaded dashboard info:`, { 
+                  id: dashboard.id, 
+                  name: dashboard.name, 
+                  isPublic: dashboard.isPublic 
+                });
+                setDashboardName(dashboard.name || "My Dashboard");
+                setIsPublished(dashboard.isPublic || false);
+              }
+            })
+            .catch(err => logger.warn('[useDashboardState] Failed to load dashboard info:', err));
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else {
+      logger.debug(`[useDashboardState] Using pre-loaded initial data:`, {
+        widgetsCount: (initialData as any)?.widgets?.length || 0,
+        dashboardName: (initialData as any)?.dashboard?.name
       });
+      setIsLoading(false);
+    }
 
     return () => {
       logger.debug(`[useDashboardState] Cleaning up widget persistence`);
       persistenceManager.cleanup();
       widgetPersistenceRef.current = null;
     };
-  }, [dashboardId, userId, initialData]);
+  }, [dashboardId, userId]);
 
   // Load widgets from database with cache busting
   const loadWidgets = useCallback(async (options: { bustCache?: boolean; retryCount?: number; silent?: boolean } = {}) => {

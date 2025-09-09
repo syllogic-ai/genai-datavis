@@ -10,7 +10,7 @@ export function SyllogicBadge() {
       href="https://syllogic.ai"
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-white text-sm font-medium border border-gray-200 transition-all duration-200 shadow-sm hover:shadow-md"
+      className="inline-flex items-center text-black gap-2 px-3 py-2 rounded-lg bg-white text-sm font-medium border border-gray-200 transition-all duration-200 shadow-sm hover:shadow-md"
     >
     <div className="flex items-center gap-0.5">
     Made with

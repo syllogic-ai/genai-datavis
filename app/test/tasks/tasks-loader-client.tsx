@@ -5,6 +5,16 @@ import { MultiStepLoader } from "@/components/ui/multi-step-loader";
 
 type Task = { title: string; status: string };
 
+const fallbackLoadingStates = [
+  { text: "Waking up the AI hamsters..." },
+  { text: "Brewing an extra-strong coffee..." },
+  { text: "Convincing charts to behave..." },
+  { text: "Teaching data some manners..." },
+  { text: "Assembling tiny bar charts with tweezers..." },
+  { text: "Optimizing witty responses..." },
+  { text: "Almost there... probably." },
+];
+
 export default function TasksLoaderClient({
   initialTasks,
   taskGroupId,
@@ -44,9 +54,15 @@ export default function TasksLoaderClient({
     setLoading(!allDone);
   }, [tasks]);
 
+  const isWaitingForTasks = tasks.length === 0;
+
   return (
     <div className="w-full min-h-[60vh] flex items-center justify-center">
-      <MultiStepLoader loadingStates={loadingStates} loading={loading} duration={2000} />
+      {isWaitingForTasks ? (
+        <MultiStepLoader loadingStates={fallbackLoadingStates} loading={loading} duration={1600} loop />
+      ) : (
+        <MultiStepLoader loadingStates={loadingStates} loading={loading} duration={2000} />
+      )}
     </div>
   );
 }

@@ -35,6 +35,7 @@ interface DashboardPageClientProps {
   defaultChatId: string | null;
   searchParams: { [key: string]: string | string[] | undefined };
   userId: string;
+  initialThemeData?: any;
 }
 
 function EnhancedDashboardContent({
@@ -43,7 +44,8 @@ function EnhancedDashboardContent({
   initialWidgets,
   defaultChatId: preloadedChatId,
   searchParams: serverSearchParams,
-  userId: serverUserId
+  userId: serverUserId,
+  initialThemeData
 }: DashboardPageClientProps) {
   const params = useParams();
   const router = useRouter();
@@ -521,13 +523,17 @@ export default function DashboardPageClient({
   initialWidgets,
   defaultChatId,
   searchParams,
-  userId
+  userId,
+  initialThemeData
 }: DashboardPageClientProps) {
   const params = useParams();
   const dashboardId = params.dashboardId as string;
 
   return (
-    <DashboardThemeProvider dashboardId={dashboardId}>
+    <DashboardThemeProvider 
+      dashboardId={dashboardId}
+      initialThemeData={initialThemeData}
+    >
       <EnhancedDashboardContent
         initialDashboard={initialDashboard}
         initialFiles={initialFiles}
@@ -535,6 +541,7 @@ export default function DashboardPageClient({
         defaultChatId={defaultChatId}
         searchParams={searchParams}
         userId={userId}
+        initialThemeData={initialThemeData}
       />
     </DashboardThemeProvider>
   );

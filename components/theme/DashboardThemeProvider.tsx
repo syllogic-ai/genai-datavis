@@ -43,18 +43,23 @@ function cleanupGlobalTheme() {
 export function DashboardThemeProvider({
   dashboardId,
   children,
+  initialThemeData,
 }: {
   dashboardId: string;
   children: React.ReactNode;
+  initialThemeData?: any;
 }) {
   
-  const [activeTheme, setActiveThemeState] = useState<Theme | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // Initialize with server-provided data if available
+  const [activeTheme, setActiveThemeState] = useState<Theme | null>(initialThemeData?.theme || null);
+  const [isLoading, setIsLoading] = useState(!initialThemeData);
   const [error, setError] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
   const [themeClassName, setThemeClassName] = useState<string>('');
-  const [themeMode, setThemeModeState] = useState<'light' | 'dark' | 'system'>('system');
-  const [dashboardData, setDashboardData] = useState<any>(null);
+  const [themeMode, setThemeModeState] = useState<'light' | 'dark' | 'system'>(
+    initialThemeData?.dashboard?.themeMode || 'system'
+  );
+  const [dashboardData, setDashboardData] = useState<any>(initialThemeData?.dashboard || null);
 
   // Determine dark mode based on dashboard theme mode preference
   useEffect(() => {
@@ -125,10 +130,17 @@ export function DashboardThemeProvider({
     }
   }, [dashboardId]);
 
-  // Load dashboard theme on mount
+  // Load dashboard theme on mount - only if we don't have initial data
   useEffect(() => {
-    loadDashboardTheme();
-  }, [dashboardId, loadDashboardTheme]);
+    if (!initialThemeData) {
+      loadDashboardTheme();
+    } else {
+      console.log(`[DashboardThemeProvider] Using pre-loaded theme data:`, {
+        themeName: initialThemeData.theme?.name,
+        themeMode: initialThemeData.dashboard?.themeMode
+      });
+    }
+  }, [dashboardId, loadDashboardTheme, initialThemeData]);
 
   // Apply active theme to CSS variables
   useEffect(() => {

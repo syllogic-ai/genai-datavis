@@ -139,7 +139,50 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
   const getCurrentFont = () => {
     if (!isEditorValid(editor)) return "default";
     
-    const fontFamily = editor.getAttributes('textStyle').fontFamily;
+    // First try to get font from current text style attributes
+    let fontFamily = editor.getAttributes('textStyle').fontFamily;
+    
+    // If no font found in textStyle, check the DOM element at cursor position
+    if (!fontFamily) {
+      try {
+        const { from } = editor.state.selection;
+        const resolvedPos = editor.state.doc.resolve(from);
+        
+        // Walk up the tree to find any element with font-family styling
+        const view = editor.view;
+        const domAtPos = view.domAtPos(from);
+        let element = domAtPos.node;
+        
+        // Search parent elements for font-family style
+        while (element && element.nodeType !== Node.DOCUMENT_NODE) {
+          if (element.nodeType === Node.ELEMENT_NODE) {
+            const el = element as HTMLElement;
+            const style = el.getAttribute('style');
+            if (style && style.includes('font-family')) {
+              const match = style.match(/font-family:\s*([^;]+)/);
+              if (match) {
+                fontFamily = match[1].trim().replace(/['"]/g, '');
+                break;
+              }
+            }
+            // Also check computed style
+            const computedStyle = window.getComputedStyle(el);
+            if (computedStyle.fontFamily && computedStyle.fontFamily !== 'inherit' && computedStyle.fontFamily !== 'initial') {
+              // Only use computed style if it's not a generic fallback
+              const computedFont = computedStyle.fontFamily.split(',')[0].trim().replace(/['"]/g, '');
+              if (!computedFont.includes('serif') && !computedFont.includes('sans-serif') && !computedFont.includes('monospace')) {
+                fontFamily = computedFont;
+                break;
+              }
+            }
+          }
+          element = element.parentNode;
+        }
+      } catch (error) {
+        console.log('[Toolbar] Error detecting font from DOM:', error);
+      }
+    }
+    
     if (!fontFamily) return "default";
     
     // Normalize the font family for comparison
@@ -180,8 +223,45 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
 
   const getCurrentFontWeight = () => {
     if (!isEditorValid(editor)) return "400";
-    const attrs = editor.getAttributes('textStyle');
-    return attrs.fontWeight || "400";
+    
+    // First try to get weight from current text style attributes
+    let fontWeight = editor.getAttributes('textStyle').fontWeight;
+    
+    // If no weight found in textStyle, check the DOM element at cursor position
+    if (!fontWeight) {
+      try {
+        const { from } = editor.state.selection;
+        const view = editor.view;
+        const domAtPos = view.domAtPos(from);
+        let element = domAtPos.node;
+        
+        // Search parent elements for font-weight style
+        while (element && element.nodeType !== Node.DOCUMENT_NODE) {
+          if (element.nodeType === Node.ELEMENT_NODE) {
+            const el = element as HTMLElement;
+            const style = el.getAttribute('style');
+            if (style && style.includes('font-weight')) {
+              const match = style.match(/font-weight:\s*([^;]+)/);
+              if (match) {
+                fontWeight = match[1].trim();
+                break;
+              }
+            }
+            // Also check computed style
+            const computedStyle = window.getComputedStyle(el);
+            if (computedStyle.fontWeight && computedStyle.fontWeight !== 'inherit' && computedStyle.fontWeight !== 'initial') {
+              fontWeight = computedStyle.fontWeight;
+              break;
+            }
+          }
+          element = element.parentNode;
+        }
+      } catch (error) {
+        console.log('[Toolbar] Error detecting font weight from DOM:', error);
+      }
+    }
+    
+    return fontWeight || "400";
   };
 
   const getAvailableWeightsForCurrentFont = () => {
@@ -204,8 +284,45 @@ export function SimpleEditorToolbar({ editor, isVisible }: SimpleEditorToolbarPr
 
   const getCurrentFontSize = () => {
     if (!isEditorValid(editor)) return "16px";
-    const attrs = editor.getAttributes('textStyle');
-    return attrs.fontSize || "16px";
+    
+    // First try to get size from current text style attributes
+    let fontSize = editor.getAttributes('textStyle').fontSize;
+    
+    // If no size found in textStyle, check the DOM element at cursor position
+    if (!fontSize) {
+      try {
+        const { from } = editor.state.selection;
+        const view = editor.view;
+        const domAtPos = view.domAtPos(from);
+        let element = domAtPos.node;
+        
+        // Search parent elements for font-size style
+        while (element && element.nodeType !== Node.DOCUMENT_NODE) {
+          if (element.nodeType === Node.ELEMENT_NODE) {
+            const el = element as HTMLElement;
+            const style = el.getAttribute('style');
+            if (style && style.includes('font-size')) {
+              const match = style.match(/font-size:\s*([^;]+)/);
+              if (match) {
+                fontSize = match[1].trim();
+                break;
+              }
+            }
+            // Also check computed style
+            const computedStyle = window.getComputedStyle(el);
+            if (computedStyle.fontSize && computedStyle.fontSize !== 'inherit' && computedStyle.fontSize !== 'initial') {
+              fontSize = computedStyle.fontSize;
+              break;
+            }
+          }
+          element = element.parentNode;
+        }
+      } catch (error) {
+        console.log('[Toolbar] Error detecting font size from DOM:', error);
+      }
+    }
+    
+    return fontSize || "16px";
   };
 
   const increaseFontSize = () => {

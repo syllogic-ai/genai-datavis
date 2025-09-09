@@ -524,11 +524,17 @@ export async function getDashboardWidgets(dashboardId: string, userId: string) {
         throw new Error(`Dashboard with ID ${dashboardId} not found or doesn't belong to user`);
       }
 
-      // Get widgets with only the fields needed for navigation
+      // Get widgets with all necessary fields
       const result = await db.select({
         id: widgets.id,
         title: widgets.title,
         type: widgets.type,
+        config: widgets.config,
+        data: widgets.data,
+        summary: widgets.summary,
+        order: widgets.order,
+        createdAt: widgets.createdAt,
+        updatedAt: widgets.updatedAt,
       })
         .from(widgets)
         .where(and(
@@ -537,11 +543,17 @@ export async function getDashboardWidgets(dashboardId: string, userId: string) {
         ))
         .orderBy(desc(widgets.createdAt));
 
-      // Transform the result to match expected format
+      // Transform the result to match expected Widget interface format
       return result.map((widget: any) => ({
         id: widget.id,
         title: widget.title,
-        type: widget.type || 'chart', // Default to 'chart' if no type specified
+        type: widget.type || 'chart',
+        config: widget.config || {},
+        data: widget.data,
+        summary: widget.summary,
+        order: widget.order,
+        createdAt: widget.createdAt,
+        updatedAt: widget.updatedAt,
       }));
     });
   } catch (error) {
