@@ -74,9 +74,7 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('[FILE_UPLOAD] Error uploading to Supabase Storage:', error);
       console.error('[FILE_UPLOAD] Error details:', {
-        message: error.message,
-        statusCode: error.statusCode,
-        status: error.status
+        message: error.message
       });
       
       // Handle specific error cases
