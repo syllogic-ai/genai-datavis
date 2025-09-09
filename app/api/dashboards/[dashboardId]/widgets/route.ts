@@ -6,6 +6,7 @@ import { widgets, dashboards } from '@/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 import { Widget } from '@/types/enhanced-dashboard-types';
 import { dashboardCache, withRedisCache } from '@/lib/redis';
+import { logger } from '@/lib/logger';
 
 // GET: Load widgets for a dashboard with Redis caching
 export async function GET(
@@ -32,22 +33,22 @@ export async function GET(
       async () => {
         const cached = await dashboardCache.getDashboardWidgets(dashboardId, userId);
         if (cached && Array.isArray(cached)) {
-          console.log(`[API] Cache HIT - Loaded ${cached.length} widgets for dashboard ${dashboardId}`);
+          logger.debug(`[API] Cache HIT - Loaded ${cached.length} widgets for dashboard ${dashboardId}`);
           return { widgets: cached, fromCache: true };
         }
         return null;
       },
       // Fallback to database
       async () => {
-        console.log(`[API] ${bustCache ? 'Cache BUST' : 'Cache MISS'} - Loading widgets from database for dashboard ${dashboardId}`);
+        logger.debug(`[API] ${bustCache ? 'Cache BUST' : 'Cache MISS'} - Loading widgets from database for dashboard ${dashboardId}`);
         
         // If cache busting, invalidate cache first
         if (bustCache) {
           try {
             await dashboardCache.invalidateDashboardWidgets(dashboardId, userId);
-            console.log(`[API] Cache invalidated for dashboard ${dashboardId}`);
+            logger.debug(`[API] Cache invalidated for dashboard ${dashboardId}`);
           } catch (cacheError) {
-            console.warn('Failed to invalidate cache during bust:', cacheError);
+            logger.warn('Failed to invalidate cache during bust:', cacheError);
           }
         }
         

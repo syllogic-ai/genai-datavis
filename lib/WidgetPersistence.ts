@@ -1,6 +1,7 @@
 "use client";
 
 import { Widget } from '@/types/enhanced-dashboard-types';
+import { logger } from './logger';
 
 export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -52,7 +53,7 @@ export class WidgetPersistence {
     userId,
     onStatusChange,
     onError,
-    debounceMs = 2000, // Increased debounce to reduce Redis calls
+    debounceMs = 1000, // Optimized debounce time
   }: WidgetPersistenceOptions) {
     this.dashboardId = dashboardId;
     this.userId = userId;
@@ -68,16 +69,12 @@ export class WidgetPersistence {
     // Create debounced save function
     this.debouncedSave = debounce(this.flushOperations.bind(this), debounceMs);
     
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[WidgetPersistence] Initialized for dashboard ${dashboardId} (simplified mode - no real-time updates)`);
-    }
+    logger.debug(`[WidgetPersistence] Initialized for dashboard ${dashboardId}`);
   }
 
   async loadWidgets(bustCache: boolean = false): Promise<Widget[]> {
     try {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`[WidgetPersistence] Loading widgets for dashboard ${this.dashboardId}${bustCache ? ' (cache busting)' : ''}`);
-      }
+      logger.debug(`[WidgetPersistence] Loading widgets for dashboard ${this.dashboardId}${bustCache ? ' (cache busting)' : ''}`);
       
       // Build URL with cache busting parameter if requested
       let url = `/api/dashboards/${this.dashboardId}/widgets`;

@@ -1,4 +1,5 @@
 import { dashboardCache } from './redis'
+import { logger } from './logger'
 
 // Cache warming utility to preload frequently accessed data
 export class CacheWarmer {
@@ -18,24 +19,24 @@ export class CacheWarmer {
   async warmUserCache(userId: string): Promise<void> {
     // Skip cache warming in development to prevent infinite loops with Fast Refresh
     if (process.env.NODE_ENV === 'development') {
-      console.log('[CACHE_WARMER] Skipping cache warming in development environment')
+      logger.debug('[CACHE_WARMER] Skipping cache warming in development environment')
       return
     }
 
     if (this.isWarmingUp) {
-      console.log('[CACHE_WARMER] Already warming up, skipping...')
+      logger.debug('[CACHE_WARMER] Already warming up, skipping...')
       return
     }
 
     this.isWarmingUp = true
-    console.log(`[CACHE_WARMER] Starting cache warming for user ${userId}`)
+    logger.debug(`[CACHE_WARMER] Starting cache warming for user ${userId}`)
     
     try {
       // Check if dashboard list is already cached
       const isCached = await dashboardCache.checkCacheStatus(`dashboards:${userId}`)
       
       if (isCached) {
-        console.log('[CACHE_WARMER] Dashboard list already cached, skipping warm-up')
+        logger.debug('[CACHE_WARMER] Dashboard list already cached, skipping warm-up')
         this.isWarmingUp = false
         return
       }
@@ -50,7 +51,7 @@ export class CacheWarmer {
       
       if (dashboardListResponse.ok) {
         const dashboards = await dashboardListResponse.json()
-        console.log(`[CACHE_WARMER] Pre-warmed dashboard list: ${dashboards.length} dashboards`)
+        logger.debug(`[CACHE_WARMER] Pre-warmed dashboard list: ${dashboards.length} dashboards`)
         
         // Pre-warm first 2 dashboard widget data (reduced from 3 to minimize requests)
         const topDashboards = dashboards.slice(0, 2)
@@ -61,7 +62,7 @@ export class CacheWarmer {
             const isWidgetsCached = await dashboardCache.checkCacheStatus(cacheKey)
             
             if (isWidgetsCached) {
-              console.log(`[CACHE_WARMER] Widgets for dashboard ${dashboard.id} already cached, skipping`)
+              logger.debug(`[CACHE_WARMER] Widgets for dashboard ${dashboard.id} already cached, skipping`)
               return
             }
             
@@ -73,18 +74,18 @@ export class CacheWarmer {
             })
             
             if (widgetsResponse.ok) {
-              console.log(`[CACHE_WARMER] Pre-warmed widgets for dashboard ${dashboard.id}`)
+              logger.debug(`[CACHE_WARMER] Pre-warmed widgets for dashboard ${dashboard.id}`)
             }
           } catch (error) {
-            console.warn(`[CACHE_WARMER] Failed to warm dashboard ${dashboard.id}:`, error)
+            logger.warn(`[CACHE_WARMER] Failed to warm dashboard ${dashboard.id}:`, error)
           }
         })
         
         await Promise.allSettled(warmupPromises)
-        console.log(`[CACHE_WARMER] Completed warming top dashboards for user ${userId}`)
+        logger.debug(`[CACHE_WARMER] Completed warming top dashboards for user ${userId}`)
       }
     } catch (error) {
-      console.warn('[CACHE_WARMER] Cache warming failed:', error)
+      logger.warn('[CACHE_WARMER] Cache warming failed:', error)
     } finally {
       this.isWarmingUp = false
     }
@@ -115,14 +116,14 @@ export class CacheWarmer {
       if (dashboardId) {
         // Invalidate specific dashboard
         await dashboardCache.invalidateAllDashboardData(dashboardId, userId)
-        console.log(`[CACHE_WARMER] Invalidated cache for dashboard ${dashboardId}`)
+        logger.debug(`[CACHE_WARMER] Invalidated cache for dashboard ${dashboardId}`)
       } else {
         // Invalidate user's dashboard list only
         await dashboardCache.invalidateDashboardList(userId)
-        console.log(`[CACHE_WARMER] Invalidated dashboard list cache for user ${userId}`)
+        logger.debug(`[CACHE_WARMER] Invalidated dashboard list cache for user ${userId}`)
       }
     } catch (error) {
-      console.warn('[CACHE_WARMER] Cache invalidation failed:', error)
+      logger.warn('[CACHE_WARMER] Cache invalidation failed:', error)
     }
   }
 }

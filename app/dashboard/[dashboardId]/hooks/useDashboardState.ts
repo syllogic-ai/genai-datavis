@@ -6,6 +6,7 @@ import type { ChartSpec } from "@/types/chart-types";
 import toast from 'react-hot-toast';
 import { useSession } from "@/lib/auth-client";
 import { WidgetPersistence, SaveStatus } from "@/lib/WidgetPersistence";
+import { logger } from "@/lib/logger";
 
 export function useDashboardState(dashboardId: string) {
   const { data: session } = useSession();
@@ -31,14 +32,14 @@ export function useDashboardState(dashboardId: string) {
   useEffect(() => {
     if (!userId) return;
     
-    console.log(`[useDashboardState] Initializing widget persistence for dashboard ${dashboardId}`);
+    logger.debug(`[useDashboardState] Initializing widget persistence for dashboard ${dashboardId}`);
     
     const persistenceManager = new WidgetPersistence({
       dashboardId: dashboardId,
       userId: userId,
       onStatusChange: setSaveStatus,
       onError: (error) => {
-        console.error('[useDashboardState] Widget persistence error:', error);
+        logger.error('[useDashboardState] Widget persistence error:', error);
         toast.error('Failed to save widget changes');
       },
     });
@@ -52,7 +53,7 @@ export function useDashboardState(dashboardId: string) {
         .then(res => res.ok ? res.json() : null)
         .then(dashboard => {
           if (dashboard) {
-            console.log(`[useDashboardState] Loaded dashboard info:`, { 
+            logger.debug(`[useDashboardState] Loaded dashboard info:`, { 
               id: dashboard.id, 
               name: dashboard.name, 
               isPublic: dashboard.isPublic 
@@ -61,11 +62,11 @@ export function useDashboardState(dashboardId: string) {
             setIsPublished(dashboard.isPublic || false);
           }
         })
-        .catch(err => console.warn('[useDashboardState] Failed to load dashboard info:', err)),
+        .catch(err => logger.warn('[useDashboardState] Failed to load dashboard info:', err)),
       
       // Load widgets
       persistenceManager.loadWidgets().then((loadedWidgets) => {
-        console.log(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
+        logger.debug(`[useDashboardState] Loaded ${loadedWidgets.length} widgets on initialization`);
         setWidgets(loadedWidgets);
         return loadedWidgets;
       })
@@ -74,7 +75,7 @@ export function useDashboardState(dashboardId: string) {
     });
 
     return () => {
-      console.log(`[useDashboardState] Cleaning up widget persistence`);
+      logger.debug(`[useDashboardState] Cleaning up widget persistence`);
       persistenceManager.cleanup();
       widgetPersistenceRef.current = null;
     };

@@ -3,8 +3,8 @@
 import { motion, AnimatePresence } from "motion/react";
 import { SimpleDashboardLayout } from "./components/SimpleDashboardLayout";
 import { FloatingWidgetDock } from "./components/FloatingWidgetDock";
-import { ChatSidebar } from "@/components/dashboard/chat-sidebar";
 import { TextEditorProvider } from "./components/TextEditorContext";
+import { useEffect, useState, lazy, Suspense } from "react";
 import { DashboardToolbar } from "./components/DashboardToolbar";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
@@ -18,14 +18,14 @@ import { useModalCleanup } from "@/hooks/useModalCleanup";
 import { useSidebar } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Save, Loader2, Check, AlertCircle } from "lucide-react";
-import { useEffect, useState } from "react";
 import * as React from "react";
 import toast, { Toaster } from 'react-hot-toast';
 import { useDashboardRealtime } from "@/app/lib/hooks/useDashboardRealtime";
-import { usePartialDashboardUpdates } from "@/app/lib/hooks/usePartialDashboardUpdates";
 import { useErrorHandling } from "@/app/lib/hooks/useErrorHandling";
 import { DashboardThemeProvider, useDashboardTheme } from "@/components/theme/DashboardThemeProvider";
 import { useDashboardSettings } from "./hooks/useDashboardSettings";
+import { logger } from "@/lib/logger";
+import { ChatSidebar } from "@/components/dashboard/chat-sidebar";
 import { GoogleFontsLoader } from "@/components/tiptap/GoogleFonts";
 
 function EnhancedDashboardContent() {
@@ -105,19 +105,19 @@ function EnhancedDashboardContent() {
   } = useDashboardRealtime({
     dashboardId,
     onWidgetAdded: (widget) => {
-      console.log('Widget added via realtime:', widget);
-      // Trigger a silent refresh to include the new widget
-      loadWidgets({ bustCache: true, silent: true });
+      logger.debug('Widget added via realtime:', widget);
+      // Directly update local state instead of refetching all widgets
+      handleUpdateWidgets([...widgets, widget]);
     },
     onWidgetUpdated: (widget) => {
-      console.log('Widget updated via realtime:', widget);
-      // Trigger a silent refresh to update the widget
-      loadWidgets({ bustCache: true, silent: true });
+      logger.debug('Widget updated via realtime:', widget);
+      // Update only the specific widget in local state
+      handleUpdateWidgets(widgets.map(w => w.id === widget.id ? widget : w));
     },
     onWidgetDeleted: (widgetId) => {
-      console.log('Widget deleted via realtime:', widgetId);
-      // Trigger a silent refresh to remove the widget
-      loadWidgets({ bustCache: true, silent: true });
+      logger.debug('Widget deleted via realtime:', widgetId);
+      // Remove only the specific widget from local state
+      handleUpdateWidgets(widgets.filter(w => w.id !== widgetId));
     },
     enableOptimisticUpdates: true,
     enableCrossTabSync: true,
@@ -140,27 +140,7 @@ function EnhancedDashboardContent() {
     autoRetry: false
   });
 
-  // Partial updates for large dashboards
-  const {
-    updateWidgets: performPartialUpdate,
-    isUpdating: isPartiallyUpdating,
-    updateProgress: partialUpdateProgress,
-    queuedUpdates,
-    completedUpdates,
-    failedUpdates
-  } = usePartialDashboardUpdates(
-    (widget) => {
-      console.log('Partial update applied to widget:', widget.id);
-      // Force re-render of specific widget
-      handleUpdateWidgets(widgets.map(w => w.id === widget.id ? widget : w));
-    },
-    {
-      maxConcurrentUpdates: 3,
-      batchSize: 5,
-      updateDelay: 100,
-      prioritizeVisible: true
-    }
-  );
+  // Simplified approach - removed partial updates system since realtime handles updates efficiently
   
   // Get chat ID from URL parameter or fall back to default
   const urlChatId = searchParams.get('chat');
@@ -185,7 +165,7 @@ function EnhancedDashboardContent() {
   // Update the dashboard context whenever widgets change
   useEffect(() => {
     if (dashboardId && widgets.length >= 0) {
-      console.log(`[DashboardPage] Updating context with ${widgets.length} widgets for dashboard ${dashboardId}`);
+      logger.debug(`[DashboardPage] Updating context with ${widgets.length} widgets for dashboard ${dashboardId}`);
       updateCurrentDashboard(dashboardObj, widgets);
     }
   }, [dashboardId, widgets, dashboardObj, updateCurrentDashboard]);
@@ -257,17 +237,11 @@ function EnhancedDashboardContent() {
     }
   };
 
-  // Enhanced widget refresh with error handling and partial updates
+  // Simplified widget refresh
   const handleEnhancedWidgetRefresh = React.useCallback(async (changedWidgetIds?: string[]) => {
     try {
-      // Load latest widgets
+      // Load latest widgets with silent refresh to avoid loading states
       await loadWidgets({ bustCache: true, silent: true });
-      
-      // If specific widgets changed, use partial update
-      if (changedWidgetIds && changedWidgetIds.length > 0 && widgets.length > 10) {
-        console.log('Using partial update for large dashboard');
-        await performPartialUpdate(widgets, changedWidgetIds);
-      }
     } catch (error) {
       addError({
         message: 'Failed to refresh dashboard widgets',
@@ -276,10 +250,10 @@ function EnhancedDashboardContent() {
         source: 'widget-refresh'
       });
     }
-  }, [loadWidgets, widgets, performPartialUpdate, addError, dashboardId]);
+  }, [loadWidgets, addError, dashboardId]);
 
   // Debug phase rendering
-  console.log('[Dashboard Page] Rendering decision:', {
+  logger.debug('[Dashboard Page] Rendering decision:', {
     isLoading,
     isSetupLoading,
     setupState,
@@ -311,7 +285,7 @@ function EnhancedDashboardContent() {
   }
 
   // Progressive flow: Setup → Chat → Full Dashboard
-  console.log('[Dashboard Page] Phase decision:', {
+  logger.debug('[Dashboard Page] Phase decision:', {
     isFullDashboard: setupState.isFullDashboard,
     isSetupMode: setupState.isSetupMode,
     isChatMode: setupState.isChatMode,
@@ -347,7 +321,7 @@ function EnhancedDashboardContent() {
         files={files}
         onFirstMessage={handleFirstMessage}
         onBack={handleBackToSetup}
-        onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
+        onWidgetsRefresh={handleEnhancedWidgetRefresh}
       />
     );
   }
@@ -356,18 +330,9 @@ function EnhancedDashboardContent() {
   return (
     <TextEditorProvider>
       <GoogleFontsLoader />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.98 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-        className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col"
-      >
+      <div className="w-full h-full max-h-[calc(100vh-1rem)] flex flex-col">
       {/* Header with Publish Button */}
-      <motion.div 
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="overflow-hidden rounded-t-lg shrink-0"
-      >
+      <div className="overflow-hidden rounded-t-lg shrink-0">
         <DashboardHeader 
           dashboardTitle={dashboardName} 
           dashboardId={dashboardId}
@@ -378,16 +343,13 @@ function EnhancedDashboardContent() {
           onUnpublish={unpublishDashboard}
           isPublishLoading={isPublishLoading}
         />
-      </motion.div>
+      </div>
 
       {/* Text Editor Toolbar */}
       <DashboardToolbar />
 
       {/* Main Content - Apply theme here */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
+      <div 
         className="flex-1 flex overflow-hidden"
         style={{ backgroundColor: themeBackground }}
       >
@@ -426,11 +388,11 @@ function EnhancedDashboardContent() {
             isOpen={isChatSidebarOpen}
             onToggle={handleChatSidebarToggle}
             dashboardWidgets={widgets}
-            onWidgetsRefresh={() => loadWidgets({ bustCache: true, silent: true })}
+            onWidgetsRefresh={handleEnhancedWidgetRefresh}
             onJobStart={() => {}}
           />
         )}
-      </motion.div>
+      </div>
 
       {/* Status Indicators */}
       <AnimatePresence mode="wait">
@@ -490,30 +452,6 @@ function EnhancedDashboardContent() {
             </motion.div>
           )}
           
-          {/* Partial Update Progress */}
-          {isPartiallyUpdating && (
-            <motion.div
-              key="partial-update"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              className="flex flex-col gap-1 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-lg min-w-[200px]"
-            >
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-sm">Updating widgets...</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <div className="flex-1 bg-indigo-800 rounded-full h-1">
-                  <div 
-                    className="bg-white rounded-full h-1 transition-all duration-300"
-                    style={{ width: `${partialUpdateProgress}%` }}
-                  />
-                </div>
-                <span>{completedUpdates}/{queuedUpdates}</span>
-              </div>
-            </motion.div>
-          )}
           
           {/* Error Indicator */}
           {hasErrors && (
@@ -547,7 +485,7 @@ function EnhancedDashboardContent() {
         </div>
       </AnimatePresence>
 
-    </motion.div>
+    </div>
     </TextEditorProvider>
   );
 }
